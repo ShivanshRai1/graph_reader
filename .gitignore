@@ -1,0 +1,25 @@
+# Backend
+backend/__pycache__/
+backend/.venv/
+backend/venv/
+backend/.env
+backend/*.egg-info/
+backend/dist/
+backend/build/
+
+# Frontend
+frontend/graphreader/node_modules/
+frontend/graphreader/dist/
+frontend/graphreader/.env
+frontend/graphreader/.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# OS
+Thumbs.db
