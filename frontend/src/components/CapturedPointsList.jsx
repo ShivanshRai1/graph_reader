@@ -12,7 +12,10 @@ const CapturedPointsList = () => {
 
     const csvContent = [
       ['X', 'Y'],
-      ...dataPoints.map(point => [point.x.toFixed(6), point.y.toFixed(6)])
+      ...dataPoints.map(point => [
+        typeof point.x === 'number' && !isNaN(point.x) ? point.x.toFixed(6) : 'Invalid',
+        typeof point.y === 'number' && !isNaN(point.y) ? point.y.toFixed(6) : 'Invalid'
+      ])
     ]
       .map(row => row.join(','))
       .join('\n');
@@ -70,8 +73,8 @@ const CapturedPointsList = () => {
               {dataPoints.map((point, index) => (
                 <tr key={index}>
                   <td>{index + 1}</td>
-                  <td>{point.x.toFixed(4)}</td>
-                  <td>{point.y.toFixed(4)}</td>
+                  <td>{typeof point.x === 'number' && !isNaN(point.x) ? point.x.toFixed(4) : 'Invalid'}</td>
+                  <td>{typeof point.y === 'number' && !isNaN(point.y) ? point.y.toFixed(4) : 'Invalid'}</td>
                 </tr>
               ))}
             </tbody>

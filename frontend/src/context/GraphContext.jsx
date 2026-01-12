@@ -46,6 +46,8 @@ export const GraphProvider = ({ children }) => {
   // Normalize logarithmic value - convert actual value to exponent if needed
   const normalizeLogValue = (value) => {
     const num = parseFloat(value);
+    if (isNaN(num)) return 0; // Return 0 for invalid input
+    
     // If value is between -10 and 10, assume it's an exponent
     // Otherwise, assume it's an actual value and convert to exponent
     if (Math.abs(num) <= 10 && Number.isInteger(num)) {
@@ -53,7 +55,8 @@ export const GraphProvider = ({ children }) => {
     } else if (num > 0) {
       return Math.log10(num); // Convert actual value to exponent
     }
-    return num; // Fallback
+    // For zero or negative values in log scale, return a safe fallback
+    return -10; // 10^-10 is a very small positive number
   };
 
   // Get normalized min/max for calculations
@@ -62,6 +65,12 @@ export const GraphProvider = ({ children }) => {
     let xMax = parseFloat(graphConfig.xMax);
     let yMin = parseFloat(graphConfig.yMin);
     let yMax = parseFloat(graphConfig.yMax);
+
+    // Handle NaN
+    if (isNaN(xMin)) xMin = 0;
+    if (isNaN(xMax)) xMax = 100;
+    if (isNaN(yMin)) yMin = 0;
+    if (isNaN(yMax)) yMax = 100;
 
     if (graphConfig.xScale === 'Logarithmic') {
       xMin = normalizeLogValue(xMin);

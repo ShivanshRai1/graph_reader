@@ -19,9 +19,20 @@ const GraphCapture = () => {
       alert('Please capture at least one data point');
       return;
     }
-    
+    // Validate log min/max
+    if (graphConfig.xScale === 'Logarithmic') {
+      if (!(parseFloat(graphConfig.xMin) > 0) || !(parseFloat(graphConfig.xMax) > 0)) {
+        alert('For logarithmic X axis, min and max must be > 0');
+        return;
+      }
+    }
+    if (graphConfig.yScale === 'Logarithmic') {
+      if (!(parseFloat(graphConfig.yMin) > 0) || !(parseFloat(graphConfig.yMax) > 0)) {
+        alert('For logarithmic Y axis, min and max must be > 0');
+        return;
+      }
+    }
     setIsSaving(true);
-    
     try {
       // Save to backend
       const payload = {
@@ -80,7 +91,9 @@ const GraphCapture = () => {
     // Generate CSV content
     let csv = 'X Value,Y Value\n';
     dataPoints.forEach(point => {
-      csv += `${point.x.toFixed(6)},${point.y.toFixed(6)}\n`;
+      const x = typeof point.x === 'number' && !isNaN(point.x) ? point.x.toFixed(6) : 'Invalid';
+      const y = typeof point.y === 'number' && !isNaN(point.y) ? point.y.toFixed(6) : 'Invalid';
+      csv += `${x},${y}\n`;
     });
 
     // Create blob and download

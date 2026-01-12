@@ -312,7 +312,7 @@ const GraphCanvas = () => {
       <div className="canvas-wrapper">
         {showCoords && (
           <div className="coordinate-display">
-            x={mousePos.x.toFixed(3)} y={mousePos.y.toFixed(3)}
+            x={typeof mousePos.x === 'number' && !isNaN(mousePos.x) ? mousePos.x.toFixed(3) : 'N/A'} y={typeof mousePos.y === 'number' && !isNaN(mousePos.y) ? mousePos.y.toFixed(3) : 'N/A'}
           </div>
         )}
         <canvas

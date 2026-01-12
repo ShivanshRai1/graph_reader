@@ -1,8 +1,28 @@
 import { useGraph } from '../context/GraphContext';
 import './GraphConfig.css';
+import { useState, useEffect } from 'react';
 
 const GraphConfig = () => {
   const { graphConfig, setGraphConfig } = useGraph();
+  const [logError, setLogError] = useState({ x: '', y: '' });
+
+  // Validate log min/max
+  useEffect(() => {
+    let xErr = '', yErr = '';
+    if (graphConfig.xScale === 'Logarithmic') {
+      const min = parseFloat(graphConfig.xMin);
+      const max = parseFloat(graphConfig.xMax);
+      if (!(min > 0)) xErr = 'X min must be > 0 for log scale';
+      if (!(max > 0)) xErr = 'X max must be > 0 for log scale';
+    }
+    if (graphConfig.yScale === 'Logarithmic') {
+      const min = parseFloat(graphConfig.yMin);
+      const max = parseFloat(graphConfig.yMax);
+      if (!(min > 0)) yErr = 'Y min must be > 0 for log scale';
+      if (!(max > 0)) yErr = 'Y max must be > 0 for log scale';
+    }
+    setLogError({ x: xErr, y: yErr });
+  }, [graphConfig.xScale, graphConfig.xMin, graphConfig.xMax, graphConfig.yScale, graphConfig.yMin, graphConfig.yMax]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -69,7 +89,9 @@ const GraphConfig = () => {
               name="yMin"
               value={graphConfig.yMin}
               onChange={handleChange}
+              min={graphConfig.yScale === 'Logarithmic' ? 1e-10 : undefined}
             />
+            {logError.y && <span style={{ color: '#d32f2f', fontSize: 12 }}>{logError.y}</span>}
           </label>
           <label>
             Max:
@@ -78,6 +100,7 @@ const GraphConfig = () => {
               name="yMax"
               value={graphConfig.yMax}
               onChange={handleChange}
+              min={graphConfig.yScale === 'Logarithmic' ? 1e-10 : undefined}
             />
           </label>
         </div>
@@ -111,7 +134,9 @@ const GraphConfig = () => {
               name="xMin"
               value={graphConfig.xMin}
               onChange={handleChange}
+              min={graphConfig.xScale === 'Logarithmic' ? 1e-10 : undefined}
             />
+            {logError.x && <span style={{ color: '#d32f2f', fontSize: 12 }}>{logError.x}</span>}
           </label>
           <label>
             Max:
@@ -120,6 +145,7 @@ const GraphConfig = () => {
               name="xMax"
               value={graphConfig.xMax}
               onChange={handleChange}
+              min={graphConfig.xScale === 'Logarithmic' ? 1e-10 : undefined}
             />
           </label>
         </div>
