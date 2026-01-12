@@ -92,13 +92,17 @@ const GraphCanvas = () => {
   // Draw lines connecting all captured points
   const drawFixPoints = (ctx) => {
     if (dataPoints.length < 2) return;
+    
+    // Sort points by X coordinate (left to right) to avoid zig-zag
+    const sortedPoints = [...dataPoints].sort((a, b) => a.canvasX - b.canvasX);
+    
     ctx.save();
     ctx.strokeStyle = '#1976d2';
     ctx.lineWidth = 4;
     ctx.beginPath();
-    ctx.moveTo(dataPoints[0].canvasX, dataPoints[0].canvasY);
-    for (let i = 1; i < dataPoints.length; i++) {
-      ctx.lineTo(dataPoints[i].canvasX, dataPoints[i].canvasY);
+    ctx.moveTo(sortedPoints[0].canvasX, sortedPoints[0].canvasY);
+    for (let i = 1; i < sortedPoints.length; i++) {
+      ctx.lineTo(sortedPoints[i].canvasX, sortedPoints[i].canvasY);
     }
     ctx.stroke();
     ctx.restore();
