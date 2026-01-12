@@ -46,6 +46,7 @@ def create_curve(curve: CurveCreate, db: Session = Depends(get_db)):
     try:
         # Create curve
         db_curve = Curve(
+            part_number=curve.part_number,
             curve_name=curve.curve_name,
             x_scale=curve.x_scale,
             y_scale=curve.y_scale,

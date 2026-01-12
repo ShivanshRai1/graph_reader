@@ -7,6 +7,7 @@ class Curve(Base):
     __tablename__ = "curves"
 
     id = Column(Integer, primary_key=True, index=True)
+    part_number = Column(String(255))
     curve_name = Column(String(255), nullable=False)
     x_scale = Column(String(50), default="Linear")
     y_scale = Column(String(50), default="Linear")
@@ -26,6 +27,7 @@ class Curve(Base):
     def to_dict(self):
         return {
             "id": self.id,
+            "part_number": self.part_number,
             "curve_name": self.curve_name,
             "x_scale": self.x_scale,
             "y_scale": self.y_scale,

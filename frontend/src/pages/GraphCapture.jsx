@@ -25,6 +25,7 @@ const GraphCapture = () => {
     try {
       // Save to backend
       const payload = {
+        part_number: graphConfig.partNumber || null,
         curve_name: graphConfig.curveName,
         x_scale: graphConfig.xScale,
         y_scale: graphConfig.yScale,

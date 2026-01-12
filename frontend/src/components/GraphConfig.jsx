@@ -27,6 +27,16 @@ const GraphConfig = () => {
             placeholder="Enter curve name"
           />
         </label>
+        <label>
+          Part Number (optional):
+          <input
+            type="text"
+            name="partNumber"
+            value={graphConfig.partNumber}
+            onChange={handleChange}
+            placeholder="Enter part number"
+          />
+        </label>
       </div>
 
       <div className="config-row">

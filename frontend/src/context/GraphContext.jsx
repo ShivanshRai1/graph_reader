@@ -16,6 +16,7 @@ export const GraphProvider = ({ children }) => {
   
   // Graph configuration state
   const [graphConfig, setGraphConfig] = useState({
+    partNumber: '',
     curveName: '',
     xScale: 'Linear',
     yScale: 'Linear',

@@ -17,6 +17,7 @@ class DataPointResponse(BaseModel):
         from_attributes = True
 
 class CurveCreate(BaseModel):
+    part_number: Optional[str] = None
     curve_name: str
     x_scale: str = "Linear"
     y_scale: str = "Linear"
@@ -30,6 +31,7 @@ class CurveCreate(BaseModel):
     data_points: List[DataPointCreate] = []
 
 class CurveUpdate(BaseModel):
+    part_number: Optional[str] = None
     curve_name: Optional[str] = None
     x_scale: Optional[str] = None
     y_scale: Optional[str] = None
@@ -43,6 +45,7 @@ class CurveUpdate(BaseModel):
 
 class CurveResponse(BaseModel):
     id: int
+    part_number: Optional[str]
     curve_name: str
     x_scale: str
     y_scale: str
