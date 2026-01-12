@@ -22,7 +22,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "http://localhost:3000",
-        "https://yourdomain.com",  # Update with your Netlify domain
+        "https://graph-capture.netlify.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
