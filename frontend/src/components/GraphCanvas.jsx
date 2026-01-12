@@ -4,6 +4,7 @@ import './GraphCanvas.css';
 
 const GraphCanvas = () => {
   const { uploadedImage, graphArea, setGraphArea, dataPoints, addDataPoint, clearDataPoints, graphConfig } = useGraph();
+  const [showRedrawMsg, setShowRedrawMsg] = useState(false);
   const canvasRef = useRef(null);
   const magnifierRef = useRef(null);
   const [isSelecting, setIsSelecting] = useState(false);
@@ -13,6 +14,10 @@ const GraphCanvas = () => {
   const [showCoords, setShowCoords] = useState(false);
   const [showMagnifier, setShowMagnifier] = useState(false);
   const [magnifierPos, setMagnifierPos] = useState({ x: 0, y: 0 });
+  const [showFixPoints, setShowFixPoints] = useState(false);
+  const [dragDistance, setDragDistance] = useState(0);
+  const imageRef = useRef(null);
+  const coordinateUpdateTimeoutRef = useRef(null);
 
   useEffect(() => {
     if (uploadedImage && canvasRef.current) {
@@ -24,9 +29,10 @@ const GraphCanvas = () => {
         canvas.width = img.width;
         canvas.height = img.height;
         setImageSize({ width: img.width, height: img.height });
+        imageRef.current = img; // Store image reference
         
-        // Auto-draw blue selection box covering entire image on first load
-        if (graphArea.width === 0 && graphArea.height === 0) {
+        // Auto-draw blue selection box covering entire image only on first load (no points captured yet)
+        if (graphArea.width === 0 && graphArea.height === 0 && dataPoints.length === 0) {
           setGraphArea({
             x: 0,
             y: 0,
@@ -38,16 +44,30 @@ const GraphCanvas = () => {
         ctx.drawImage(img, 0, 0);
         drawSelection(ctx);
         drawDataPoints(ctx);
+        if (showFixPoints) drawFixPoints(ctx);
       };
       
       img.src = uploadedImage;
     }
-  }, [uploadedImage, graphArea, dataPoints]);
+  }, [uploadedImage]);
+
+  // Separate effect to redraw selection box and points without reloading image
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !imageRef.current) return;
+    
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(imageRef.current, 0, 0);
+    drawSelection(ctx);
+    drawDataPoints(ctx);
+    if (showFixPoints) drawFixPoints(ctx);
+  }, [graphArea, dataPoints, showFixPoints]);
 
   const drawSelection = (ctx) => {
     if (graphArea.width > 0 && graphArea.height > 0) {
       ctx.strokeStyle = 'blue';
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 4;
       ctx.strokeRect(graphArea.x, graphArea.y, graphArea.width, graphArea.height);
     }
   };
@@ -58,15 +78,30 @@ const GraphCanvas = () => {
       ctx.strokeStyle = 'white';
       ctx.lineWidth = 3;
       ctx.beginPath();
-      ctx.arc(point.canvasX, point.canvasY, 12, 0, 2 * Math.PI);
+      ctx.arc(point.canvasX, point.canvasY, 8, 0, 2 * Math.PI); // reduced from 12 to 8
       ctx.stroke();
       
       // Draw red fill
       ctx.fillStyle = 'red';
       ctx.beginPath();
-      ctx.arc(point.canvasX, point.canvasY, 12, 0, 2 * Math.PI);
+      ctx.arc(point.canvasX, point.canvasY, 8, 0, 2 * Math.PI); // reduced from 12 to 8
       ctx.fill();
     });
+  };
+
+  // Draw lines connecting all captured points
+  const drawFixPoints = (ctx) => {
+    if (dataPoints.length < 2) return;
+    ctx.save();
+    ctx.strokeStyle = '#1976d2';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(dataPoints[0].canvasX, dataPoints[0].canvasY);
+    for (let i = 1; i < dataPoints.length; i++) {
+      ctx.lineTo(dataPoints[i].canvasX, dataPoints[i].canvasY);
+    }
+    ctx.stroke();
+    ctx.restore();
   };
 
   const handleMouseDown = (e) => {
@@ -96,6 +131,12 @@ const GraphCanvas = () => {
     const x = (e.clientX - rect.left) * scaleX;
     const y = (e.clientY - rect.top) * scaleY;
     
+    // Calculate distance moved
+    const distX = x - startPos.x;
+    const distY = y - startPos.y;
+    const distance = Math.sqrt(distX * distX + distY * distY);
+    setDragDistance(distance);
+    
     const width = x - startPos.x;
     const height = y - startPos.y;
     
@@ -112,18 +153,23 @@ const GraphCanvas = () => {
   };
 
   const handleCanvasClick = (e) => {
-    if (isSelecting) return; // Don't add points while selecting
-    
+    // Don't add points while selecting or if this was a drag (box drawing)
+    if (isSelecting || dragDistance > 10) {
+      setDragDistance(0); // Reset for next interaction
+      return;
+    }
+    // Prevent adding points if box is not drawn
+    if (graphArea.width === 0 || graphArea.height === 0) {
+      setShowRedrawMsg(true);
+      return;
+    }
     // Get exact canvas position relative to viewport, accounting for scaling
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
-    
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
-    
     const canvasX = (e.clientX - rect.left) * scaleX;
     const canvasY = (e.clientY - rect.top) * scaleY;
-    
     // Check if click is within graph area
     if (
       canvasX >= graphArea.x &&
@@ -171,16 +217,25 @@ const GraphCanvas = () => {
       return; // Can't calculate without image loaded
     }
     
-    setMousePos({ x: graphX, y: graphY });
-    setShowCoords(true);
+    // Throttle coordinate updates to reduce flickering
+    if (coordinateUpdateTimeoutRef.current) {
+      clearTimeout(coordinateUpdateTimeoutRef.current);
+    }
+    
+    coordinateUpdateTimeoutRef.current = setTimeout(() => {
+      setMousePos({ x: graphX, y: graphY });
+      setShowCoords(true);
+    }, 16); // ~60fps
     
     // Update magnifier
     setShowMagnifier(true);
-    setMagnifierPos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
     drawMagnifier(canvasX, canvasY);
   };
 
   const handleMouseLeaveCanvas = () => {
+    if (coordinateUpdateTimeoutRef.current) {
+      clearTimeout(coordinateUpdateTimeoutRef.current);
+    }
     setShowCoords(false);
     setShowMagnifier(false);
   };
@@ -268,7 +323,36 @@ const GraphCanvas = () => {
           onClick={handleCanvasClick}
           className="graph-canvas"
         />
+        <button
+          className="btn btn-primary"
+          style={{ marginTop: 16, marginLeft: 8, marginBottom: 24 }}
+          onClick={() => setShowFixPoints((prev) => !prev)}
+        >
+          {showFixPoints ? 'Hide fix-points' : 'Draw fix-points'}
+        </button>
+        <button
+          className="btn btn-secondary"
+          style={{ marginTop: 16, marginLeft: 8, marginBottom: 24 }}
+          onClick={() => {
+            if (imageSize.width && imageSize.height) {
+              setGraphArea({
+                x: 0,
+                y: 0,
+                width: imageSize.width,
+                height: imageSize.height,
+              });
+              setShowRedrawMsg(false);
+            }
+          }}
+        >
+          Redraw Box
+        </button>
       </div>
+      {showRedrawMsg && (
+        <div style={{ color: '#d32f2f', fontWeight: 'bold', marginTop: 8, marginBottom: 8 }}>
+          Please redraw the box
+        </div>
+      )}
       {showMagnifier && (
         <canvas
           ref={magnifierRef}
