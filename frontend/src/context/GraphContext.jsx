@@ -42,17 +42,59 @@ export const GraphProvider = ({ children }) => {
   // Saved curves
   const [savedCurves, setSavedCurves] = useState([]);
 
+  // Normalize logarithmic value - convert actual value to exponent if needed
+  const normalizeLogValue = (value) => {
+    const num = parseFloat(value);
+    // If value is between -10 and 10, assume it's an exponent
+    // Otherwise, assume it's an actual value and convert to exponent
+    if (Math.abs(num) <= 10 && Number.isInteger(num)) {
+      return num; // It's an exponent
+    } else if (num > 0) {
+      return Math.log10(num); // Convert actual value to exponent
+    }
+    return num; // Fallback
+  };
+
+  // Get normalized min/max for calculations
+  const getNormalizedMinMax = () => {
+    let xMin = parseFloat(graphConfig.xMin);
+    let xMax = parseFloat(graphConfig.xMax);
+    let yMin = parseFloat(graphConfig.yMin);
+    let yMax = parseFloat(graphConfig.yMax);
+
+    if (graphConfig.xScale === 'Logarithmic') {
+      xMin = normalizeLogValue(xMin);
+      xMax = normalizeLogValue(xMax);
+    }
+    if (graphConfig.yScale === 'Logarithmic') {
+      yMin = normalizeLogValue(yMin);
+      yMax = normalizeLogValue(yMax);
+    }
+
+    return { xMin, xMax, yMin, yMax };
+  };
+
   // Convert canvas coordinates to graph coordinates
   const convertCanvasToGraphCoordinates = (canvasX, canvasY) => {
     if (graphArea.width === 0 || graphArea.height === 0) {
       return { x: 0, y: 0 };
     }
 
-    const graphX = graphConfig.xMin + 
-      ((canvasX - graphArea.x) / graphArea.width) * (graphConfig.xMax - graphConfig.xMin);
+    const { xMin, xMax, yMin, yMax } = getNormalizedMinMax();
+
+    let graphX = xMin + 
+      ((canvasX - graphArea.x) / graphArea.width) * (xMax - xMin);
     
-    const graphY = graphConfig.yMax - 
-      ((canvasY - graphArea.y) / graphArea.height) * (graphConfig.yMax - graphConfig.yMin);
+    let graphY = yMax - 
+      ((canvasY - graphArea.y) / graphArea.height) * (yMax - yMin);
+    
+    // Convert back from exponent to actual value for logarithmic scales
+    if (graphConfig.xScale === 'Logarithmic') {
+      graphX = Math.pow(10, graphX);
+    }
+    if (graphConfig.yScale === 'Logarithmic') {
+      graphY = Math.pow(10, graphY);
+    }
     
     return { x: graphX, y: graphY };
   };

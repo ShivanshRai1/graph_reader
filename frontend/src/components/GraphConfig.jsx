@@ -40,7 +40,7 @@ const GraphConfig = () => {
             </select>
           </label>
           {graphConfig.yScale === 'Logarithmic' && (
-            <small className="helper-text">Enter min/max as exponents for 10^x (e.g., -5 for 10^-5, 2 for 10^2)</small>
+            <small className="helper-text">Enter min/max as exponents (e.g., -5 for 10^-5) or actual values (e.g., 0.00001)</small>
           )}
           <label>
             Unit:
@@ -82,7 +82,7 @@ const GraphConfig = () => {
             </select>
           </label>
           {graphConfig.xScale === 'Logarithmic' && (
-            <small className="helper-text">Enter min/max as exponents for 10^x (e.g., -5 for 10^-5, 2 for 10^2)</small>
+            <small className="helper-text">Enter min/max as exponents (e.g., -5 for 10^-5) or actual values (e.g., 0.00001)</small>
           )}
           <label>
             Unit:
