@@ -43,7 +43,8 @@ const GraphCapture = () => {
 
       console.log('Sending payload:', payload);
 
-      const response = await fetch('http://localhost:8000/api/curves', {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const response = await fetch(`${apiUrl}/api/curves`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -64,7 +65,7 @@ const GraphCapture = () => {
       setIsSaving(false);
     } catch (error) {
       console.error('Full error:', error);
-      alert('Error saving curve: ' + error.message + '\n\nMake sure backend is running at http://localhost:8000');
+      alert('Error saving curve: ' + error.message + '\n\nMake sure backend is running');
       setIsSaving(false);
     }
   };
