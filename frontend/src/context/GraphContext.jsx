@@ -141,6 +141,8 @@ export const GraphProvider = ({ children }) => {
     // TODO: Call API to save curve
     const newCurve = {
       ...graphConfig,
+      x_unit: graphConfig.xUnitPrefix,
+      y_unit: graphConfig.yUnitPrefix,
       points: dataPoints,
       timestamp: new Date().toISOString(),
     };

@@ -261,11 +261,11 @@ const GraphCanvas = () => {
       if (nw < minSize) nw = minSize;
       if (nh < minSize) nh = minSize;
 
-      // Ensure boundaries with margin
-      if (nx < MARGIN) nx = MARGIN;
-      if (ny < MARGIN) ny = MARGIN;
-      if (nx + nw > canvasW - MARGIN) nw = (canvasW - MARGIN) - nx;
-      if (ny + nh > canvasH - MARGIN) nh = (canvasH - MARGIN) - ny;
+      // Ensure boundaries (allow resizing all the way to canvas edges)
+      if (nx < 0) nx = 0;
+      if (ny < 0) ny = 0;
+      if (nx + nw > canvasW) nw = canvasW - nx;
+      if (ny + nh > canvasH) nh = canvasH - ny;
 
       setGraphArea({ x: nx, y: ny, width: nw, height: nh });
       return;
