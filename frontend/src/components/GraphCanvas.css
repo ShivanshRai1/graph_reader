@@ -56,10 +56,9 @@
   right: 20px;
 }
 
-.coordinate-display {
-  position: absolute;
-  top: 10px;
-  left: 10px;
+
+.coordinate-display-static {
+  margin-bottom: 12px;
   background-color: rgba(0, 0, 0, 0.85);
   color: white;
   border: 2px solid #4CAF50;
@@ -68,14 +67,15 @@
   font-family: monospace;
   font-size: 16px;
   font-weight: bold;
-  z-index: 10;
-  pointer-events: none;
+  display: inline-block;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+  transition: opacity 120ms ease;
+  min-height: 42px; /* keeps layout stable when visibility toggles */
 }
 
 .graph-canvas {
   display: block;
-  cursor: crosshair;
+  cursor: default;
   max-width: 100%;
 }
 

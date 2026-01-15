@@ -22,6 +22,8 @@ export const GraphProvider = ({ children }) => {
     yScale: 'Linear',
     xUnit: '',
     yUnit: '',
+    xUnitPrefix: '',
+    yUnitPrefix: '',
     xMin: 0,
     xMax: 100,
     yMin: 0,
@@ -71,6 +73,14 @@ export const GraphProvider = ({ children }) => {
     if (isNaN(xMax)) xMax = 100;
     if (isNaN(yMin)) yMin = 0;
     if (isNaN(yMax)) yMax = 100;
+
+    // Apply unit prefix multipliers (default to 1 if not selected)
+    const xMultiplier = graphConfig.xUnitPrefix ? parseFloat(graphConfig.xUnitPrefix) : 1;
+    const yMultiplier = graphConfig.yUnitPrefix ? parseFloat(graphConfig.yUnitPrefix) : 1;
+    xMin = xMin * xMultiplier;
+    xMax = xMax * xMultiplier;
+    yMin = yMin * yMultiplier;
+    yMax = yMax * yMultiplier;
 
     if (graphConfig.xScale === 'Logarithmic') {
       xMin = normalizeLogValue(xMin);

@@ -74,13 +74,18 @@ const GraphConfig = () => {
           )}
           <label>
             Unit:
-            <input
-              type="text"
-              name="yUnit"
-              value={graphConfig.yUnit}
-              onChange={handleChange}
-              placeholder="e.g., A, V"
-            />
+            <select name="yUnitPrefix" value={graphConfig.yUnitPrefix} onChange={handleChange}>
+              <option value="">-select-</option>
+              <option value="1e-12">pico (p) = 1e-12</option>
+              <option value="1e-9">nano (n) = 1e-9</option>
+              <option value="1e-6">micro (μ) = 1e-6</option>
+              <option value="1e-3">milli (m) = 1e-3</option>
+              <option value="1">1</option>
+              <option value="1e3">Kilo (k) = 1e3</option>
+              <option value="1e6">Mega (M) = 1e6</option>
+              <option value="1e9">Giga (G) = 1e9</option>
+              <option value="1e12">Tera (T) = 1e12</option>
+            </select>
           </label>
           <label>
             Min:
@@ -119,13 +124,18 @@ const GraphConfig = () => {
           )}
           <label>
             Unit:
-            <input
-              type="text"
-              name="xUnit"
-              value={graphConfig.xUnit}
-              onChange={handleChange}
-              placeholder="e.g., V, Hz"
-            />
+            <select name="xUnitPrefix" value={graphConfig.xUnitPrefix} onChange={handleChange}>
+              <option value="">-select-</option>
+              <option value="1e-12">pico (p) = 1e-12</option>
+              <option value="1e-9">nano (n) = 1e-9</option>
+              <option value="1e-6">micro (μ) = 1e-6</option>
+              <option value="1e-3">milli (m) = 1e-3</option>
+              <option value="1">1</option>
+              <option value="1e3">Kilo (k) = 1e3</option>
+              <option value="1e6">Mega (M) = 1e6</option>
+              <option value="1e9">Giga (G) = 1e9</option>
+              <option value="1e12">Tera (T) = 1e12</option>
+            </select>
           </label>
           <label>
             Min:

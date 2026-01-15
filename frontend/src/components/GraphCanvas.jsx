@@ -18,6 +18,27 @@ const GraphCanvas = () => {
   const [dragDistance, setDragDistance] = useState(0);
   const imageRef = useRef(null);
   const coordinateUpdateTimeoutRef = useRef(null);
+  const [resizeMode, setResizeMode] = useState(null);
+  const [initialArea, setInitialArea] = useState(null);
+  const [initialMouse, setInitialMouse] = useState({ x: 0, y: 0 });
+  const [isResizing, setIsResizing] = useState(false);
+  const justFinishedResizingRef = useRef(false);
+  const [hoveredHandle, setHoveredHandle] = useState(null);
+
+  const MARGIN = 16; // Margin from edges for resize handles visibility
+
+  const normalizeArea = (area) => {
+    let { x, y, width, height } = area;
+    if (width < 0) {
+      x = x + width;
+      width = Math.abs(width);
+    }
+    if (height < 0) {
+      y = y + height;
+      height = Math.abs(height);
+    }
+    return { x, y, width, height };
+  };
 
   useEffect(() => {
     if (uploadedImage && canvasRef.current) {
@@ -34,10 +55,10 @@ const GraphCanvas = () => {
         // Auto-draw blue selection box covering entire image only on first load (no points captured yet)
         if (graphArea.width === 0 && graphArea.height === 0 && dataPoints.length === 0) {
           setGraphArea({
-            x: 0,
-            y: 0,
-            width: img.width,
-            height: img.height,
+            x: MARGIN,
+            y: MARGIN,
+            width: img.width - (MARGIN * 2),
+            height: img.height - (MARGIN * 2),
           });
         }
         
@@ -62,13 +83,56 @@ const GraphCanvas = () => {
     drawSelection(ctx);
     drawDataPoints(ctx);
     if (showFixPoints) drawFixPoints(ctx);
-  }, [graphArea, dataPoints, showFixPoints]);
+  }, [graphArea, dataPoints, showFixPoints, hoveredHandle, resizeMode]);
 
   const drawSelection = (ctx) => {
-    if (graphArea.width > 0 && graphArea.height > 0) {
+    const area = normalizeArea(graphArea);
+    if (area.width > 0 && area.height > 0) {
       ctx.strokeStyle = 'blue';
       ctx.lineWidth = 4;
-      ctx.strokeRect(graphArea.x, graphArea.y, graphArea.width, graphArea.height);
+      ctx.strokeRect(area.x, area.y, area.width, area.height);
+      
+      // Draw resize handles
+      const handleSize = 12;
+      const handles = [
+        { x: area.x, y: area.y, key: 'top-left' },
+        { x: area.x + area.width, y: area.y, key: 'top-right' },
+        { x: area.x, y: area.y + area.height, key: 'bottom-left' },
+        { x: area.x + area.width, y: area.y + area.height, key: 'bottom-right' },
+        { x: area.x + area.width / 2, y: area.y, key: 'top' },
+        { x: area.x + area.width / 2, y: area.y + area.height, key: 'bottom' },
+        { x: area.x, y: area.y + area.height / 2, key: 'left' },
+        { x: area.x + area.width, y: area.y + area.height / 2, key: 'right' },
+      ];
+      
+      handles.forEach(handle => {
+        const isHovered = hoveredHandle === handle.key;
+        const isActive = resizeMode === handle.key;
+        const currentSize = (isHovered || isActive) ? handleSize + 3 : handleSize;
+        
+        // Draw white border
+        ctx.fillStyle = 'white';
+        ctx.beginPath();
+        ctx.arc(handle.x, handle.y, currentSize, 0, 2 * Math.PI);
+        ctx.fill();
+        
+        // Draw black fill with lighter color when hovered/active
+        ctx.fillStyle = (isHovered || isActive) ? '#333333' : '#000000';
+        ctx.beginPath();
+        ctx.arc(handle.x, handle.y, currentSize - 2, 0, 2 * Math.PI);
+        ctx.fill();
+        
+        // Add glow effect when hovered or active
+        if (isHovered || isActive) {
+          ctx.shadowColor = '#666666';
+          ctx.shadowBlur = 10;
+          ctx.beginPath();
+          ctx.arc(handle.x, handle.y, currentSize - 2, 0, 2 * Math.PI);
+          ctx.fill();
+          ctx.shadowColor = 'transparent';
+          ctx.shadowBlur = 0;
+        }
+      });
     }
   };
 
@@ -118,22 +182,97 @@ const GraphCanvas = () => {
     
     const x = (e.clientX - rect.left) * scaleX;
     const y = (e.clientY - rect.top) * scaleY;
+
+    const area = normalizeArea(graphArea);
+    const handleRadius = 15; // Same as in handleMouseMoveOnCanvas
+    
+    // Define all handle positions (same as in handleMouseMoveOnCanvas)
+    const handles = [
+      { x: area.x, y: area.y, key: 'top-left' },
+      { x: area.x + area.width, y: area.y, key: 'top-right' },
+      { x: area.x, y: area.y + area.height, key: 'bottom-left' },
+      { x: area.x + area.width, y: area.y + area.height, key: 'bottom-right' },
+      { x: area.x + area.width / 2, y: area.y, key: 'top' },
+      { x: area.x + area.width / 2, y: area.y + area.height, key: 'bottom' },
+      { x: area.x, y: area.y + area.height / 2, key: 'left' },
+      { x: area.x + area.width, y: area.y + area.height / 2, key: 'right' },
+    ];
+    
+    // Check if clicking on any handle using distance-based detection
+    let mode = null;
+    for (const handle of handles) {
+      const dx = x - handle.x;
+      const dy = y - handle.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      if (distance <= handleRadius) {
+        mode = handle.key;
+        break;
+      }
+    }
+
+    if (mode) {
+      setResizeMode(mode);
+      setInitialArea(area);
+      setInitialMouse({ x, y });
+      setIsResizing(true);
+      return;
+    }
     
     setIsSelecting(true);
     setStartPos({ x, y });
   };
 
   const handleMouseMove = (e) => {
-    if (!isSelecting) return;
-    
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
-    
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
-    
+
     const x = (e.clientX - rect.left) * scaleX;
     const y = (e.clientY - rect.top) * scaleY;
+
+    // Resize existing box
+    if (resizeMode && initialArea) {
+      const dx = x - initialMouse.x;
+      const dy = y - initialMouse.y;
+      const minSize = 20;
+      const canvasW = canvas.width;
+      const canvasH = canvas.height;
+
+      let { x: nx, y: ny, width: nw, height: nh } = initialArea;
+
+      if (resizeMode.includes('left')) {
+        nx = initialArea.x + dx;
+        nw = initialArea.width - dx;
+      }
+      if (resizeMode.includes('right')) {
+        nw = initialArea.width + dx;
+      }
+      if (resizeMode.includes('top')) {
+        ny = initialArea.y + dy;
+        nh = initialArea.height - dy;
+      }
+      if (resizeMode.includes('bottom')) {
+        nh = initialArea.height + dy;
+      }
+
+      // Apply constraints
+      // Ensure minimum size
+      if (nw < minSize) nw = minSize;
+      if (nh < minSize) nh = minSize;
+
+      // Ensure boundaries with margin
+      if (nx < MARGIN) nx = MARGIN;
+      if (ny < MARGIN) ny = MARGIN;
+      if (nx + nw > canvasW - MARGIN) nw = (canvasW - MARGIN) - nx;
+      if (ny + nh > canvasH - MARGIN) nh = (canvasH - MARGIN) - ny;
+
+      setGraphArea({ x: nx, y: ny, width: nw, height: nh });
+      return;
+    }
+
+    // Draw new box
+    if (!isSelecting) return;
     
     // Calculate distance moved
     const distX = x - startPos.x;
@@ -143,22 +282,30 @@ const GraphCanvas = () => {
     
     const width = x - startPos.x;
     const height = y - startPos.y;
-    
-    setGraphArea({
+    setGraphArea(normalizeArea({
       x: startPos.x,
       y: startPos.y,
       width,
       height,
-    });
+    }));
   };
 
   const handleMouseUp = () => {
+    if (isResizing) {
+      justFinishedResizingRef.current = true;
+      setTimeout(() => {
+        justFinishedResizingRef.current = false;
+      }, 100);
+    }
     setIsSelecting(false);
+    setResizeMode(null);
+    setInitialArea(null);
+    setIsResizing(false);
   };
 
   const handleCanvasClick = (e) => {
-    // Don't add points while selecting or if this was a drag (box drawing)
-    if (isSelecting || dragDistance > 10) {
+    // Don't add points while selecting, resizing, or if this was a drag (box drawing)
+    if (isSelecting || isResizing || justFinishedResizingRef.current || dragDistance > 10) {
       setDragDistance(0); // Reset for next interaction
       return;
     }
@@ -174,12 +321,14 @@ const GraphCanvas = () => {
     const scaleY = canvas.height / rect.height;
     const canvasX = (e.clientX - rect.left) * scaleX;
     const canvasY = (e.clientY - rect.top) * scaleY;
+
     // Check if click is within graph area
+    const area = normalizeArea(graphArea);
     if (
-      canvasX >= graphArea.x &&
-      canvasX <= graphArea.x + graphArea.width &&
-      canvasY >= graphArea.y &&
-      canvasY <= graphArea.y + graphArea.height
+      canvasX >= area.x &&
+      canvasX <= area.x + area.width &&
+      canvasY >= area.y &&
+      canvasY <= area.y + area.height
     ) {
       addDataPoint({ canvasX, canvasY });
     }
@@ -199,6 +348,44 @@ const GraphCanvas = () => {
     
     const canvasX = (e.clientX - rect.left) * scaleX;
     const canvasY = (e.clientY - rect.top) * scaleY;
+    
+    // Check if mouse is directly over any resize handle
+    const area = normalizeArea(graphArea);
+    if (area.width > 0 && area.height > 0) {
+      const handleRadius = 15; // Detection radius for hover
+      
+      // Define all handle positions
+      const handles = [
+        { x: area.x, y: area.y, key: 'top-left' },
+        { x: area.x + area.width, y: area.y, key: 'top-right' },
+        { x: area.x, y: area.y + area.height, key: 'bottom-left' },
+        { x: area.x + area.width, y: area.y + area.height, key: 'bottom-right' },
+        { x: area.x + area.width / 2, y: area.y, key: 'top' },
+        { x: area.x + area.width / 2, y: area.y + area.height, key: 'bottom' },
+        { x: area.x, y: area.y + area.height / 2, key: 'left' },
+        { x: area.x + area.width, y: area.y + area.height / 2, key: 'right' },
+      ];
+      
+      // Find which handle the mouse is over (distance-based)
+      let hovered = null;
+      for (const handle of handles) {
+        const dx = canvasX - handle.x;
+        const dy = canvasY - handle.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        if (distance <= handleRadius) {
+          hovered = handle.key;
+          break; // Only one handle can be hovered at a time
+        }
+      }
+      
+      setHoveredHandle(hovered);
+      
+      if (hovered) {
+        canvas.style.cursor = 'default';
+      } else {
+        canvas.style.cursor = 'default';
+      }
+    }
     
     // Show coordinates - use drawn box if available, otherwise use full canvas as reference
     let graphX, graphY;
@@ -309,12 +496,13 @@ const GraphCanvas = () => {
           <li>Hover over the graph to see a magnified view</li>
         </ul>
       </div>
+      <div
+        className="coordinate-display-static"
+        style={{ visibility: showCoords ? 'visible' : 'hidden', opacity: showCoords ? 1 : 0.35 }}
+      >
+        x={typeof mousePos.x === 'number' && !isNaN(mousePos.x) ? mousePos.x.toFixed(3) : 'N/A'} y={typeof mousePos.y === 'number' && !isNaN(mousePos.y) ? mousePos.y.toFixed(3) : 'N/A'}
+      </div>
       <div className="canvas-wrapper">
-        {showCoords && (
-          <div className="coordinate-display">
-            x={typeof mousePos.x === 'number' && !isNaN(mousePos.x) ? mousePos.x.toFixed(3) : 'N/A'} y={typeof mousePos.y === 'number' && !isNaN(mousePos.y) ? mousePos.y.toFixed(3) : 'N/A'}
-          </div>
-        )}
         <canvas
           ref={canvasRef}
           onMouseDown={handleMouseDown}
@@ -327,31 +515,31 @@ const GraphCanvas = () => {
           onClick={handleCanvasClick}
           className="graph-canvas"
         />
-        <button
-          className="btn btn-primary"
-          style={{ marginTop: 16, marginLeft: 8, marginBottom: 24 }}
-          onClick={() => setShowFixPoints((prev) => !prev)}
-        >
-          {showFixPoints ? 'Hide fix-points' : 'Draw fix-points'}
-        </button>
-        <button
-          className="btn btn-secondary"
-          style={{ marginTop: 16, marginLeft: 8, marginBottom: 24 }}
-          onClick={() => {
-            if (imageSize.width && imageSize.height) {
-              setGraphArea({
-                x: 0,
-                y: 0,
-                width: imageSize.width,
-                height: imageSize.height,
-              });
-              setShowRedrawMsg(false);
-            }
-          }}
-        >
-          Redraw Box
-        </button>
       </div>
+      <button
+        className="btn btn-primary"
+        style={{ marginTop: 16, marginLeft: 8, marginBottom: 24 }}
+        onClick={() => setShowFixPoints((prev) => !prev)}
+      >
+        {showFixPoints ? 'Hide fix-points' : 'Draw fix-points'}
+      </button>
+      <button
+        className="btn btn-secondary"
+        style={{ marginTop: 16, marginLeft: 8, marginBottom: 24 }}
+        onClick={() => {
+          if (imageSize.width && imageSize.height) {
+            setGraphArea({
+              x: MARGIN,
+              y: MARGIN,
+              width: imageSize.width - (MARGIN * 2),
+              height: imageSize.height - (MARGIN * 2),
+            });
+            setShowRedrawMsg(false);
+          }
+        }}
+      >
+        Redraw Box
+      </button>
       {showRedrawMsg && (
         <div style={{ color: '#d32f2f', fontWeight: 'bold', marginTop: 8, marginBottom: 8 }}>
           Please redraw the box
