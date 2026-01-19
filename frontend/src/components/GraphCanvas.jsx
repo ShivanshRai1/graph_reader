@@ -24,8 +24,16 @@ const GraphCanvas = () => {
   const [isResizing, setIsResizing] = useState(false);
   const justFinishedResizingRef = useRef(false);
   const [hoveredHandle, setHoveredHandle] = useState(null);
+  const prevCanvasPosRef = useRef(null);
+  const prevGraphPosRef = useRef(null);
+  const [zeroWarnActive, setZeroWarnActive] = useState(false);
+  const [stuckWarnActive, setStuckWarnActive] = useState(false);
+  const warningHoldTimeoutRef = useRef(null);
 
   const MARGIN = 16; // Margin from edges for resize handles visibility
+  const EDGE_GAP = 12; // Hysteresis for edge checks to reduce flicker
+  const EPS = 1e-6;
+  const WARN_CLEAR_DELAY = 180; // ms to hold warning before clearing
 
   const normalizeArea = (area) => {
     let { x, y, width, height } = area;
@@ -85,6 +93,15 @@ const GraphCanvas = () => {
     if (showFixPoints) drawFixPoints(ctx);
   }, [graphArea, dataPoints, showFixPoints, hoveredHandle, resizeMode]);
 
+  useEffect(() => () => {
+    if (coordinateUpdateTimeoutRef.current) {
+      clearTimeout(coordinateUpdateTimeoutRef.current);
+    }
+    if (warningHoldTimeoutRef.current) {
+      clearTimeout(warningHoldTimeoutRef.current);
+    }
+  }, []);
+
   const drawSelection = (ctx) => {
     const area = normalizeArea(graphArea);
     if (area.width > 0 && area.height > 0) {
@@ -93,7 +110,7 @@ const GraphCanvas = () => {
       ctx.strokeRect(area.x, area.y, area.width, area.height);
       
       // Draw resize handles
-      const handleSize = 12;
+      const handleSize = 8;
       const handles = [
         { x: area.x, y: area.y, key: 'top-left' },
         { x: area.x + area.width, y: area.y, key: 'top-right' },
@@ -108,9 +125,11 @@ const GraphCanvas = () => {
       handles.forEach(handle => {
         const isHovered = hoveredHandle === handle.key;
         const isActive = resizeMode === handle.key;
-        const currentSize = (isHovered || isActive) ? handleSize + 3 : handleSize;
+        const currentSize = (isHovered || isActive) ? handleSize + 2 : handleSize;
+        const opacity = (isHovered || isActive) ? 1 : 0.5;
         
-        // Draw white border
+        // Draw white border with transparency
+        ctx.globalAlpha = opacity;
         ctx.fillStyle = 'white';
         ctx.beginPath();
         ctx.arc(handle.x, handle.y, currentSize, 0, 2 * Math.PI);
@@ -132,6 +151,8 @@ const GraphCanvas = () => {
           ctx.shadowColor = 'transparent';
           ctx.shadowBlur = 0;
         }
+        
+        ctx.globalAlpha = 1; // Reset opacity
       });
     }
   };
@@ -184,7 +205,7 @@ const GraphCanvas = () => {
     const y = (e.clientY - rect.top) * scaleY;
 
     const area = normalizeArea(graphArea);
-    const handleRadius = 15; // Same as in handleMouseMoveOnCanvas
+    const handleRadius = 12; // Same as in handleMouseMoveOnCanvas
     
     // Define all handle positions (same as in handleMouseMoveOnCanvas)
     const handles = [
@@ -352,7 +373,7 @@ const GraphCanvas = () => {
     // Check if mouse is directly over any resize handle
     const area = normalizeArea(graphArea);
     if (area.width > 0 && area.height > 0) {
-      const handleRadius = 15; // Detection radius for hover
+      const handleRadius = 12; // Detection radius for hover
       
       // Define all handle positions
       const handles = [
@@ -390,22 +411,48 @@ const GraphCanvas = () => {
     // Show coordinates - use drawn box if available, otherwise use full canvas as reference
     let graphX, graphY;
     
+    // Parse config values as numbers
+    let xMin = parseFloat(graphConfig.xMin);
+    let xMax = parseFloat(graphConfig.xMax);
+    let yMin = parseFloat(graphConfig.yMin);
+    let yMax = parseFloat(graphConfig.yMax);
+    
+    // Apply unit prefix multipliers only for linear scales (not for exponents in log scales)
+    if (graphConfig.xScale !== 'Logarithmic') {
+      const xMultiplier = graphConfig.xUnitPrefix ? parseFloat(graphConfig.xUnitPrefix) : 1;
+      xMin = xMin * xMultiplier;
+      xMax = xMax * xMultiplier;
+    }
+    if (graphConfig.yScale !== 'Logarithmic') {
+      const yMultiplier = graphConfig.yUnitPrefix ? parseFloat(graphConfig.yUnitPrefix) : 1;
+      yMin = yMin * yMultiplier;
+      yMax = yMax * yMultiplier;
+    }
+    
     if (graphArea.width > 0 && graphArea.height > 0) {
       // Use the drawn box for calculation
-      graphX = graphConfig.xMin + 
-        ((canvasX - graphArea.x) / graphArea.width) * (graphConfig.xMax - graphConfig.xMin);
+      graphX = xMin + 
+        ((canvasX - graphArea.x) / graphArea.width) * (xMax - xMin);
       
-      graphY = graphConfig.yMax - 
-        ((canvasY - graphArea.y) / graphArea.height) * (graphConfig.yMax - graphConfig.yMin);
+      graphY = yMax - 
+        ((canvasY - graphArea.y) / graphArea.height) * (yMax - yMin);
     } else if (uploadedImage && imageSize.width > 0) {
       // If no box drawn yet, use full image dimensions as reference
-      graphX = graphConfig.xMin + 
-        (canvasX / imageSize.width) * (graphConfig.xMax - graphConfig.xMin);
+      graphX = xMin + 
+        (canvasX / imageSize.width) * (xMax - xMin);
       
-      graphY = graphConfig.yMax - 
-        (canvasY / imageSize.height) * (graphConfig.yMax - graphConfig.yMin);
+      graphY = yMax - 
+        (canvasY / imageSize.height) * (yMax - yMin);
     } else {
       return; // Can't calculate without image loaded
+    }
+    
+    // Convert back from exponent to actual value for logarithmic scales
+    if (graphConfig.xScale === 'Logarithmic') {
+      graphX = Math.pow(10, graphX);
+    }
+    if (graphConfig.yScale === 'Logarithmic') {
+      graphY = Math.pow(10, graphY);
     }
     
     // Throttle coordinate updates to reduce flickering
@@ -417,7 +464,50 @@ const GraphCanvas = () => {
       setMousePos({ x: graphX, y: graphY });
       setShowCoords(true);
     }, 16); // ~60fps
-    
+
+    // Detect if values are stuck (any constant value, positive or negative) while cursor moves
+    const prevCanvas = prevCanvasPosRef.current;
+    const prevGraph = prevGraphPosRef.current;
+    const areaForWarn = normalizeArea(graphArea);
+    let nextStuckWarn = false;
+    if (prevCanvas && prevGraph) {
+      const canvasDelta = Math.hypot(canvasX - prevCanvas.x, canvasY - prevCanvas.y);
+      const graphDeltaX = Math.abs(graphX - prevGraph.x);
+      const graphDeltaY = Math.abs(graphY - prevGraph.y);
+      const graphDelta = Math.max(graphDeltaX, graphDeltaY);
+      const graphScale = Math.max(Math.abs(graphX), Math.abs(graphY), 1);
+      const movedEnough = canvasDelta > 20; // pixels (higher threshold)
+      const graphBarelyChanges = (graphDelta / graphScale) < 0.01; // 1% threshold, stricter than 0.1%
+      nextStuckWarn = movedEnough && graphBarelyChanges && areaForWarn.width > 0 && areaForWarn.height > 0;
+    }
+
+    prevCanvasPosRef.current = { x: canvasX, y: canvasY };
+    prevGraphPosRef.current = { x: graphX, y: graphY };
+
+    // Zero detection: only warn if truly stuck at zero, not near-zero on log scales
+    // Require strictly inside box (further from edges)
+    const strictInsideX = canvasX > areaForWarn.x + EDGE_GAP * 2 && canvasX < areaForWarn.x + areaForWarn.width - EDGE_GAP * 2;
+    const strictInsideY = canvasY > areaForWarn.y + EDGE_GAP * 2 && canvasY < areaForWarn.y + areaForWarn.height - EDGE_GAP * 2;
+    const nextZeroWarn = areaForWarn.width > 0 && areaForWarn.height > 0 && (
+      (strictInsideX && Math.abs(graphX) < EPS * 10) ||
+      (strictInsideY && Math.abs(graphY) < EPS * 10)
+    );
+
+    // Apply a brief hold when clearing to prevent flicker on edge jitters
+    // Suppress stuck warning if zero warning is already showing
+    if (warningHoldTimeoutRef.current) {
+      clearTimeout(warningHoldTimeoutRef.current);
+    }
+    if (nextZeroWarn || (nextStuckWarn && !nextZeroWarn)) {
+      setZeroWarnActive(nextZeroWarn);
+      setStuckWarnActive(nextStuckWarn && !nextZeroWarn);
+    } else {
+      warningHoldTimeoutRef.current = setTimeout(() => {
+        setZeroWarnActive(false);
+        setStuckWarnActive(false);
+      }, WARN_CLEAR_DELAY);
+    }
+
     // Update magnifier
     setShowMagnifier(true);
     drawMagnifier(canvasX, canvasY);
@@ -427,8 +517,13 @@ const GraphCanvas = () => {
     if (coordinateUpdateTimeoutRef.current) {
       clearTimeout(coordinateUpdateTimeoutRef.current);
     }
+    if (warningHoldTimeoutRef.current) {
+      clearTimeout(warningHoldTimeoutRef.current);
+    }
     setShowCoords(false);
     setShowMagnifier(false);
+    setZeroWarnActive(false);
+    setStuckWarnActive(false);
   };
 
   const drawMagnifier = (canvasX, canvasY) => {
@@ -501,6 +596,17 @@ const GraphCanvas = () => {
         style={{ visibility: showCoords ? 'visible' : 'hidden', opacity: showCoords ? 1 : 0.35 }}
       >
         x={typeof mousePos.x === 'number' && !isNaN(mousePos.x) ? mousePos.x.toFixed(3) : 'N/A'} y={typeof mousePos.y === 'number' && !isNaN(mousePos.y) ? mousePos.y.toFixed(3) : 'N/A'}
+      </div>
+      <div
+        className="coord-warning-display"
+        style={{
+          visibility: (zeroWarnActive || stuckWarnActive) ? 'visible' : 'hidden',
+          opacity: (zeroWarnActive || stuckWarnActive) ? 1 : 0,
+        }}
+      >
+        {zeroWarnActive ? '⚠️ Coordinates are constant. Check that the axis scale (Linear/Logarithmic) and min/max values match the graph.' : null}
+        {zeroWarnActive && stuckWarnActive ? ' ' : null}
+        {stuckWarnActive ? '⚠️ Coordinates are barely changing while you move. Verify scale, min/max, and units match the graph.' : null}
       </div>
       <div className="canvas-wrapper">
         <canvas

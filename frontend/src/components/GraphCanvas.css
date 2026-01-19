@@ -70,7 +70,19 @@
   display: inline-block;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
   transition: opacity 120ms ease;
-  min-height: 42px; /* keeps layout stable when visibility toggles */
+  min-height: 42px;
+}
+
+.coord-warning-display {
+  display: block;
+  margin-top: 8px;
+  margin-bottom: 12px;
+  min-height: 26px;
+  color: #d32f2f;
+  font-size: 12px;
+  font-style: italic;
+  line-height: 1.35;
+  transition: opacity 180ms ease;
 }
 
 .graph-canvas {

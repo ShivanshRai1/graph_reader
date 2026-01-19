@@ -50,15 +50,9 @@ export const GraphProvider = ({ children }) => {
     const num = parseFloat(value);
     if (isNaN(num)) return 0; // Return 0 for invalid input
     
-    // If value is between -10 and 10, assume it's an exponent
-    // Otherwise, assume it's an actual value and convert to exponent
-    if (Math.abs(num) <= 10 && Number.isInteger(num)) {
-      return num; // It's an exponent
-    } else if (num > 0) {
-      return Math.log10(num); // Convert actual value to exponent
-    }
-    // For zero or negative values in log scale, return a safe fallback
-    return -10; // 10^-10 is a very small positive number
+    // For log scale, values entered are already exponents, so just return them
+    // (Users enter exponents like -2, 0, 2.8, etc.)
+    return num;
   };
 
   // Get normalized min/max for calculations
@@ -74,13 +68,17 @@ export const GraphProvider = ({ children }) => {
     if (isNaN(yMin)) yMin = 0;
     if (isNaN(yMax)) yMax = 100;
 
-    // Apply unit prefix multipliers (default to 1 if not selected)
-    const xMultiplier = graphConfig.xUnitPrefix ? parseFloat(graphConfig.xUnitPrefix) : 1;
-    const yMultiplier = graphConfig.yUnitPrefix ? parseFloat(graphConfig.yUnitPrefix) : 1;
-    xMin = xMin * xMultiplier;
-    xMax = xMax * xMultiplier;
-    yMin = yMin * yMultiplier;
-    yMax = yMax * yMultiplier;
+    // Apply unit prefix multipliers only for linear scales (not for exponents in log scales)
+    if (graphConfig.xScale !== 'Logarithmic') {
+      const xMultiplier = graphConfig.xUnitPrefix ? parseFloat(graphConfig.xUnitPrefix) : 1;
+      xMin = xMin * xMultiplier;
+      xMax = xMax * xMultiplier;
+    }
+    if (graphConfig.yScale !== 'Logarithmic') {
+      const yMultiplier = graphConfig.yUnitPrefix ? parseFloat(graphConfig.yUnitPrefix) : 1;
+      yMin = yMin * yMultiplier;
+      yMax = yMax * yMultiplier;
+    }
 
     if (graphConfig.xScale === 'Logarithmic') {
       xMin = normalizeLogValue(xMin);
