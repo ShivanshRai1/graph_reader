@@ -5,6 +5,13 @@ import { useState, useEffect } from 'react';
 const GraphConfig = () => {
   const { graphConfig, setGraphConfig } = useGraph();
   const [logError, setLogError] = useState({ x: '', y: '' });
+  // Synced values for logarithmic inputs (exponent <-> actual)
+  const [logValues, setLogValues] = useState({
+    xMin: { exp: '', actual: '' },
+    xMax: { exp: '', actual: '' },
+    yMin: { exp: '', actual: '' },
+    yMax: { exp: '', actual: '' },
+  });
   
   // Track which input field is being used for logarithmic values
   const [logInputMode, setLogInputMode] = useState({
@@ -21,6 +28,22 @@ const GraphConfig = () => {
     setLogError({ x: xErr, y: yErr });
   }, [graphConfig.xScale, graphConfig.xMin, graphConfig.xMax, graphConfig.yScale, graphConfig.yMin, graphConfig.yMax]);
 
+  // Keep local synced values up-to-date from graphConfig
+  useEffect(() => {
+    const toActual = (expStr) => {
+      const exp = parseFloat(expStr);
+      if (isNaN(exp)) return '';
+      const val = Math.pow(10, exp);
+      return Number.isFinite(val) ? String(val) : '';
+    };
+    setLogValues({
+      xMin: { exp: String(graphConfig.xMin ?? ''), actual: toActual(graphConfig.xMin) },
+      xMax: { exp: String(graphConfig.xMax ?? ''), actual: toActual(graphConfig.xMax) },
+      yMin: { exp: String(graphConfig.yMin ?? ''), actual: toActual(graphConfig.yMin) },
+      yMax: { exp: String(graphConfig.yMax ?? ''), actual: toActual(graphConfig.yMax) },
+    });
+  }, [graphConfig.xMin, graphConfig.xMax, graphConfig.yMin, graphConfig.yMax]);
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     setGraphConfig({
@@ -32,28 +55,38 @@ const GraphConfig = () => {
   // Handle logarithmic input for exponent field
   const handleLogExponentChange = (field, value) => {
     setLogInputMode({ ...logInputMode, [field]: 'exponent' });
+    // Update config with exponent
     setGraphConfig({
       ...graphConfig,
       [field]: value,
     });
+    // Sync actual value locally
+    const exp = parseFloat(value);
+    const actual = !isNaN(exp) ? Math.pow(10, exp) : '';
+    setLogValues((prev) => ({
+      ...prev,
+      [field]: { exp: String(value), actual: actual !== '' ? String(actual) : '' },
+    }));
   };
 
   // Handle logarithmic input for actual value field
   const handleLogActualChange = (field, value) => {
     setLogInputMode({ ...logInputMode, [field]: 'actual' });
     const numValue = parseFloat(value);
-    if (numValue > 0 && !isNaN(numValue)) {
-      const exponent = Math.log10(numValue);
-      setGraphConfig({
-        ...graphConfig,
-        [field]: exponent.toString(),
-      });
-    } else {
-      setGraphConfig({
-        ...graphConfig,
-        [field]: value,
-      });
-    }
+    const exp = !isNaN(numValue) && numValue > 0 ? Math.log10(numValue) : NaN;
+    // Update config with exponent (if valid); otherwise keep current
+    setGraphConfig({
+      ...graphConfig,
+      [field]: Number.isNaN(exp) ? graphConfig[field] : String(exp),
+    });
+    // Sync local pair values
+    setLogValues((prev) => ({
+      ...prev,
+      [field]: {
+        exp: Number.isNaN(exp) ? prev[field].exp : String(exp),
+        actual: String(value),
+      },
+    }));
   };
 
   // Handle focus on exponent field
@@ -131,7 +164,7 @@ const GraphConfig = () => {
                   <div style={{ flex: 1, position: 'relative' }}>
                     <input
                       type="number"
-                      value={logInputMode.yMin === 'exponent' ? graphConfig.yMin : ''}
+                      value={logValues.yMin.exp}
                       onChange={(e) => handleLogExponentChange('yMin', e.target.value)}
                       onFocus={() => handleExponentFocus('yMin')}
                       placeholder="e.g., 5 for 10^5"
@@ -142,6 +175,7 @@ const GraphConfig = () => {
                   <div style={{ flex: 1, position: 'relative' }}>
                     <input
                       type="number"
+                      value={logValues.yMin.actual}
                       onChange={(e) => handleLogActualChange('yMin', e.target.value)}
                       onFocus={() => handleActualFocus('yMin')}
                       placeholder="e.g., 100k"
@@ -158,7 +192,7 @@ const GraphConfig = () => {
                   <div style={{ flex: 1, position: 'relative' }}>
                     <input
                       type="number"
-                      value={logInputMode.yMax === 'exponent' ? graphConfig.yMax : ''}
+                      value={logValues.yMax.exp}
                       onChange={(e) => handleLogExponentChange('yMax', e.target.value)}
                       onFocus={() => handleExponentFocus('yMax')}
                       placeholder="e.g., 5 for 10^5"
@@ -169,6 +203,7 @@ const GraphConfig = () => {
                   <div style={{ flex: 1, position: 'relative' }}>
                     <input
                       type="number"
+                      value={logValues.yMax.actual}
                       onChange={(e) => handleLogActualChange('yMax', e.target.value)}
                       onFocus={() => handleActualFocus('yMax')}
                       placeholder="e.g., 100k"
@@ -240,7 +275,7 @@ const GraphConfig = () => {
                   <div style={{ flex: 1, position: 'relative' }}>
                     <input
                       type="number"
-                      value={logInputMode.xMin === 'exponent' ? graphConfig.xMin : ''}
+                      value={logValues.xMin.exp}
                       onChange={(e) => handleLogExponentChange('xMin', e.target.value)}
                       onFocus={() => handleExponentFocus('xMin')}
                       placeholder="e.g., 5 for 10^5"
@@ -251,6 +286,7 @@ const GraphConfig = () => {
                   <div style={{ flex: 1, position: 'relative' }}>
                     <input
                       type="number"
+                      value={logValues.xMin.actual}
                       onChange={(e) => handleLogActualChange('xMin', e.target.value)}
                       onFocus={() => handleActualFocus('xMin')}
                       placeholder="e.g., 100k"
@@ -267,7 +303,7 @@ const GraphConfig = () => {
                   <div style={{ flex: 1, position: 'relative' }}>
                     <input
                       type="number"
-                      value={logInputMode.xMax === 'exponent' ? graphConfig.xMax : ''}
+                      value={logValues.xMax.exp}
                       onChange={(e) => handleLogExponentChange('xMax', e.target.value)}
                       onFocus={() => handleExponentFocus('xMax')}
                       placeholder="e.g., 5 for 10^5"
@@ -278,6 +314,7 @@ const GraphConfig = () => {
                   <div style={{ flex: 1, position: 'relative' }}>
                     <input
                       type="number"
+                      value={logValues.xMax.actual}
                       onChange={(e) => handleLogActualChange('xMax', e.target.value)}
                       onFocus={() => handleActualFocus('xMax')}
                       placeholder="e.g., 100k"
