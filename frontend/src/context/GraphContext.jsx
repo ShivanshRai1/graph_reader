@@ -194,7 +194,7 @@ export const GraphProvider = ({ children }) => {
     // Current bounds (already normalized for units/log)
     const { xMin: currXMin, xMax: currXMax, yMin: currYMin, yMax: currYMax } = getNormalizedMinMax();
 
-    // Expand bounds to fit imported data (with small padding)
+    // Expand bounds to fit imported data (with small padding) for canvas mapping only
     let newXMin = Math.min(currXMin, dataXMin);
     let newXMax = Math.max(currXMax, dataXMax);
     let newYMin = Math.min(currYMin, dataYMin);
@@ -207,16 +207,8 @@ export const GraphProvider = ({ children }) => {
     newYMin -= padY;
     newYMax += padY;
 
-    // Update graphConfig to reflect the expanded bounds (store as numbers)
-    setGraphConfig({
-      ...graphConfig,
-      xMin: newXMin,
-      xMax: newXMax,
-      yMin: newYMin,
-      yMax: newYMax,
-    });
-
-    // Convert graph coordinates to canvas coordinates using the new bounds
+    // Use expanded bounds ONLY for converting imported points to canvas coordinates
+    // Do NOT modify graphConfig - keep user's original bounds
     const boundsOverride = { xMin: newXMin, xMax: newXMax, yMin: newYMin, yMax: newYMax };
     const pointsWithCanvas = newPoints.map(point => {
       const canvasCoords = convertGraphToCanvasCoordinates(point.x, point.y, boundsOverride);

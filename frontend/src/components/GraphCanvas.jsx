@@ -38,7 +38,7 @@ const GraphCanvas = () => {
   const EDGE_GAP = 12; // Hysteresis for edge checks to reduce flicker
   const EPS = 1e-6;
   const WARN_CLEAR_DELAY = 180; // ms to hold warning before clearing
-  const DRAG_THRESHOLD = 30; // Increased from 10px to prevent accidental box redraw
+  const DRAG_THRESHOLD = 50; // Threshold to distinguish between click and drag
 
   const normalizeArea = (area) => {
     let { x, y, width, height } = area;
@@ -374,6 +374,7 @@ const GraphCanvas = () => {
     setResizeMode(null);
     setInitialArea(null);
     setIsResizing(false);
+    setDragDistance(0); // Reset drag distance after mouse up
   };
 
   const handleCanvasClick = (e) => {

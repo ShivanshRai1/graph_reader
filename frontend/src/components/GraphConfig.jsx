@@ -60,6 +60,8 @@ const GraphConfig = () => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
+    // Keep raw string value for numeric inputs to allow typing decimals like "0." or "1.2"
+    // Parsing will happen when the value is actually used in calculations
     setGraphConfig({
       ...graphConfig,
       [name]: value,
