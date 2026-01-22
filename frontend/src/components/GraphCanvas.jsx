@@ -8,6 +8,7 @@ const GraphCanvas = () => {
   const canvasRef = useRef(null);
   const magnifierRef = useRef(null);
   const [isSelecting, setIsSelecting] = useState(false);
+  const [isDrawingBox, setIsDrawingBox] = useState(false);
   const [startPos, setStartPos] = useState({ x: 0, y: 0 });
   const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
@@ -26,14 +27,18 @@ const GraphCanvas = () => {
   const [hoveredHandle, setHoveredHandle] = useState(null);
   const prevCanvasPosRef = useRef(null);
   const prevGraphPosRef = useRef(null);
+  const stuckFramesRef = useRef(0);
   const [zeroWarnActive, setZeroWarnActive] = useState(false);
   const [stuckWarnActive, setStuckWarnActive] = useState(false);
   const warningHoldTimeoutRef = useRef(null);
+  const [boxTransparent, setBoxTransparent] = useState(false);
+  const lastUserBoxRef = useRef(null); // Store last manually set box dimensions
 
   const MARGIN = 16; // Margin from edges for resize handles visibility
   const EDGE_GAP = 12; // Hysteresis for edge checks to reduce flicker
   const EPS = 1e-6;
   const WARN_CLEAR_DELAY = 180; // ms to hold warning before clearing
+  const DRAG_THRESHOLD = 30; // Increased from 10px to prevent accidental box redraw
 
   const normalizeArea = (area) => {
     let { x, y, width, height } = area;
@@ -62,12 +67,14 @@ const GraphCanvas = () => {
         
         // Auto-draw blue selection box covering entire image only on first load (no points captured yet)
         if (graphArea.width === 0 && graphArea.height === 0 && dataPoints.length === 0) {
-          setGraphArea({
+          const initialBox = {
             x: MARGIN,
             y: MARGIN,
             width: img.width - (MARGIN * 2),
             height: img.height - (MARGIN * 2),
-          });
+          };
+          setGraphArea(initialBox);
+          lastUserBoxRef.current = initialBox;
         }
         
         ctx.drawImage(img, 0, 0);
@@ -93,6 +100,13 @@ const GraphCanvas = () => {
     if (showFixPoints) drawFixPoints(ctx);
   }, [graphArea, dataPoints, showFixPoints, hoveredHandle, resizeMode]);
 
+  // Set box to transparent when points are captured (manually or imported)
+  useEffect(() => {
+    if (dataPoints.length > 0) {
+      setBoxTransparent(true);
+    }
+  }, [dataPoints.length]);
+
   useEffect(() => () => {
     if (coordinateUpdateTimeoutRef.current) {
       clearTimeout(coordinateUpdateTimeoutRef.current);
@@ -105,9 +119,12 @@ const GraphCanvas = () => {
   const drawSelection = (ctx) => {
     const area = normalizeArea(graphArea);
     if (area.width > 0 && area.height > 0) {
+      // Set opacity based on boxTransparent state
+      ctx.globalAlpha = boxTransparent ? 0.15 : 1;
       ctx.strokeStyle = 'blue';
       ctx.lineWidth = 4;
       ctx.strokeRect(area.x, area.y, area.width, area.height);
+      ctx.globalAlpha = 1; // Reset for handles
       
       // Draw resize handles
       const handleSize = 8;
@@ -126,7 +143,9 @@ const GraphCanvas = () => {
         const isHovered = hoveredHandle === handle.key;
         const isActive = resizeMode === handle.key;
         const currentSize = (isHovered || isActive) ? handleSize + 2 : handleSize;
-        const opacity = (isHovered || isActive) ? 1 : 0.5;
+        // Hide handles when box is transparent unless hovering
+        const baseOpacity = boxTransparent ? 0 : 0.5;
+        const opacity = (isHovered || isActive) ? 1 : baseOpacity;
         
         // Draw white border with transparency
         ctx.globalAlpha = opacity;
@@ -158,18 +177,27 @@ const GraphCanvas = () => {
   };
 
   const drawDataPoints = (ctx) => {
-    dataPoints.forEach((point) => {
+    dataPoints.forEach((point, index) => {
+      // Skip rendering imported points (keep them in table but not on canvas)
+      if (point.imported) return;
+
+      // Only draw if point has valid canvas coordinates
+      if (typeof point.canvasX !== 'number' || typeof point.canvasY !== 'number' || 
+          isNaN(point.canvasX) || isNaN(point.canvasY)) {
+        return;
+      }
+      
       // Draw white border for better visibility
       ctx.strokeStyle = 'white';
-      ctx.lineWidth = 3;
+      ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.arc(point.canvasX, point.canvasY, 8, 0, 2 * Math.PI); // reduced from 12 to 8
+      ctx.arc(point.canvasX, point.canvasY, 5, 0, 2 * Math.PI);
       ctx.stroke();
       
       // Draw red fill
       ctx.fillStyle = 'red';
       ctx.beginPath();
-      ctx.arc(point.canvasX, point.canvasY, 8, 0, 2 * Math.PI); // reduced from 12 to 8
+      ctx.arc(point.canvasX, point.canvasY, 5, 0, 2 * Math.PI);
       ctx.fill();
     });
   };
@@ -204,6 +232,9 @@ const GraphCanvas = () => {
     const x = (e.clientX - rect.left) * scaleX;
     const y = (e.clientY - rect.top) * scaleY;
 
+    // Reset drag distance for new interaction
+    setDragDistance(0);
+
     const area = normalizeArea(graphArea);
     const handleRadius = 12; // Same as in handleMouseMoveOnCanvas
     
@@ -236,6 +267,8 @@ const GraphCanvas = () => {
       setInitialArea(area);
       setInitialMouse({ x, y });
       setIsResizing(true);
+      // Make box visible during resize so user can see what they're doing
+      setBoxTransparent(false);
       return;
     }
     
@@ -301,24 +334,43 @@ const GraphCanvas = () => {
     const distance = Math.sqrt(distX * distX + distY * distY);
     setDragDistance(distance);
     
-    const width = x - startPos.x;
-    const height = y - startPos.y;
-    setGraphArea(normalizeArea({
-      x: startPos.x,
-      y: startPos.y,
-      width,
-      height,
-    }));
+    // Only start drawing box after DRAG_THRESHOLD to prevent accidental redraw
+    if (distance > DRAG_THRESHOLD && !isDrawingBox) {
+      setIsDrawingBox(true);
+    }
+    
+    // Only update graphArea if actively drawing a box
+    if (isDrawingBox) {
+      const width = x - startPos.x;
+      const height = y - startPos.y;
+      setGraphArea(normalizeArea({
+        x: startPos.x,
+        y: startPos.y,
+        width,
+        height,
+      }));
+    }
   };
 
   const handleMouseUp = () => {
     if (isResizing) {
       justFinishedResizingRef.current = true;
+      // Store the final resized box dimensions
+      lastUserBoxRef.current = { ...graphArea };
+      // Make box transparent after resize is done (entering capture mode)
+      setBoxTransparent(true);
       setTimeout(() => {
         justFinishedResizingRef.current = false;
       }, 100);
     }
+    if (isDrawingBox) {
+      // Store box dimensions when user finishes drawing
+      lastUserBoxRef.current = { ...graphArea };
+      // Make box transparent after drawing is done (entering capture mode)
+      setBoxTransparent(true);
+    }
     setIsSelecting(false);
+    setIsDrawingBox(false);
     setResizeMode(null);
     setInitialArea(null);
     setIsResizing(false);
@@ -326,7 +378,7 @@ const GraphCanvas = () => {
 
   const handleCanvasClick = (e) => {
     // Don't add points while selecting, resizing, or if this was a drag (box drawing)
-    if (isSelecting || isResizing || justFinishedResizingRef.current || dragDistance > 10) {
+    if (isSelecting || isResizing || justFinishedResizingRef.current || dragDistance > DRAG_THRESHOLD) {
       setDragDistance(0); // Reset for next interaction
       return;
     }
@@ -352,6 +404,8 @@ const GraphCanvas = () => {
       canvasY <= area.y + area.height
     ) {
       addDataPoint({ canvasX, canvasY });
+      // Make box transparent after first point is captured (entering capture mode)
+      setBoxTransparent(true);
     }
   };
 
@@ -475,14 +529,30 @@ const GraphCanvas = () => {
       const graphDeltaX = Math.abs(graphX - prevGraph.x);
       const graphDeltaY = Math.abs(graphY - prevGraph.y);
       const graphDelta = Math.max(graphDeltaX, graphDeltaY);
-      const graphScale = Math.max(Math.abs(graphX), Math.abs(graphY), 1);
-      const movedEnough = canvasDelta > 20; // pixels (higher threshold)
-      const graphBarelyChanges = (graphDelta / graphScale) < 0.01; // 1% threshold, stricter than 0.1%
+      const spanX = Math.abs(xMax - xMin);
+      const spanY = Math.abs(yMax - yMin);
+      const spanMax = Math.max(spanX, spanY, 1);
+      const movedEnough = canvasDelta > 20; // pixels
+      const graphBarelyChanges = (graphDelta / spanMax) < 0.002; // 0.2% of axis span
       nextStuckWarn = movedEnough && graphBarelyChanges && areaForWarn.width > 0 && areaForWarn.height > 0;
+    }
+
+    // Debounce stuck warning across frames to avoid blips
+    if (!prevGraphPosRef.current || !prevCanvasPosRef.current) {
+      prevCanvasPosRef.current = { x: canvasX, y: canvasY };
+      prevGraphPosRef.current = { x: graphX, y: graphY };
     }
 
     prevCanvasPosRef.current = { x: canvasX, y: canvasY };
     prevGraphPosRef.current = { x: graphX, y: graphY };
+
+    if (nextStuckWarn) {
+      stuckFramesRef.current = (stuckFramesRef.current || 0) + 1;
+    } else {
+      stuckFramesRef.current = 0;
+    }
+
+    const showStuck = stuckFramesRef.current >= 2;
 
     // Zero detection: only warn if truly stuck at zero, not near-zero on log scales
     // Require strictly inside box (further from edges)
@@ -498,9 +568,9 @@ const GraphCanvas = () => {
     if (warningHoldTimeoutRef.current) {
       clearTimeout(warningHoldTimeoutRef.current);
     }
-    if (nextZeroWarn || (nextStuckWarn && !nextZeroWarn)) {
+    if (nextZeroWarn || (showStuck && !nextZeroWarn)) {
       setZeroWarnActive(nextZeroWarn);
-      setStuckWarnActive(nextStuckWarn && !nextZeroWarn);
+      setStuckWarnActive(showStuck && !nextZeroWarn);
     } else {
       warningHoldTimeoutRef.current = setTimeout(() => {
         setZeroWarnActive(false);
@@ -633,15 +703,23 @@ const GraphCanvas = () => {
         className="btn btn-secondary"
         style={{ marginTop: 16, marginLeft: 8, marginBottom: 24 }}
         onClick={() => {
-          if (imageSize.width && imageSize.height) {
-            setGraphArea({
+          if (lastUserBoxRef.current) {
+            // Restore last user-defined box dimensions
+            setGraphArea({ ...lastUserBoxRef.current });
+          } else if (imageSize.width && imageSize.height) {
+            // First time: use full canvas
+            const newBox = {
               x: MARGIN,
               y: MARGIN,
               width: imageSize.width - (MARGIN * 2),
               height: imageSize.height - (MARGIN * 2),
-            });
-            setShowRedrawMsg(false);
+            };
+            setGraphArea(newBox);
+            lastUserBoxRef.current = newBox;
           }
+          // Make box visible again for potential resizing
+          setBoxTransparent(false);
+          setShowRedrawMsg(false);
         }}
       >
         Redraw Box

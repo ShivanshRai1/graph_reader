@@ -117,6 +117,37 @@ export const GraphProvider = ({ children }) => {
     return { x: graphX, y: graphY };
   };
 
+  // Convert graph coordinates to canvas coordinates
+  // Optional boundsOverride lets us map using updated bounds before state flushes
+  const convertGraphToCanvasCoordinates = (graphX, graphY, boundsOverride) => {
+    if (graphArea.width === 0 || graphArea.height === 0) {
+      return { canvasX: 0, canvasY: 0 };
+    }
+
+    const { xMin, xMax, yMin, yMax } = boundsOverride || getNormalizedMinMax();
+
+    // Avoid divide-by-zero and handle edge cases
+    const dx = Math.max(xMax - xMin, 1e-9);
+    const dy = Math.max(yMax - yMin, 1e-9);
+    let x = graphX;
+    let y = graphY;
+
+    // For log scales, clamp to positive range and convert to exponent
+    if (graphConfig.xScale === 'Logarithmic') {
+      x = Math.max(x, 1e-12);
+      x = Math.log10(x);
+    }
+    if (graphConfig.yScale === 'Logarithmic') {
+      y = Math.max(y, 1e-12);
+      y = Math.log10(y);
+    }
+
+    const canvasX = graphArea.x + ((x - xMin) / dx) * graphArea.width;
+    const canvasY = graphArea.y + ((yMax - y) / dy) * graphArea.height;
+
+    return { canvasX, canvasY };
+  };
+
   const addDataPoint = (point) => {
     // Convert canvas coordinates to graph coordinates
     const graphCoords = convertCanvasToGraphCoordinates(point.canvasX, point.canvasY);
@@ -133,6 +164,89 @@ export const GraphProvider = ({ children }) => {
 
   const clearDataPoints = () => {
     setDataPoints([]);
+  };
+
+  const importDataPoints = (newPoints) => {
+    if (!newPoints || newPoints.length === 0) return;
+
+    // Compute data extents from imported points
+    let dataXMin = Number.POSITIVE_INFINITY;
+    let dataXMax = Number.NEGATIVE_INFINITY;
+    let dataYMin = Number.POSITIVE_INFINITY;
+    let dataYMax = Number.NEGATIVE_INFINITY;
+
+    newPoints.forEach(point => {
+      if (typeof point.x === 'number' && !isNaN(point.x)) {
+        dataXMin = Math.min(dataXMin, point.x);
+        dataXMax = Math.max(dataXMax, point.x);
+      }
+      if (typeof point.y === 'number' && !isNaN(point.y)) {
+        dataYMin = Math.min(dataYMin, point.y);
+        dataYMax = Math.max(dataYMax, point.y);
+      }
+    });
+
+    // Fallback if all invalid
+    if (!isFinite(dataXMin) || !isFinite(dataXMax) || !isFinite(dataYMin) || !isFinite(dataYMax)) {
+      return;
+    }
+
+    // Current bounds (already normalized for units/log)
+    const { xMin: currXMin, xMax: currXMax, yMin: currYMin, yMax: currYMax } = getNormalizedMinMax();
+
+    // Expand bounds to fit imported data (with small padding)
+    let newXMin = Math.min(currXMin, dataXMin);
+    let newXMax = Math.max(currXMax, dataXMax);
+    let newYMin = Math.min(currYMin, dataYMin);
+    let newYMax = Math.max(currYMax, dataYMax);
+
+    const padX = Math.max((newXMax - newXMin) * 0.05, 1e-6);
+    const padY = Math.max((newYMax - newYMin) * 0.05, 1e-6);
+    newXMin -= padX;
+    newXMax += padX;
+    newYMin -= padY;
+    newYMax += padY;
+
+    // Update graphConfig to reflect the expanded bounds (store as numbers)
+    setGraphConfig({
+      ...graphConfig,
+      xMin: newXMin,
+      xMax: newXMax,
+      yMin: newYMin,
+      yMax: newYMax,
+    });
+
+    // Convert graph coordinates to canvas coordinates using the new bounds
+    const boundsOverride = { xMin: newXMin, xMax: newXMax, yMin: newYMin, yMax: newYMax };
+    const pointsWithCanvas = newPoints.map(point => {
+      const canvasCoords = convertGraphToCanvasCoordinates(point.x, point.y, boundsOverride);
+      return {
+        x: point.x,
+        y: point.y,
+        canvasX: canvasCoords.canvasX,
+        canvasY: canvasCoords.canvasY,
+        imported: true, // mark imported so we can choose whether to render
+      };
+    });
+
+    // Deduplicate: remove duplicate points within the batch and against existing points
+    const seenCoordinates = new Set();
+    dataPoints.forEach(point => {
+      const key = `${point.x.toFixed(10)},${point.y.toFixed(10)}`;
+      seenCoordinates.add(key);
+    });
+
+    const deduplicatedPoints = pointsWithCanvas.filter(point => {
+      const key = `${point.x.toFixed(10)},${point.y.toFixed(10)}`;
+      if (seenCoordinates.has(key)) {
+        return false;
+      }
+      seenCoordinates.add(key);
+      return true;
+    });
+
+    // Append deduplicated points to existing data points
+    setDataPoints([...dataPoints, ...deduplicatedPoints]);
   };
 
   const saveCurve = async () => {
@@ -158,6 +272,7 @@ export const GraphProvider = ({ children }) => {
     dataPoints,
     addDataPoint,
     clearDataPoints,
+    importDataPoints,
     savedCurves,
     setSavedCurves,
     saveCurve,

@@ -21,10 +21,24 @@ const GraphConfig = () => {
     yMax: 'exponent',
   });
 
-  // Validate log min/max
+  // Validate min/max values
   useEffect(() => {
     let xErr = '', yErr = '';
-    // Removed validation for log scale min/max > 0 to allow negative exponents
+    
+    // Check if min > max for X-axis
+    const xMin = parseFloat(graphConfig.xMin);
+    const xMax = parseFloat(graphConfig.xMax);
+    if (!isNaN(xMin) && !isNaN(xMax) && xMin >= xMax) {
+      xErr = '⚠️ Min value must be less than Max value';
+    }
+    
+    // Check if min > max for Y-axis
+    const yMin = parseFloat(graphConfig.yMin);
+    const yMax = parseFloat(graphConfig.yMax);
+    if (!isNaN(yMin) && !isNaN(yMax) && yMin >= yMax) {
+      yErr = '⚠️ Min value must be less than Max value';
+    }
+    
     setLogError({ x: xErr, y: yErr });
   }, [graphConfig.xScale, graphConfig.xMin, graphConfig.xMax, graphConfig.yScale, graphConfig.yMin, graphConfig.yMax]);
 
@@ -73,13 +87,14 @@ const GraphConfig = () => {
   const handleLogActualChange = (field, value) => {
     setLogInputMode({ ...logInputMode, [field]: 'actual' });
     const numValue = parseFloat(value);
+    // Accept scientific notation (e.g., "1e5") and positive values
     const exp = !isNaN(numValue) && numValue > 0 ? Math.log10(numValue) : NaN;
     // Update config with exponent (if valid); otherwise keep current
     setGraphConfig({
       ...graphConfig,
       [field]: Number.isNaN(exp) ? graphConfig[field] : String(exp),
     });
-    // Sync local pair values
+    // Sync local pair values - keep the user's input as-is in actual field
     setLogValues((prev) => ({
       ...prev,
       [field]: {
@@ -163,7 +178,8 @@ const GraphConfig = () => {
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                   <div style={{ flex: 1, position: 'relative' }}>
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
                       value={logValues.yMin.exp}
                       onChange={(e) => handleLogExponentChange('yMin', e.target.value)}
                       onFocus={() => handleExponentFocus('yMin')}
@@ -174,13 +190,14 @@ const GraphConfig = () => {
                   </div>
                   <div style={{ flex: 1, position: 'relative' }}>
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
                       value={logValues.yMin.actual}
                       onChange={(e) => handleLogActualChange('yMin', e.target.value)}
                       onFocus={() => handleActualFocus('yMin')}
-                      placeholder="e.g., 100k"
+                      placeholder="e.g., 100k or 1e5"
                       style={{ width: '100%', opacity: logInputMode.yMin === 'exponent' ? 0.5 : 1 }}
-                      title="Enter the actual value (e.g., 100000). It will be converted to exponent."
+                      title="Enter the actual value (e.g., 100000 or 1e5). It will be converted to exponent."
                     />
                   </div>
                 </div>
@@ -191,7 +208,8 @@ const GraphConfig = () => {
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                   <div style={{ flex: 1, position: 'relative' }}>
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
                       value={logValues.yMax.exp}
                       onChange={(e) => handleLogExponentChange('yMax', e.target.value)}
                       onFocus={() => handleExponentFocus('yMax')}
@@ -202,13 +220,14 @@ const GraphConfig = () => {
                   </div>
                   <div style={{ flex: 1, position: 'relative' }}>
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
                       value={logValues.yMax.actual}
                       onChange={(e) => handleLogActualChange('yMax', e.target.value)}
                       onFocus={() => handleActualFocus('yMax')}
-                      placeholder="e.g., 100k"
+                      placeholder="e.g., 100k or 1e5"
                       style={{ width: '100%', opacity: logInputMode.yMax === 'exponent' ? 0.5 : 1 }}
-                      title="Enter the actual value (e.g., 100000). It will be converted to exponent."
+                      title="Enter the actual value (e.g., 100000 or 1e5). It will be converted to exponent."
                     />
                   </div>
                 </div>
@@ -233,6 +252,7 @@ const GraphConfig = () => {
                   value={graphConfig.yMax}
                   onChange={handleChange}
                 />
+                {logError.y && <span style={{ color: '#d32f2f', fontSize: 12, display: 'block', marginTop: 4 }}>{logError.y}</span>}
               </label>
             </>
           )}
@@ -274,7 +294,8 @@ const GraphConfig = () => {
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                   <div style={{ flex: 1, position: 'relative' }}>
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
                       value={logValues.xMin.exp}
                       onChange={(e) => handleLogExponentChange('xMin', e.target.value)}
                       onFocus={() => handleExponentFocus('xMin')}
@@ -285,13 +306,14 @@ const GraphConfig = () => {
                   </div>
                   <div style={{ flex: 1, position: 'relative' }}>
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
                       value={logValues.xMin.actual}
                       onChange={(e) => handleLogActualChange('xMin', e.target.value)}
                       onFocus={() => handleActualFocus('xMin')}
-                      placeholder="e.g., 100k"
+                      placeholder="e.g., 100k or 1e5"
                       style={{ width: '100%', opacity: logInputMode.xMin === 'exponent' ? 0.5 : 1 }}
-                      title="Enter the actual value (e.g., 100000). It will be converted to exponent."
+                      title="Enter the actual value (e.g., 100000 or 1e5). It will be converted to exponent."
                     />
                   </div>
                 </div>
@@ -302,7 +324,8 @@ const GraphConfig = () => {
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                   <div style={{ flex: 1, position: 'relative' }}>
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
                       value={logValues.xMax.exp}
                       onChange={(e) => handleLogExponentChange('xMax', e.target.value)}
                       onFocus={() => handleExponentFocus('xMax')}
@@ -313,13 +336,14 @@ const GraphConfig = () => {
                   </div>
                   <div style={{ flex: 1, position: 'relative' }}>
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
                       value={logValues.xMax.actual}
                       onChange={(e) => handleLogActualChange('xMax', e.target.value)}
                       onFocus={() => handleActualFocus('xMax')}
-                      placeholder="e.g., 100k"
+                      placeholder="e.g., 100k or 1e5"
                       style={{ width: '100%', opacity: logInputMode.xMax === 'exponent' ? 0.5 : 1 }}
-                      title="Enter the actual value (e.g., 100000). It will be converted to exponent."
+                      title="Enter the actual value (e.g., 100000 or 1e5). It will be converted to exponent."
                     />
                   </div>
                 </div>
@@ -344,6 +368,7 @@ const GraphConfig = () => {
                   value={graphConfig.xMax}
                   onChange={handleChange}
                 />
+                {logError.x && <span style={{ color: '#d32f2f', fontSize: 12, display: 'block', marginTop: 4 }}>{logError.x}</span>}
               </label>
             </>
           )}
