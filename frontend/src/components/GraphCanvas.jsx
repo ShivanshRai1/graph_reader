@@ -3,7 +3,7 @@ import { useGraph } from '../context/GraphContext';
 import './GraphCanvas.css';
 
 const GraphCanvas = () => {
-  const { uploadedImage, graphArea, setGraphArea, dataPoints, addDataPoint, clearDataPoints, graphConfig } = useGraph();
+  const { uploadedImage, graphArea, setGraphArea, dataPoints, addDataPoint, clearDataPoints, graphConfig, deleteDataPoint } = useGraph();
   const [showRedrawMsg, setShowRedrawMsg] = useState(false);
   const canvasRef = useRef(null);
   const magnifierRef = useRef(null);
@@ -414,6 +414,42 @@ const GraphCanvas = () => {
     clearDataPoints();
   };
 
+  const handleCanvasContextMenu = (e) => {
+    e.preventDefault(); // Prevent browser context menu
+    
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    
+    const canvasX = (e.clientX - rect.left) * scaleX;
+    const canvasY = (e.clientY - rect.top) * scaleY;
+    
+    // Check if right-click is on any data point (manual points only)
+    const clickRadius = 8; // Detection radius for point click
+    
+    for (let i = 0; i < dataPoints.length; i++) {
+      const point = dataPoints[i];
+      
+      // Skip imported points - can't delete them by right-click
+      if (point.imported) continue;
+      
+      // Check distance from click to point
+      if (typeof point.canvasX === 'number' && typeof point.canvasY === 'number' &&
+          !isNaN(point.canvasX) && !isNaN(point.canvasY)) {
+        const dx = canvasX - point.canvasX;
+        const dy = canvasY - point.canvasY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        if (distance <= clickRadius) {
+          // Found a point - delete it
+          deleteDataPoint(i);
+          return;
+        }
+      }
+    }
+  };
+
   const handleMouseMoveOnCanvas = (e) => {
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
@@ -595,6 +631,20 @@ const GraphCanvas = () => {
     setShowMagnifier(false);
     setZeroWarnActive(false);
     setStuckWarnActive(false);
+    
+    // Cancel any active resize operation when mouse leaves canvas
+    if (isResizing) {
+      setResizeMode(null);
+      setInitialArea(null);
+      setIsResizing(false);
+      setBoxTransparent(true);
+    }
+    
+    // Cancel any active box drawing operation
+    if (isDrawingBox) {
+      setIsDrawingBox(false);
+      setIsSelecting(false);
+    }
   };
 
   const drawMagnifier = (canvasX, canvasY) => {
@@ -690,6 +740,7 @@ const GraphCanvas = () => {
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseLeaveCanvas}
           onClick={handleCanvasClick}
+          onContextMenu={handleCanvasContextMenu}
           className="graph-canvas"
         />
       </div>
