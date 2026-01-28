@@ -153,9 +153,8 @@ const GraphConfig = () => {
               <option value="Logarithmic">Logarithmic</option>
             </select>
           </label>
-          <small className="helper-text">Linear: evenly spaced values. Logarithmic: spans powers of 10 (decades).</small>
           {graphConfig.yScale === 'Logarithmic' && (
-            <small className="helper-text">Enter EITHER the exponent OR the actual value (not both)</small>
+            <small className="helper-text">For Logarithmic values Enter EITHER the exponent OR the actual value (not both)</small>
           )}
           <label>
             Unit:
@@ -269,9 +268,8 @@ const GraphConfig = () => {
               <option value="Logarithmic">Logarithmic</option>
             </select>
           </label>
-          <small className="helper-text">Linear: evenly spaced values. Logarithmic: spans powers of 10 (decades).</small>
           {graphConfig.xScale === 'Logarithmic' && (
-            <small className="helper-text">Enter EITHER the exponent OR the actual value (not both)</small>
+            <small className="helper-text">For Logarithmic values Enter EITHER the exponent OR the actual value (not both)</small>
           )}
           <label>
             Unit:

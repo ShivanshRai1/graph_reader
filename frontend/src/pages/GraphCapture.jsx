@@ -34,6 +34,9 @@ const GraphCapture = () => {
     }
     setIsSaving(true);
     try {
+      // Show informative message if backend might be cold starting
+      const startTime = Date.now();
+      
       // Save to backend
       const payload = {
         part_number: graphConfig.partNumber || null,
@@ -56,15 +59,25 @@ const GraphCapture = () => {
       console.log('Sending payload:', payload);
 
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      
+      // Add timeout for cold starts
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 180000); // 3 minute timeout
+      
       const response = await fetch(`${apiUrl}/api/curves`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(payload),
+        signal: controller.signal,
       });
-
+      
+      clearTimeout(timeoutId);
+      const elapsed = Date.now() - startTime;
+      
       console.log('Response status:', response.status);
+      console.log(`Request took ${(elapsed / 1000).toFixed(1)}s`);
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -73,11 +86,15 @@ const GraphCapture = () => {
       }
 
       const result = await response.json();
-      alert(`Curve saved successfully! (ID: ${result.id})`);
+      alert(`Curve saved successfully! (ID: ${result.id})${elapsed > 10000 ? '\n\nNote: First request took longer due to server startup.' : ''}`);
       setIsSaving(false);
     } catch (error) {
       console.error('Full error:', error);
-      alert('Error saving curve: ' + error.message + '\n\nMake sure backend is running');
+      if (error.name === 'AbortError') {
+        alert('Request timed out. The server may be starting up (takes 1-2 minutes on first use). Please try again.');
+      } else {
+        alert('Error saving curve: ' + error.message + '\n\nMake sure backend is running or try again if server is starting up.');
+      }
       setIsSaving(false);
     }
   };

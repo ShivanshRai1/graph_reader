@@ -241,6 +241,32 @@ export const GraphProvider = ({ children }) => {
     setDataPoints([...dataPoints, ...deduplicatedPoints]);
   };
 
+  const updateDataPoint = (index, newX, newY) => {
+    if (index < 0 || index >= dataPoints.length) return;
+    
+    const point = dataPoints[index];
+    const canvasCoords = convertGraphToCanvasCoordinates(newX, newY);
+    
+    const updatedPoint = {
+      ...point,
+      x: newX,
+      y: newY,
+      canvasX: canvasCoords.canvasX,
+      canvasY: canvasCoords.canvasY,
+    };
+    
+    const updatedPoints = [...dataPoints];
+    updatedPoints[index] = updatedPoint;
+    setDataPoints(updatedPoints);
+  };
+
+  const deleteDataPoint = (index) => {
+    if (index < 0 || index >= dataPoints.length) return;
+    
+    const updatedPoints = dataPoints.filter((_, i) => i !== index);
+    setDataPoints(updatedPoints);
+  };
+
   const saveCurve = async () => {
     // TODO: Call API to save curve
     const newCurve = {
@@ -265,6 +291,8 @@ export const GraphProvider = ({ children }) => {
     addDataPoint,
     clearDataPoints,
     importDataPoints,
+    updateDataPoint,
+    deleteDataPoint,
     savedCurves,
     setSavedCurves,
     saveCurve,

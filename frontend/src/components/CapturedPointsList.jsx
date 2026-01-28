@@ -1,9 +1,13 @@
 import { useGraph } from '../context/GraphContext';
 import { parseFile } from '../utils/fileParser';
 import './CapturedPointsList.css';
+import { useState } from 'react';
 
 const CapturedPointsList = () => {
-  const { dataPoints, clearDataPoints, importDataPoints, uploadedImage } = useGraph();
+  const { dataPoints, clearDataPoints, importDataPoints, uploadedImage, updateDataPoint, deleteDataPoint } = useGraph();
+  const [editingIndex, setEditingIndex] = useState(null);
+  const [editX, setEditX] = useState('');
+  const [editY, setEditY] = useState('');
 
   const exportToCSV = () => {
     if (dataPoints.length === 0) {
@@ -88,6 +92,40 @@ const CapturedPointsList = () => {
     event.target.value = '';
   };
 
+  const handleEditClick = (index) => {
+    const point = dataPoints[index];
+    setEditingIndex(index);
+    setEditX(parseFloat(point.x).toFixed(4));
+    setEditY(parseFloat(point.y).toFixed(4));
+  };
+
+  const handleSaveEdit = (index) => {
+    const newX = parseFloat(editX);
+    const newY = parseFloat(editY);
+
+    if (isNaN(newX) || isNaN(newY)) {
+      alert('Please enter valid numeric values');
+      return;
+    }
+
+    updateDataPoint(index, newX, newY);
+    setEditingIndex(null);
+    setEditX('');
+    setEditY('');
+  };
+
+  const handleCancelEdit = () => {
+    setEditingIndex(null);
+    setEditX('');
+    setEditY('');
+  };
+
+  const handleDeletePoint = (index) => {
+    if (window.confirm('Are you sure you want to delete this point?')) {
+      deleteDataPoint(index);
+    }
+  };
+
   return (
     <div className="captured-points-container">
       <div className="points-header">
@@ -142,14 +180,100 @@ const CapturedPointsList = () => {
                 <th>#</th>
                 <th>X</th>
                 <th>Y</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {dataPoints.map((point, index) => (
                 <tr key={index}>
                   <td>{index + 1}</td>
-                  <td>{typeof point.x === 'number' && !isNaN(point.x) ? point.x.toFixed(4) : 'Invalid'}</td>
-                  <td>{typeof point.y === 'number' && !isNaN(point.y) ? point.y.toFixed(4) : 'Invalid'}</td>
+                  {editingIndex === index ? (
+                    <>
+                      <td>
+                        <input
+                          type="number"
+                          value={editX}
+                          onChange={(e) => setEditX(e.target.value)}
+                          step="any"
+                          style={{ width: '100%', padding: '4px' }}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          type="number"
+                          value={editY}
+                          onChange={(e) => setEditY(e.target.value)}
+                          step="any"
+                          style={{ width: '100%', padding: '4px' }}
+                        />
+                      </td>
+                      <td style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                        <button
+                          onClick={() => handleSaveEdit(index)}
+                          style={{
+                            padding: '4px 8px',
+                            backgroundColor: '#4caf50',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          Save
+                        </button>
+                        <button
+                          onClick={handleCancelEdit}
+                          style={{
+                            padding: '4px 8px',
+                            backgroundColor: '#f44336',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td>{typeof point.x === 'number' && !isNaN(point.x) ? point.x.toFixed(4) : 'Invalid'}</td>
+                      <td>{typeof point.y === 'number' && !isNaN(point.y) ? point.y.toFixed(4) : 'Invalid'}</td>
+                      <td style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                        <button
+                          onClick={() => handleEditClick(index)}
+                          disabled={point.imported}
+                          title={point.imported ? 'Cannot edit imported points' : 'Edit this point'}
+                          style={{
+                            padding: '4px 8px',
+                            backgroundColor: point.imported ? '#ccc' : '#2196F3',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: point.imported ? 'not-allowed' : 'pointer',
+                          }}
+                        >
+                          ✎ Edit
+                        </button>
+                        <button
+                          onClick={() => handleDeletePoint(index)}
+                          disabled={point.imported}
+                          title={point.imported ? 'Cannot delete imported points' : 'Delete this point'}
+                          style={{
+                            padding: '4px 8px',
+                            backgroundColor: point.imported ? '#ccc' : '#f44336',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: point.imported ? 'not-allowed' : 'pointer',
+                          }}
+                        >
+                          🗑 Delete
+                        </button>
+                      </td>
+                    </>
+                  )}
                 </tr>
               ))}
             </tbody>
