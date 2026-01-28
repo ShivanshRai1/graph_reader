@@ -31,10 +31,12 @@ app.add_middleware(
 
 # Health check endpoint
 @app.get("/")
+@app.head("/")
 def read_root():
     return {"message": "Graph Capture API is running!", "version": "1.0.0"}
 
 @app.get("/health")
+@app.head("/health")
 def health_check():
     return {"status": "healthy"}
 
