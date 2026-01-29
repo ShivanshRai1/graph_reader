@@ -166,6 +166,10 @@ export const GraphProvider = ({ children }) => {
     setDataPoints([]);
   };
 
+  const replaceDataPoints = (points) => {
+    setDataPoints(Array.isArray(points) ? points : []);
+  };
+
   const importDataPoints = (newPoints) => {
     if (!newPoints || newPoints.length === 0) return;
 
@@ -290,6 +294,7 @@ export const GraphProvider = ({ children }) => {
     dataPoints,
     addDataPoint,
     clearDataPoints,
+    replaceDataPoints,
     importDataPoints,
     updateDataPoint,
     deleteDataPoint,

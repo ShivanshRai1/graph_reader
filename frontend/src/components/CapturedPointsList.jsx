@@ -1,13 +1,21 @@
 import { useGraph } from '../context/GraphContext';
 import { parseFile } from '../utils/fileParser';
 import './CapturedPointsList.css';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
-const CapturedPointsList = () => {
+const CapturedPointsList = ({ isReadOnly = false }) => {
   const { dataPoints, clearDataPoints, importDataPoints, uploadedImage, updateDataPoint, deleteDataPoint } = useGraph();
   const [editingIndex, setEditingIndex] = useState(null);
   const [editX, setEditX] = useState('');
   const [editY, setEditY] = useState('');
+
+  useEffect(() => {
+    if (isReadOnly && editingIndex !== null) {
+      setEditingIndex(null);
+      setEditX('');
+      setEditY('');
+    }
+  }, [isReadOnly, editingIndex]);
 
   const exportToCSV = () => {
     if (dataPoints.length === 0) {
@@ -65,6 +73,11 @@ const CapturedPointsList = () => {
   };
 
   const handleFileImport = async (event) => {
+    if (isReadOnly) {
+      alert('Points are read-only after saving. Start a new graph to import more points.');
+      event.target.value = '';
+      return;
+    }
     const file = event.target.files[0];
     if (!file) return;
 
@@ -93,6 +106,9 @@ const CapturedPointsList = () => {
   };
 
   const handleEditClick = (index) => {
+    if (isReadOnly) {
+      return;
+    }
     const point = dataPoints[index];
     setEditingIndex(index);
     setEditX(parseFloat(point.x).toFixed(4));
@@ -121,6 +137,9 @@ const CapturedPointsList = () => {
   };
 
   const handleDeletePoint = (index) => {
+    if (isReadOnly) {
+      return;
+    }
     if (window.confirm('Are you sure you want to delete this point?')) {
       deleteDataPoint(index);
     }
@@ -130,6 +149,11 @@ const CapturedPointsList = () => {
     <div className="captured-points-container">
       <div className="points-header">
         <h3>Captured Points ({dataPoints.length})</h3>
+        {isReadOnly ? (
+          <span style={{ marginLeft: 12, color: '#555', fontSize: 13 }}>
+            Read-only (saved)
+          </span>
+        ) : null}
         <div className="points-actions">
           <input 
             type="file" 
@@ -141,6 +165,8 @@ const CapturedPointsList = () => {
           <button 
             onClick={() => document.getElementById('file-import').click()} 
             className="btn btn-primary"
+            disabled={isReadOnly}
+            title={isReadOnly ? 'Points are read-only after saving' : 'Import from file'}
           >
             Import from File
           </button>
@@ -161,7 +187,8 @@ const CapturedPointsList = () => {
           <button 
             onClick={clearDataPoints} 
             className="btn btn-danger"
-            disabled={dataPoints.length === 0}
+            disabled={dataPoints.length === 0 || isReadOnly}
+            title={isReadOnly ? 'Points are read-only after saving' : 'Clear all points'}
           >
             Clear All
           </button>
@@ -243,30 +270,30 @@ const CapturedPointsList = () => {
                       <td style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
                         <button
                           onClick={() => handleEditClick(index)}
-                          disabled={point.imported}
-                          title={point.imported ? 'Cannot edit imported points' : 'Edit this point'}
+                          disabled={point.imported || isReadOnly}
+                          title={isReadOnly ? 'Points are read-only after saving' : (point.imported ? 'Cannot edit imported points' : 'Edit this point')}
                           style={{
                             padding: '4px 8px',
-                            backgroundColor: point.imported ? '#ccc' : '#2196F3',
+                            backgroundColor: (point.imported || isReadOnly) ? '#ccc' : '#2196F3',
                             color: 'white',
                             border: 'none',
                             borderRadius: '4px',
-                            cursor: point.imported ? 'not-allowed' : 'pointer',
+                            cursor: (point.imported || isReadOnly) ? 'not-allowed' : 'pointer',
                           }}
                         >
                           ✎ Edit
                         </button>
                         <button
                           onClick={() => handleDeletePoint(index)}
-                          disabled={point.imported}
-                          title={point.imported ? 'Cannot delete imported points' : 'Delete this point'}
+                          disabled={point.imported || isReadOnly}
+                          title={isReadOnly ? 'Points are read-only after saving' : (point.imported ? 'Cannot delete imported points' : 'Delete this point')}
                           style={{
                             padding: '4px 8px',
-                            backgroundColor: point.imported ? '#ccc' : '#f44336',
+                            backgroundColor: (point.imported || isReadOnly) ? '#ccc' : '#f44336',
                             color: 'white',
                             border: 'none',
                             borderRadius: '4px',
-                            cursor: point.imported ? 'not-allowed' : 'pointer',
+                            cursor: (point.imported || isReadOnly) ? 'not-allowed' : 'pointer',
                           }}
                         >
                           🗑 Delete

@@ -2,7 +2,7 @@ import { useRef, useState, useEffect } from 'react';
 import { useGraph } from '../context/GraphContext';
 import './GraphCanvas.css';
 
-const GraphCanvas = () => {
+const GraphCanvas = ({ isReadOnly = false }) => {
   const { uploadedImage, graphArea, setGraphArea, dataPoints, addDataPoint, clearDataPoints, graphConfig, deleteDataPoint } = useGraph();
   const [showRedrawMsg, setShowRedrawMsg] = useState(false);
   const canvasRef = useRef(null);
@@ -378,6 +378,9 @@ const GraphCanvas = () => {
   };
 
   const handleCanvasClick = (e) => {
+    if (isReadOnly) {
+      return;
+    }
     // Don't add points while selecting, resizing, or if this was a drag (box drawing)
     if (isSelecting || isResizing || justFinishedResizingRef.current || dragDistance > DRAG_THRESHOLD) {
       setDragDistance(0); // Reset for next interaction
@@ -416,6 +419,10 @@ const GraphCanvas = () => {
 
   const handleCanvasContextMenu = (e) => {
     e.preventDefault(); // Prevent browser context menu
+
+    if (isReadOnly) {
+      return;
+    }
     
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
