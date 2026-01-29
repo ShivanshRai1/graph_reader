@@ -27,18 +27,23 @@ const GraphCapture = () => {
       alert('Please capture at least one data point');
       return;
     }
-    // Validate log min/max
-    if (graphConfig.xScale === 'Logarithmic') {
-      if (!(parseFloat(graphConfig.xMin) > 0) || !(parseFloat(graphConfig.xMax) > 0)) {
-        alert('For logarithmic X axis, min and max must be > 0');
-        return;
-      }
+    // Validate min/max values are valid numbers and min < max
+    const xMin = parseFloat(graphConfig.xMin);
+    const xMax = parseFloat(graphConfig.xMax);
+    const yMin = parseFloat(graphConfig.yMin);
+    const yMax = parseFloat(graphConfig.yMax);
+    
+    if (isNaN(xMin) || isNaN(xMax) || isNaN(yMin) || isNaN(yMax)) {
+      alert('Please enter valid numeric values for all min/max fields');
+      return;
     }
-    if (graphConfig.yScale === 'Logarithmic') {
-      if (!(parseFloat(graphConfig.yMin) > 0) || !(parseFloat(graphConfig.yMax) > 0)) {
-        alert('For logarithmic Y axis, min and max must be > 0');
-        return;
-      }
+    if (xMin >= xMax) {
+      alert('X-axis: Min must be less than Max');
+      return;
+    }
+    if (yMin >= yMax) {
+      alert('Y-axis: Min must be less than Max');
+      return;
     }
     setIsSaving(true);
     try {
