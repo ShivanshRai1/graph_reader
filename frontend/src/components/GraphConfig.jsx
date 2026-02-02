@@ -132,6 +132,16 @@ const GraphConfig = () => {
           />
         </label>
         <label>
+          TC/TJ (Temperature):
+          <input
+            type="text"
+            name="temperature"
+            value={graphConfig.temperature}
+            onChange={handleChange}
+            placeholder="e.g., -40°C, 25°C"
+          />
+        </label>
+        <label>
           Part Number (optional):
           <input
             type="text"
@@ -176,6 +186,10 @@ const GraphConfig = () => {
             <>
               <label>
                 Min (10^x):
+                <div style={{ display: 'flex', gap: '8px', fontSize: 12, color: '#1976d2', marginBottom: 4 }}>
+                  <span style={{ flex: 1 }}>Log Exponent</span>
+                  <span style={{ flex: 1 }}>Real Value</span>
+                </div>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                   <div style={{ flex: 1, position: 'relative' }}>
                     <input
@@ -206,6 +220,10 @@ const GraphConfig = () => {
               </label>
               <label>
                 Max (10^x):
+                <div style={{ display: 'flex', gap: '8px', fontSize: 12, color: '#1976d2', marginBottom: 4 }}>
+                  <span style={{ flex: 1 }}>Log Exponent</span>
+                  <span style={{ flex: 1 }}>Real Value</span>
+                </div>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                   <div style={{ flex: 1, position: 'relative' }}>
                     <input
@@ -291,6 +309,10 @@ const GraphConfig = () => {
             <>
               <label>
                 Min (10^x):
+                <div style={{ display: 'flex', gap: '8px', fontSize: 12, color: '#1976d2', marginBottom: 4 }}>
+                  <span style={{ flex: 1 }}>Log Exponent</span>
+                  <span style={{ flex: 1 }}>Real Value</span>
+                </div>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                   <div style={{ flex: 1, position: 'relative' }}>
                     <input
@@ -321,6 +343,10 @@ const GraphConfig = () => {
               </label>
               <label>
                 Max (10^x):
+                <div style={{ display: 'flex', gap: '8px', fontSize: 12, color: '#1976d2', marginBottom: 4 }}>
+                  <span style={{ flex: 1 }}>Log Exponent</span>
+                  <span style={{ flex: 1 }}>Real Value</span>
+                </div>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                   <div style={{ flex: 1, position: 'relative' }}>
                     <input
@@ -375,18 +401,7 @@ const GraphConfig = () => {
         </div>
       </div>
 
-      <div className="config-section">
-        <label>
-          TC/TJ (Temperature):
-          <input
-            type="text"
-            name="temperature"
-            value={graphConfig.temperature}
-            onChange={handleChange}
-            placeholder="e.g., -40°C, 25°C"
-          />
-        </label>
-      </div>
+      {/* Temperature input moved above */}
     </div>
   );
 };
