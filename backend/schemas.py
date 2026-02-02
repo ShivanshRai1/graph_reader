@@ -28,6 +28,12 @@ class CurveCreate(BaseModel):
     y_min: float = 0
     y_max: float = 100
     temperature: Optional[str] = None
+    manufacturer: Optional[str] = None
+    graph_title: Optional[str] = None
+    x_label: Optional[str] = None
+    y_label: Optional[str] = None
+    other_symbols: Optional[str] = None
+    discoveree_cat_id: Optional[int] = None
     data_points: List[DataPointCreate] = []
 
 class CurveUpdate(BaseModel):
@@ -42,6 +48,12 @@ class CurveUpdate(BaseModel):
     y_min: Optional[float] = None
     y_max: Optional[float] = None
     temperature: Optional[str] = None
+    manufacturer: Optional[str] = None
+    graph_title: Optional[str] = None
+    x_label: Optional[str] = None
+    y_label: Optional[str] = None
+    other_symbols: Optional[str] = None
+    discoveree_cat_id: Optional[int] = None
 
 class CurveResponse(BaseModel):
     id: int
@@ -56,6 +68,12 @@ class CurveResponse(BaseModel):
     y_min: float
     y_max: float
     temperature: Optional[str]
+    manufacturer: Optional[str]
+    graph_title: Optional[str]
+    x_label: Optional[str]
+    y_label: Optional[str]
+    other_symbols: Optional[str]
+    discoveree_cat_id: Optional[int]
     created_at: Optional[datetime] = None
     data_points: List[DataPointResponse] = []
 

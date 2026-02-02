@@ -120,7 +120,7 @@ const GraphCanvas = ({ isReadOnly = false }) => {
     const area = normalizeArea(graphArea);
     if (area.width > 0 && area.height > 0) {
       // Set opacity based on boxTransparent state
-      ctx.globalAlpha = boxTransparent ? 0.15 : 1;
+      ctx.globalAlpha = boxTransparent ? 0.3 : 0.6;
       ctx.strokeStyle = 'blue';
       ctx.lineWidth = 4;
       ctx.strokeRect(area.x, area.y, area.width, area.height);
@@ -143,32 +143,38 @@ const GraphCanvas = ({ isReadOnly = false }) => {
         const isHovered = hoveredHandle === handle.key;
         const isActive = resizeMode === handle.key;
         const currentSize = (isHovered || isActive) ? handleSize + 2 : handleSize;
-        // Hide handles when box is transparent unless hovering
-        const baseOpacity = boxTransparent ? 0 : 0.5;
-        const opacity = (isHovered || isActive) ? 1 : baseOpacity;
         
-        // Draw white border with transparency
-        ctx.globalAlpha = opacity;
-        ctx.fillStyle = 'white';
-        ctx.beginPath();
-        ctx.arc(handle.x, handle.y, currentSize, 0, 2 * Math.PI);
-        ctx.fill();
+        // Always show handles, make them more visible by default
+        ctx.globalAlpha = 1;
         
-        // Draw black fill with lighter color when hovered/active
-        ctx.fillStyle = (isHovered || isActive) ? '#333333' : '#000000';
-        ctx.beginPath();
-        ctx.arc(handle.x, handle.y, currentSize - 2, 0, 2 * Math.PI);
-        ctx.fill();
-        
-        // Add glow effect when hovered or active
         if (isHovered || isActive) {
-          ctx.shadowColor = '#666666';
-          ctx.shadowBlur = 10;
+          // Hovered/Active state: Filled circle with border
+          // Draw outer border (stroke)
+          ctx.strokeStyle = '#666666'; // Gray border
+          ctx.lineWidth = 2;
+          ctx.fillStyle = '#666666'; // Gray fill
           ctx.beginPath();
-          ctx.arc(handle.x, handle.y, currentSize - 2, 0, 2 * Math.PI);
+          ctx.arc(handle.x, handle.y, currentSize, 0, 2 * Math.PI);
+          ctx.fill();
+          ctx.stroke();
+          
+          // Add glow effect
+          ctx.shadowColor = '#666666';
+          ctx.shadowBlur = 8;
+          ctx.beginPath();
+          ctx.arc(handle.x, handle.y, currentSize, 0, 2 * Math.PI);
           ctx.fill();
           ctx.shadowColor = 'transparent';
           ctx.shadowBlur = 0;
+        } else {
+          // Normal state: Hollow circle with gray border
+          ctx.strokeStyle = '#666666'; // Gray border
+          ctx.lineWidth = 2;
+          ctx.fillStyle = 'white'; // White fill
+          ctx.beginPath();
+          ctx.arc(handle.x, handle.y, currentSize, 0, 2 * Math.PI);
+          ctx.fill();
+          ctx.stroke();
         }
         
         ctx.globalAlpha = 1; // Reset opacity

@@ -18,6 +18,12 @@ class Curve(Base):
     y_min = Column(Float, default=0)
     y_max = Column(Float, default=100)
     temperature = Column(String(100))
+    manufacturer = Column(String(255))
+    graph_title = Column(String(255))
+    x_label = Column(String(255))
+    y_label = Column(String(255))
+    other_symbols = Column(Text)
+    discoveree_cat_id = Column(Integer)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -38,6 +44,12 @@ class Curve(Base):
             "y_min": self.y_min,
             "y_max": self.y_max,
             "temperature": self.temperature,
+            "manufacturer": self.manufacturer,
+            "graph_title": self.graph_title,
+            "x_label": self.x_label,
+            "y_label": self.y_label,
+            "other_symbols": self.other_symbols,
+            "discoveree_cat_id": self.discoveree_cat_id,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "data_points": [point.to_dict() for point in self.data_points],
         }

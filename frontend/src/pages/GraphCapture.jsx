@@ -3,7 +3,7 @@ import GraphCanvas from '../components/GraphCanvas';
 import GraphConfig from '../components/GraphConfig';
 import CapturedPointsList from '../components/CapturedPointsList';
 import { useGraph } from '../context/GraphContext';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import './GraphCapture.css';
 
 const GraphCapture = () => {
@@ -17,6 +17,30 @@ const GraphCapture = () => {
   const [isLoadingSavedCurve, setIsLoadingSavedCurve] = useState(false);
   const [showSavedPanel, setShowSavedPanel] = useState(false);
   const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  const [urlParams, setUrlParams] = useState({
+    partno: '',
+    manf: '',
+    graph_title: '',
+    curve_title: '',
+    xlabel: '',
+    ylabel: '',
+    other_symb: '',
+    discoveree_cat_id: '',
+  });
+
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    setUrlParams({
+      partno: searchParams.get('partno') || '',
+      manf: searchParams.get('manf') || '',
+      graph_title: searchParams.get('graph_title') || '',
+      curve_title: searchParams.get('curve_title') || '',
+      xlabel: searchParams.get('xlabel') || '',
+      ylabel: searchParams.get('ylabel') || '',
+      other_symb: searchParams.get('other_symb') || '',
+      discoveree_cat_id: searchParams.get('discoveree_cat_id') || '',
+    });
+  }, []);
 
   const handleSave = async () => {
     if (!graphConfig.curveName) {
@@ -52,8 +76,8 @@ const GraphCapture = () => {
       
       // Save to backend
       const payload = {
-        part_number: graphConfig.partNumber || null,
-        curve_name: graphConfig.curveName,
+        part_number: urlParams.partno || graphConfig.partNumber || null,
+        curve_name: urlParams.curve_title || graphConfig.curveName,
         x_scale: graphConfig.xScale,
         y_scale: graphConfig.yScale,
         x_unit: graphConfig.xUnitPrefix,
@@ -63,11 +87,20 @@ const GraphCapture = () => {
         y_min: parseFloat(graphConfig.yMin),
         y_max: parseFloat(graphConfig.yMax),
         temperature: graphConfig.temperature,
+        manufacturer: urlParams.manf || null,
+        graph_title: urlParams.graph_title || null,
+        x_label: urlParams.xlabel || null,
+        y_label: urlParams.ylabel || null,
+        other_symbols: urlParams.other_symb || null,
+        discoveree_cat_id: urlParams.discoveree_cat_id ? parseInt(urlParams.discoveree_cat_id) : null,
         data_points: dataPoints.map(point => ({
           x_value: point.x,
           y_value: point.y,
         })),
       };
+
+      console.log('URL Params:', urlParams);
+      console.log('Sending payload:', payload);
 
       console.log('Sending payload:', payload);
 

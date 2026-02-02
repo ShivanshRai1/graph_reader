@@ -188,7 +188,7 @@ const GraphConfig = () => {
                 Min (10^x):
                 <div style={{ display: 'flex', gap: '8px', fontSize: 12, color: '#1976d2', marginBottom: 4 }}>
                   <span style={{ flex: 1 }}>Log Exponent</span>
-                  <span style={{ flex: 1 }}>Real Value</span>
+                  <span style={{ flex: 1 }}>Graph Scale Value</span>
                 </div>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                   <div style={{ flex: 1, position: 'relative' }}>
@@ -222,7 +222,7 @@ const GraphConfig = () => {
                 Max (10^x):
                 <div style={{ display: 'flex', gap: '8px', fontSize: 12, color: '#1976d2', marginBottom: 4 }}>
                   <span style={{ flex: 1 }}>Log Exponent</span>
-                  <span style={{ flex: 1 }}>Real Value</span>
+                  <span style={{ flex: 1 }}>Graph Scale Value</span>
                 </div>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                   <div style={{ flex: 1, position: 'relative' }}>
@@ -311,7 +311,7 @@ const GraphConfig = () => {
                 Min (10^x):
                 <div style={{ display: 'flex', gap: '8px', fontSize: 12, color: '#1976d2', marginBottom: 4 }}>
                   <span style={{ flex: 1 }}>Log Exponent</span>
-                  <span style={{ flex: 1 }}>Real Value</span>
+                  <span style={{ flex: 1 }}>Graph Scale Value</span>
                 </div>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                   <div style={{ flex: 1, position: 'relative' }}>
@@ -345,7 +345,7 @@ const GraphConfig = () => {
                 Max (10^x):
                 <div style={{ display: 'flex', gap: '8px', fontSize: 12, color: '#1976d2', marginBottom: 4 }}>
                   <span style={{ flex: 1 }}>Log Exponent</span>
-                  <span style={{ flex: 1 }}>Real Value</span>
+                  <span style={{ flex: 1 }}>Graph Scale Value</span>
                 </div>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                   <div style={{ flex: 1, position: 'relative' }}>
