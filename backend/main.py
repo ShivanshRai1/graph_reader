@@ -59,6 +59,12 @@ def create_curve(curve: CurveCreate, db: Session = Depends(get_db)):
             y_min=curve.y_min,
             y_max=curve.y_max,
             temperature=curve.temperature,
+            manufacturer=curve.manufacturer,
+            graph_title=curve.graph_title,
+            x_label=curve.x_label,
+            y_label=curve.y_label,
+            other_symbols=curve.other_symbols,
+            discoveree_cat_id=curve.discoveree_cat_id,
         )
         
         # Add data points

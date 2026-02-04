@@ -145,6 +145,26 @@ const CapturedPointsList = ({ isReadOnly = false }) => {
     }
   };
 
+  // Copy points as tab-separated table for easy pasting
+  const copyToClipboard = () => {
+    if (dataPoints.length === 0) {
+      alert('No data points to copy');
+      return;
+    }
+    const header = ['#', 'X', 'Y'];
+    const rows = dataPoints.map((point, idx) => [
+      (idx + 1).toString(),
+      typeof point.x === 'number' && !isNaN(point.x) ? point.x.toFixed(4) : 'Invalid',
+      typeof point.y === 'number' && !isNaN(point.y) ? point.y.toFixed(4) : 'Invalid',
+    ]);
+    const table = [header, ...rows].map(row => row.join('\t')).join('\n');
+    navigator.clipboard.writeText(table).then(() => {
+      alert('Captured points copied to clipboard!');
+    }, () => {
+      alert('Failed to copy to clipboard.');
+    });
+  };
+
   return (
     <div className="captured-points-container">
       <div className="points-header">
@@ -183,6 +203,14 @@ const CapturedPointsList = ({ isReadOnly = false }) => {
             disabled={dataPoints.length === 0}
           >
             Export JSON
+          </button>
+          <button
+            onClick={copyToClipboard}
+            className="btn btn-primary"
+            disabled={dataPoints.length === 0}
+            title="Copy all points as table for pasting into Notepad, Word, etc."
+          >
+            Copy Table
           </button>
           <button 
             onClick={clearDataPoints} 
