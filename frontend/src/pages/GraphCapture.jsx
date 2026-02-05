@@ -15,6 +15,7 @@ const GraphCapture = () => {
   const [savedCurvesError, setSavedCurvesError] = useState('');
   const [selectedCurveId, setSelectedCurveId] = useState('');
   const [isLoadingSavedCurve, setIsLoadingSavedCurve] = useState(false);
+  const [savedCurvesSource, setSavedCurvesSource] = useState('company');
   const [showSavedPanel, setShowSavedPanel] = useState(false);
   const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
   const [urlParams, setUrlParams] = useState({
@@ -62,21 +63,36 @@ const GraphCapture = () => {
     });
     setReturnParams(returnParamsObj);
     
+    const partno = searchParams.get('partno') || '';
+    const manufacturer = searchParams.get('manufacturer') || searchParams.get('manf') || '';
+    const curveTitle = searchParams.get('curve_title') || '';
+    const graphTitle = searchParams.get('graph_title') || '';
+    const tctjValue = searchParams.get('tctj') || '';
+    
     setUrlParams({
-      partno: searchParams.get('partno') || '',
-      manufacturer: searchParams.get('manufacturer') || searchParams.get('manf') || '',
-      graph_title: searchParams.get('graph_title') || '',
-      curve_title: searchParams.get('curve_title') || '',
+      partno,
+      manufacturer,
+      graph_title: graphTitle,
+      curve_title: curveTitle,
       x_label: searchParams.get('x_label') || searchParams.get('x_title') || searchParams.get('xlabel') || '',
       y_label: searchParams.get('y_label') || searchParams.get('y_title') || searchParams.get('ylabel') || '',
       other_symbols: otherSymbols,
       discoveree_cat_id: searchParams.get('discoveree_cat_id') || '',
       identifier: searchParams.get('identifier') || '',
       testuser_id: searchParams.get('testuser_id') || '',
-      tctj: searchParams.get('tctj') || '',
+      tctj: tctjValue,
       return_url: searchParams.get('return_url') || '',
     });
-  }, []);
+    
+    // Auto-populate graphConfig with URL parameters
+    setGraphConfig(prevConfig => ({
+      ...prevConfig,
+      curveName: curveTitle || prevConfig.curveName,
+      graphTitle: graphTitle || prevConfig.graphTitle,
+      partNumber: partno || prevConfig.partNumber,
+      temperature: (tctjValue && tctjValue !== '0') ? tctjValue : prevConfig.temperature,
+    }));
+  }, [setGraphConfig]);
 
   const handleSave = async () => {
     if (!graphConfig.curveName) {
@@ -187,6 +203,11 @@ const GraphCapture = () => {
   };
 
   const sendToCompanyDatabase = async (graphImageUrl, graphId) => {
+    // ============================================================
+    // TESTING MODE: Set to false to skip actual API call
+    // ============================================================
+    const SEND_TO_API = true;
+    
     try {
       // Build the JSON payload for company's API
       const companyApiPayload = {
@@ -220,17 +241,21 @@ const GraphCapture = () => {
 
       console.log('Company API Payload:', companyApiPayload);
 
-      // ============================================================
-      // TODO: ENTER YOUR COMPANY'S DATABASE SAVE API ENDPOINT HERE
-      // Replace 'YOUR_COMPANY_API_SAVE_URL' with your actual API endpoint
-      // Example: 'https://your-company-api.com/api/save-graph'
-      // ============================================================
-      const COMPANY_API_SAVE_URL = 'https://www.discoveree.io/graph_capture_api.php';
-      
-      if (COMPANY_API_SAVE_URL === 'https://www.discoveree.io/graph_capture_api.php') {
-        alert('Company API endpoint not configured. Please enter your API endpoint in the code.');
-        return false;
+      // Skip API call if in testing mode
+      if (!SEND_TO_API) {
+        console.log('⚠️ TESTING MODE: Skipping actual API call');
+        // Simulate successful response for testing redirect
+        if (urlParams.return_url) {
+          const returnUrl = constructReturnUrl(urlParams.return_url, graphId);
+          console.log('Redirecting to:', returnUrl);
+          window.location.href = returnUrl;
+        } else {
+          alert('Data saved to local backend successfully! (API call skipped for testing)');
+        }
+        return true;
       }
+
+      const COMPANY_API_SAVE_URL = 'https://www.discoveree.io/graph_capture_api.php';
 
       const response = await fetch(COMPANY_API_SAVE_URL, {
         method: 'POST',
@@ -273,9 +298,9 @@ const GraphCapture = () => {
       url.searchParams.append(key, value);
     });
     
-    // Add graph_id
+    // Add return_graph_id
     if (graphId) {
-      url.searchParams.append('graph_id', graphId);
+      url.searchParams.append('return_graph_id', graphId);
     }
     
     return url.toString();
@@ -286,12 +311,27 @@ const GraphCapture = () => {
     setIsFetchingSaved(true);
     setSavedCurvesError('');
     try {
-      const response = await fetch(`${apiUrl}/api/curves`);
+      // Company database view API endpoint
+      const COMPANY_API_VIEW_URL = 'https://www.discoveree.io/graph_capture_api.php?graph_title=test&partno=abc&manf=abc&discoveree_cat_id=11';
+      if (!COMPANY_API_VIEW_URL) {
+        throw new Error('Company view API not configured');
+      }
+      const response = await fetch(COMPANY_API_VIEW_URL);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      const curves = await response.json();
-      setSavedCurves(Array.isArray(curves) ? curves : []);
+      const result = await response.json();
+      const curves = Array.isArray(result)
+        ? result
+        : Array.isArray(result.data)
+          ? result.data
+          : Array.isArray(result.results)
+            ? result.results
+            : Array.isArray(result.curves)
+              ? result.curves
+              : [];
+      setSavedCurves(curves);
+      setSavedCurvesSource('company');
       if (!curves || curves.length === 0) {
         setSavedCurvesError('No saved curves found.');
       }
@@ -304,6 +344,10 @@ const GraphCapture = () => {
 
   const handleLoadSavedCurve = async () => {
     if (!selectedCurveId) {
+      return;
+    }
+    if (savedCurvesSource === 'company') {
+      setSavedCurvesError('Loading points is only available for local saved curves.');
       return;
     }
     setIsLoadingSavedCurve(true);
@@ -401,16 +445,22 @@ const GraphCapture = () => {
           <ImageUpload />
         ) : (
           <div className="capture-workspace">
+
             <div className="canvas-section">
-              <GraphCanvas isReadOnly={isReadOnly} />
+              <GraphCanvas isReadOnly={isReadOnly} partNumber={urlParams.partno} manufacturer={urlParams.manufacturer} />
               <CapturedPointsList isReadOnly={isReadOnly} />
             </div>
-            
+
             <div className="config-section">
-              <GraphConfig />
+              <GraphConfig 
+                showTctj={urlParams.tctj !== "0"} 
+                isGraphTitleReadOnly={!!urlParams.graph_title}
+                isCurveNameReadOnly={!!urlParams.curve_title}
+              />
               
-              {/* Dynamic Symbol Input Boxes */}
-              {symbolNames.length > 0 && (
+
+              {/* Dynamic Symbol Input Boxes - Only show if other_symb exists in URL */}
+              {symbolNames && symbolNames.length > 0 && (
                 <div style={{ marginTop: 16, padding: 12, border: '1px solid #ddd', borderRadius: 8, backgroundColor: '#f9f9f9' }}>
                   <h3 style={{ marginTop: 0, marginBottom: 12, fontSize: 14 }}>Symbol Values</h3>
                   {symbolNames.map(symbol => (
@@ -423,60 +473,32 @@ const GraphCapture = () => {
                         value={symbolValues[symbol] || ''}
                         onChange={(e) => setSymbolValues({ ...symbolValues, [symbol]: e.target.value })}
                         placeholder={`Enter value for ${symbol}`}
-                        style={{ width: '100%', padding: 6, border: '1px solid #ccc', borderRadius: 4 }}
+                        style={{ width: '100%', padding: '8px', background: '#2d2d2d', color: '#ffffff', border: '1px solid #444', borderRadius: '4px' }}
                       />
                     </div>
                   ))}
                 </div>
               )}
               
-              {/* Conditional tctj Input Box */}
-              {urlParams.tctj !== "0" && (
-                <div style={{ marginTop: 16, padding: 12, border: '1px solid #ddd', borderRadius: 8, backgroundColor: '#f9f9f9' }}>
-                  <label style={{ display: 'block', marginBottom: 6, fontSize: 12, fontWeight: 500 }}>
-                    tctj
-                  </label>
-                  <input
-                    type="text"
-                    value={graphConfig.temperature || ''}
-                    onChange={(e) => setGraphConfig({ ...graphConfig, temperature: e.target.value })}
-                    placeholder="Enter tctj value"
-                    style={{ width: '100%', padding: 8, border: '1px solid #ccc', borderRadius: 4 }}
-                  />
-                </div>
-              )}
-              
+
               <div className="action-buttons">
                 <button 
                   onClick={handleSave} 
                   className="btn btn-primary"
                   disabled={isSaving}
                 >
-                  {isSaving ? 'Saving...' : 'Save Data Points'}
-                </button>
-                <button 
-                  onClick={() => window.location.reload()} 
-                  className="btn btn-outline"
-                >
-                  New Graph
+                  {isSaving ? 'Saving...' : 'Save Graph and Return'}
                 </button>
               </div>
 
-              <div style={{ marginTop: 16 }}>
+              {/* Temporarily disabled - View Saved Points button */}
+              {/* <div style={{ marginTop: 16 }}>
                 <button
                   onClick={handleViewSavedPoints}
                   className="btn btn-outline"
                   disabled={isFetchingSaved}
                 >
                   {isFetchingSaved ? 'Loading Saved Points...' : 'View Saved Points'}
-                </button>
-
-                <button
-                  onClick={handleViewCompanyDatabase}
-                  className="btn btn-outline"
-                  style={{ marginLeft: 8 }}
-                >
-                  View Company Database Results
                 </button>
 
                 {showSavedPanel ? (
@@ -499,11 +521,15 @@ const GraphCapture = () => {
                         style={{ minWidth: 220, padding: 6 }}
                       >
                         <option value="">Select a saved curve</option>
-                        {savedCurves.map((curve) => (
-                          <option key={curve.id} value={curve.id}>
-                            {curve.curve_name} (ID: {curve.id})
-                          </option>
-                        ))}
+                        {savedCurves.map((curve, index) => {
+                          const curveId = curve.id ?? curve.graph_id ?? index + 1;
+                          const curveLabel = curve.curve_name || curve.curve_title || curve.graph_title || `Curve ${curveId}`;
+                          return (
+                            <option key={curveId} value={curveId}>
+                              {curveLabel} (ID: {curveId})
+                            </option>
+                          );
+                        })}
                       </select>
                       <button
                         onClick={handleLoadSavedCurve}
@@ -520,7 +546,7 @@ const GraphCapture = () => {
                     ) : null}
                   </div>
                 ) : null}
-              </div>
+              </div> */}
             </div>
           </div>
         )}

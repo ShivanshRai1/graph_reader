@@ -18,6 +18,7 @@ export const GraphProvider = ({ children }) => {
   const [graphConfig, setGraphConfig] = useState({
     partNumber: '',
     curveName: '',
+    graphTitle: '',
     xScale: 'Linear',
     yScale: 'Linear',
     xUnit: '',

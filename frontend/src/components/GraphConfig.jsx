@@ -2,7 +2,7 @@ import { useGraph } from '../context/GraphContext';
 import './GraphConfig.css';
 import { useState, useEffect } from 'react';
 
-const GraphConfig = () => {
+const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNameReadOnly = false }) => {
   const { graphConfig, setGraphConfig } = useGraph();
   const [logError, setLogError] = useState({ x: '', y: '' });
   // Synced values for logarithmic inputs (exponent <-> actual)
@@ -129,28 +129,33 @@ const GraphConfig = () => {
             value={graphConfig.curveName}
             onChange={handleChange}
             placeholder="Enter curve name"
+            readOnly={isCurveNameReadOnly}
           />
         </label>
         <label>
-          TC/TJ (Temperature):
+          Graph Title:
           <input
             type="text"
-            name="temperature"
-            value={graphConfig.temperature}
+            name="graphTitle"
+            value={graphConfig.graphTitle || ''}
             onChange={handleChange}
-            placeholder="e.g., -40°C, 25°C"
+            placeholder="Enter graph title"
+            readOnly={isGraphTitleReadOnly}
           />
         </label>
-        <label>
-          Part Number (optional):
-          <input
-            type="text"
-            name="partNumber"
-            value={graphConfig.partNumber}
-            onChange={handleChange}
-            placeholder="Enter part number"
-          />
-        </label>
+        {showTctj && (
+          <label>
+            TC/TJ (Temperature):
+            <input
+              type="text"
+              name="temperature"
+              value={graphConfig.temperature}
+              onChange={handleChange}
+              placeholder="e.g., -40°C, 25°C"
+              style={{ background: '#2d2d2d', color: '#ffffff', border: '1px solid #444' }}
+            />
+          </label>
+        )}
       </div>
 
       <div className="config-row">

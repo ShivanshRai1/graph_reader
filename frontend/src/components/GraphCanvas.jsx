@@ -2,7 +2,7 @@ import { useRef, useState, useEffect } from 'react';
 import { useGraph } from '../context/GraphContext';
 import './GraphCanvas.css';
 
-const GraphCanvas = ({ isReadOnly = false }) => {
+const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '' }) => {
   const { uploadedImage, graphArea, setGraphArea, dataPoints, addDataPoint, clearDataPoints, graphConfig, deleteDataPoint } = useGraph();
   const [showRedrawMsg, setShowRedrawMsg] = useState(false);
   const canvasRef = useRef(null);
@@ -68,10 +68,10 @@ const GraphCanvas = ({ isReadOnly = false }) => {
         // Auto-draw blue selection box covering entire image only on first load (no points captured yet)
         if (graphArea.width === 0 && graphArea.height === 0 && dataPoints.length === 0) {
           const initialBox = {
-            x: MARGIN,
-            y: MARGIN,
-            width: img.width - (MARGIN * 2),
-            height: img.height - (MARGIN * 2),
+            x: 0,
+            y: 0,
+            width: img.width,
+            height: img.height,
           };
           setGraphArea(initialBox);
           lastUserBoxRef.current = initialBox;
@@ -724,6 +724,15 @@ const GraphCanvas = ({ isReadOnly = false }) => {
           <li>Use the buttons below to manage your data points</li>
           <li>Hover over the graph to see a magnified view</li>
         </ul>
+      </div>
+      <div style={{ marginBottom: 12, padding: 12, background: '#f5f5f5', borderRadius: 8, maxWidth: 350 }}>
+        <label style={{ fontWeight: 600, fontSize: 14, marginBottom: 4, display: 'block', color: '#222' }}>Part Number:</label>
+        <input
+          type="text"
+          value={partNumber && manufacturer ? `${partNumber}(${manufacturer})` : partNumber || ''}
+          readOnly
+          style={{ width: '100%', background: '#ffffff', color: '#111', border: '1px solid #ccc', borderRadius: 4, padding: 8 }}
+        />
       </div>
       <div
         className="coordinate-display-static"
