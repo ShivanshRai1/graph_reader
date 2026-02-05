@@ -182,7 +182,9 @@ const GraphCapture = () => {
       }
 
       const result = await response.json();
-      alert(`Curve saved successfully! (ID: ${result.id})${elapsed > 10000 ? '\n\nNote: First request took longer due to server startup.' : ''}`);
+      if (!urlParams.return_url) {
+        alert(`Curve saved successfully! (ID: ${result.id})${elapsed > 10000 ? '\n\nNote: First request took longer due to server startup.' : ''}`);
+      }
       setIsReadOnly(true);
       
       // After successful save to local backend, send to company's database
@@ -209,6 +211,34 @@ const GraphCapture = () => {
     const SEND_TO_API = true;
     
     try {
+      const xyPoints = dataPoints
+        .filter(point => Number.isFinite(point.x) && Number.isFinite(point.y))
+        .map(point => ({
+          x: String(point.x),
+          y: String(point.y),
+        }));
+
+      console.log('Filtered XY Points being sent:', xyPoints);
+
+      if (xyPoints.length === 0) {
+        alert('No valid data points to send to the company API.');
+        return false;
+      }
+
+      const tctjValue = (symbolValues && Object.keys(symbolValues).length > 0)
+        ? symbolValues
+        : (graphConfig.temperature || "");
+
+      const detailPayload = {
+        curve_title: urlParams.curve_title || graphConfig.curveName || "",
+        xy: xyPoints,
+        tctj: tctjValue,
+        xscale: graphConfig.xScale || "1",
+        yscale: graphConfig.yScale || "1",
+        xunit: graphConfig.xUnitPrefix || "1",
+        yunit: graphConfig.yUnitPrefix || "1",
+      };
+
       // Build the JSON payload for company's API
       const companyApiPayload = {
         graph: {
@@ -223,20 +253,7 @@ const GraphCapture = () => {
           mark_review: "1",
           testuser_id: urlParams.testuser_id || "",
         },
-        details: [
-          {
-            curve_title: urlParams.curve_title || graphConfig.curveName || "",
-            xy: dataPoints.map(point => ({
-              x: String(point.x),
-              y: String(point.y),
-            })),
-            tctj: symbolValues && Object.keys(symbolValues).length > 0 ? symbolValues : (graphConfig.temperature || "data1"),
-            xscale: graphConfig.xScale || "1",
-            yscale: graphConfig.yScale || "1",
-            xunit: graphConfig.xUnitPrefix || "1",
-            yunit: graphConfig.yUnitPrefix || "1",
-          },
-        ],
+        details: [detailPayload],
       };
 
       console.log('Company API Payload:', companyApiPayload);
@@ -278,10 +295,11 @@ const GraphCapture = () => {
 
       const result = await response.json();
       console.log('Company API Response:', result);
+      const companyGraphId = result?.graph_id ?? graphId;
       
       // Handle return URL redirect if configured
       if (urlParams.return_url) {
-        const returnUrl = constructReturnUrl(urlParams.return_url, graphId);
+        const returnUrl = constructReturnUrl(urlParams.return_url, companyGraphId);
         console.log('Redirecting to:', returnUrl);
         window.location.href = returnUrl;
       } else {

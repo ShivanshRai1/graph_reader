@@ -725,15 +725,13 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '' })
           <li>Hover over the graph to see a magnified view</li>
         </ul>
       </div>
-      <div style={{ marginBottom: 12, padding: 12, background: '#f5f5f5', borderRadius: 8, maxWidth: 350 }}>
-        <label style={{ fontWeight: 600, fontSize: 14, marginBottom: 4, display: 'block', color: '#222' }}>Part Number:</label>
-        <input
-          type="text"
-          value={partNumber && manufacturer ? `${partNumber}(${manufacturer})` : partNumber || ''}
-          readOnly
-          style={{ width: '100%', background: '#ffffff', color: '#111', border: '1px solid #ccc', borderRadius: 4, padding: 8 }}
-        />
-      </div>
+      {(partNumber || manufacturer) ? (
+        <div style={{ marginBottom: 12, padding: 12, background: '#f5f5f5', borderRadius: 8, maxWidth: 350 }}>
+          <div style={{ fontWeight: 600, fontSize: 14, color: '#222' }}>
+            Part Number: {partNumber && manufacturer ? `${partNumber}(${manufacturer})` : partNumber || ''}
+          </div>
+        </div>
+      ) : null}
       <div
         className="coordinate-display-static"
         style={{ visibility: showCoords ? 'visible' : 'hidden', opacity: showCoords ? 1 : 0.35 }}
