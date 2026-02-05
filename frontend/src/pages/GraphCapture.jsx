@@ -563,34 +563,12 @@ const GraphCapture = () => {
                         onChange={(e) => setSymbolValues({ ...symbolValues, [symbol]: e.target.value })}
                         placeholder={`Enter value for ${symbol}`}
                         className="config-input"
+                        style={{ 
+                          color: '#f0f0f0'
+                        }}
                       />
                     </div>
                   ))}
-                  <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border-color, #ddd)' }}>
-                    <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 500, color: 'var(--text-dark, #333)' }}>
-                      Upload Graph Image
-                    </label>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          const reader = new FileReader();
-                          reader.onload = (event) => {
-                            const img = new Image();
-                            img.src = event.target?.result;
-                            img.onload = () => {
-                              // Image loaded successfully
-                            };
-                          };
-                          reader.readAsDataURL(file);
-                        }
-                      }}
-                      className="config-input"
-                      style={{ cursor: 'pointer' }}
-                    />
-                  </div>
                 </div>
               )}
               
