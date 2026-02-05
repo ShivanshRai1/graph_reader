@@ -2,7 +2,6 @@ import { useState, useRef } from 'react';
 import { useGraph } from '../context/GraphContext';
 import './ImageUpload.css';
 
-
 const ImageUpload = () => {
   const { setUploadedImage } = useGraph();
   const fileInputRef = useRef(null);
@@ -22,7 +21,7 @@ const ImageUpload = () => {
     }
   };
 
-  const handleFileChange = (e) => {
+  const handleFileSelect = (e) => {
     const file = e.target.files[0];
     if (file && file.type.startsWith('image/')) {
       const reader = new FileReader();
@@ -34,32 +33,19 @@ const ImageUpload = () => {
   };
 
   const handleBrowseClick = () => {
-    if (fileInputRef.current) {
-      fileInputRef.current.click();
-    }
+    fileInputRef.current?.click();
   };
 
   return (
     <div className="image-upload-container">
-      <div
-        className="upload-area"
+      <textarea
+        className="paste-textarea"
+        placeholder="Click here and paste screenshot image"
         onPaste={handlePaste}
-        tabIndex={0}
-      >
-        <div className="upload-content">
-          <p>📷 Click here and paste screenshot image</p>
-          <button className="upload-button" type="button" onClick={handleBrowseClick}>
-            Browse Files
-          </button>
-          <input
-            type="file"
-            accept="image/*"
-            style={{ display: 'none' }}
-            ref={fileInputRef}
-            onChange={handleFileChange}
-          />
-        </div>
-      </div>
+        rows={3}
+        style={{ width: '100%', resize: 'vertical', fontSize: 15, padding: 8, border: '2px solid #222', borderRadius: 4, background: '#fafafa', color: '#222', outline: 'none', boxSizing: 'border-box' }}
+        title="Paste your screenshot image here"
+      />
     </div>
   );
 };

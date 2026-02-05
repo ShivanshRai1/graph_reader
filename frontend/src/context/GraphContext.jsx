@@ -1,4 +1,4 @@
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useState, useEffect } from 'react';
 
 const GraphContext = createContext();
 
@@ -69,17 +69,8 @@ export const GraphProvider = ({ children }) => {
     if (isNaN(yMin)) yMin = 0;
     if (isNaN(yMax)) yMax = 100;
 
-    // Apply unit prefix multipliers only for linear scales (not for exponents in log scales)
-    if (graphConfig.xScale !== 'Logarithmic') {
-      const xMultiplier = graphConfig.xUnitPrefix ? parseFloat(graphConfig.xUnitPrefix) : 1;
-      xMin = xMin * xMultiplier;
-      xMax = xMax * xMultiplier;
-    }
-    if (graphConfig.yScale !== 'Logarithmic') {
-      const yMultiplier = graphConfig.yUnitPrefix ? parseFloat(graphConfig.yUnitPrefix) : 1;
-      yMin = yMin * yMultiplier;
-      yMax = yMax * yMultiplier;
-    }
+    // User enters min/max in display units (e.g., 0-100 μJ)
+    // Do NOT multiply by unit prefix - keep values in display units
 
     if (graphConfig.xScale === 'Logarithmic') {
       xMin = normalizeLogValue(xMin);
@@ -174,49 +165,10 @@ export const GraphProvider = ({ children }) => {
   const importDataPoints = (newPoints) => {
     if (!newPoints || newPoints.length === 0) return;
 
-    // Compute data extents from imported points
-    let dataXMin = Number.POSITIVE_INFINITY;
-    let dataXMax = Number.NEGATIVE_INFINITY;
-    let dataYMin = Number.POSITIVE_INFINITY;
-    let dataYMax = Number.NEGATIVE_INFINITY;
-
-    newPoints.forEach(point => {
-      if (typeof point.x === 'number' && !isNaN(point.x)) {
-        dataXMin = Math.min(dataXMin, point.x);
-        dataXMax = Math.max(dataXMax, point.x);
-      }
-      if (typeof point.y === 'number' && !isNaN(point.y)) {
-        dataYMin = Math.min(dataYMin, point.y);
-        dataYMax = Math.max(dataYMax, point.y);
-      }
-    });
-
-    // Fallback if all invalid
-    if (!isFinite(dataXMin) || !isFinite(dataXMax) || !isFinite(dataYMin) || !isFinite(dataYMax)) {
-      return;
-    }
-
-    // Current bounds (already normalized for units/log)
-    const { xMin: currXMin, xMax: currXMax, yMin: currYMin, yMax: currYMax } = getNormalizedMinMax();
-
-    // Expand bounds to fit imported data (with small padding) for canvas mapping only
-    let newXMin = Math.min(currXMin, dataXMin);
-    let newXMax = Math.max(currXMax, dataXMax);
-    let newYMin = Math.min(currYMin, dataYMin);
-    let newYMax = Math.max(currYMax, dataYMax);
-
-    const padX = Math.max((newXMax - newXMin) * 0.05, 1e-6);
-    const padY = Math.max((newYMax - newYMin) * 0.05, 1e-6);
-    newXMin -= padX;
-    newXMax += padX;
-    newYMin -= padY;
-    newYMax += padY;
-
-    // Use expanded bounds ONLY for converting imported points to canvas coordinates
-    // Do NOT modify graphConfig - keep user's original bounds
-    const boundsOverride = { xMin: newXMin, xMax: newXMax, yMin: newYMin, yMax: newYMax };
+    // Use user's configured min/max values directly (no expansion)
+    // This ensures points plot correctly within their configured range
     const pointsWithCanvas = newPoints.map(point => {
-      const canvasCoords = convertGraphToCanvasCoordinates(point.x, point.y, boundsOverride);
+      const canvasCoords = convertGraphToCanvasCoordinates(point.x, point.y);
       return {
         x: point.x,
         y: point.y,
@@ -271,6 +223,31 @@ export const GraphProvider = ({ children }) => {
     const updatedPoints = dataPoints.filter((_, i) => i !== index);
     setDataPoints(updatedPoints);
   };
+
+  // Recalculate canvas coordinates for imported points when scale/unit/min-max changes
+  useEffect(() => {
+    // Only recalculate if there are imported points
+    const hasImportedPoints = dataPoints.some(p => p.imported);
+    if (!hasImportedPoints || graphArea.width === 0 || graphArea.height === 0) {
+      return;
+    }
+
+    const updatedPoints = dataPoints.map(point => {
+      if (!point.imported) {
+        return point; // Keep user-captured points as-is
+      }
+
+      // Recalculate canvas coordinates for imported points
+      const canvasCoords = convertGraphToCanvasCoordinates(point.x, point.y);
+      return {
+        ...point,
+        canvasX: canvasCoords.canvasX,
+        canvasY: canvasCoords.canvasY,
+      };
+    });
+
+    setDataPoints(updatedPoints);
+  }, [graphConfig.xScale, graphConfig.yScale, graphConfig.xUnitPrefix, graphConfig.yUnitPrefix, graphConfig.xMin, graphConfig.xMax, graphConfig.yMin, graphConfig.yMax, graphArea.width, graphArea.height]);
 
   const saveCurve = async () => {
     // TODO: Call API to save curve

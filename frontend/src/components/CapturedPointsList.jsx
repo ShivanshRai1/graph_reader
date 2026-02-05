@@ -4,10 +4,28 @@ import './CapturedPointsList.css';
 import { useEffect, useState } from 'react';
 
 const CapturedPointsList = ({ isReadOnly = false }) => {
-  const { dataPoints, clearDataPoints, importDataPoints, uploadedImage, updateDataPoint, deleteDataPoint } = useGraph();
+  const { dataPoints, clearDataPoints, importDataPoints, uploadedImage, updateDataPoint, deleteDataPoint, graphConfig, graphArea } = useGraph();
   const [editingIndex, setEditingIndex] = useState(null);
   const [editX, setEditX] = useState('');
   const [editY, setEditY] = useState('');
+
+  // Check if config is set up for import
+  const isConfigValid = () => {
+    const xMin = parseFloat(graphConfig.xMin);
+    const xMax = parseFloat(graphConfig.xMax);
+    const yMin = parseFloat(graphConfig.yMin);
+    const yMax = parseFloat(graphConfig.yMax);
+    
+    return (
+      !isNaN(xMin) && !isNaN(xMax) && !isNaN(yMin) && !isNaN(yMax) &&
+      xMin !== xMax && yMin !== yMax &&
+      graphArea.width > 0 && graphArea.height > 0 &&
+      graphConfig.xScale && graphConfig.yScale &&
+      graphConfig.xScale !== '' && graphConfig.yScale !== '' &&
+      graphConfig.xUnitPrefix && graphConfig.xUnitPrefix !== '' &&
+      graphConfig.yUnitPrefix && graphConfig.yUnitPrefix !== ''
+    );
+  };
 
   useEffect(() => {
     if (isReadOnly && editingIndex !== null) {
@@ -168,73 +186,72 @@ const CapturedPointsList = ({ isReadOnly = false }) => {
   return (
     <div className="captured-points-container">
       <div className="points-header">
-        <h3>Captured Points ({dataPoints.length})</h3>
-        {isReadOnly ? (
-          <span style={{ marginLeft: 12, color: '#555', fontSize: 13 }}>
-            Read-only (saved)
-          </span>
-        ) : null}
-        <div className="points-actions">
-          <input 
-            type="file" 
-            id="file-import" 
-            accept=".csv,.json"
-            onChange={handleFileImport}
-            style={{ display: 'none' }}
-          />
-          <button 
-            onClick={() => document.getElementById('file-import').click()} 
-            className="btn btn-primary"
-            disabled={isReadOnly}
-            title={isReadOnly ? 'Points are read-only after saving' : 'Import from file'}
-          >
-            Import from File
-          </button>
-          <button 
-            onClick={exportToCSV} 
-            className="btn btn-primary"
-            disabled={dataPoints.length === 0}
-          >
-            Export CSV
-          </button>
-          <button 
-            onClick={exportToJSON} 
-            className="btn btn-primary"
-            disabled={dataPoints.length === 0}
-          >
-            Export JSON
-          </button>
-          <button
-            onClick={copyToClipboard}
-            className="btn btn-primary"
-            disabled={dataPoints.length === 0}
-            title="Copy all points as table for pasting into Notepad, Word, etc."
-          >
-            Copy Table
-          </button>
-          <button 
-            onClick={clearDataPoints} 
-            className="btn btn-danger"
-            disabled={dataPoints.length === 0 || isReadOnly}
-            title={isReadOnly ? 'Points are read-only after saving' : 'Clear all points'}
-          >
-            Clear All
-          </button>
-        </div>
+        <h3>Captured Points: {dataPoints.length}</h3>
+        {isReadOnly && (
+          <span className="read-only-badge">Read-only (saved)</span>
+        )}
+      </div>
+
+      <div className="action-buttons">
+        <input 
+          type="file" 
+          id="file-import" 
+          accept=".csv,.json"
+          onChange={handleFileImport}
+          className="file-input-hidden"
+        />
+        <button 
+          onClick={() => document.getElementById('file-import').click()} 
+          className="btn btn-primary"
+          disabled={isReadOnly || !isConfigValid()}
+          title={isReadOnly ? 'Points are read-only after saving' : !isConfigValid() ? 'Setup required: 1) Draw the graph area (blue box), 2) Set X/Y Min/Max values, 3) Select X/Y Scale, 4) Select X/Y Unit' : 'Import data points from CSV or JSON file'}
+        >
+          📥 Import from File
+        </button>
+        <button 
+          onClick={exportToCSV} 
+          className="btn btn-secondary"
+          disabled={dataPoints.length === 0}
+        >
+          📄 Export CSV
+        </button>
+        <button 
+          onClick={exportToJSON} 
+          className="btn btn-secondary"
+          disabled={dataPoints.length === 0}
+        >
+          📋 Export JSON
+        </button>
+        <button
+          onClick={copyToClipboard}
+          className="btn btn-secondary"
+          disabled={dataPoints.length === 0}
+          title="Copy all points as table for pasting into Notepad, Word, etc."
+        >
+          📋 Copy Table
+        </button>
+        <button 
+          onClick={clearDataPoints} 
+          className="btn btn-danger"
+          disabled={dataPoints.length === 0 || isReadOnly}
+          title={isReadOnly ? 'Points are read-only after saving' : 'Clear all points'}
+        >
+          🗑️ Clear All
+        </button>
       </div>
       
-      <div className="points-list-wrapper">
-        {dataPoints.length === 0 ? (
-          <div className="no-points-message">
-            No points captured yet. Click on the graph to add points.
-          </div>
-        ) : (
+      {dataPoints.length === 0 ? (
+        <div className="empty-state">
+          <p>No points captured yet. Click on the graph to add points.</p>
+        </div>
+      ) : (
+        <div className="points-table-wrapper">
           <table className="points-table">
             <thead>
               <tr>
                 <th>#</th>
-                <th>X</th>
-                <th>Y</th>
+                <th>X Value</th>
+                <th>Y Value</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -250,7 +267,7 @@ const CapturedPointsList = ({ isReadOnly = false }) => {
                           value={editX}
                           onChange={(e) => setEditX(e.target.value)}
                           step="any"
-                          style={{ width: '100%', padding: '4px' }}
+                          className="edit-input"
                         />
                       </td>
                       <td>
@@ -259,33 +276,19 @@ const CapturedPointsList = ({ isReadOnly = false }) => {
                           value={editY}
                           onChange={(e) => setEditY(e.target.value)}
                           step="any"
-                          style={{ width: '100%', padding: '4px' }}
+                          className="edit-input"
                         />
                       </td>
-                      <td style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                      <td className="action-cell">
                         <button
                           onClick={() => handleSaveEdit(index)}
-                          style={{
-                            padding: '4px 8px',
-                            backgroundColor: '#4caf50',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '4px',
-                            cursor: 'pointer',
-                          }}
+                          className="btn btn-small btn-primary"
                         >
                           Save
                         </button>
                         <button
                           onClick={handleCancelEdit}
-                          style={{
-                            padding: '4px 8px',
-                            backgroundColor: '#f44336',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '4px',
-                            cursor: 'pointer',
-                          }}
+                          className="btn btn-small btn-secondary"
                         >
                           Cancel
                         </button>
@@ -293,39 +296,29 @@ const CapturedPointsList = ({ isReadOnly = false }) => {
                     </>
                   ) : (
                     <>
-                      <td>{typeof point.x === 'number' && !isNaN(point.x) ? point.x.toFixed(4) : 'Invalid'}</td>
-                      <td>{typeof point.y === 'number' && !isNaN(point.y) ? point.y.toFixed(4) : 'Invalid'}</td>
-                      <td style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-                        <button
-                          onClick={() => handleEditClick(index)}
-                          disabled={point.imported || isReadOnly}
-                          title={isReadOnly ? 'Points are read-only after saving' : (point.imported ? 'Cannot edit imported points' : 'Edit this point')}
-                          style={{
-                            padding: '4px 8px',
-                            backgroundColor: (point.imported || isReadOnly) ? '#ccc' : '#2196F3',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '4px',
-                            cursor: (point.imported || isReadOnly) ? 'not-allowed' : 'pointer',
-                          }}
-                        >
-                          ✎ Edit
-                        </button>
-                        <button
-                          onClick={() => handleDeletePoint(index)}
-                          disabled={point.imported || isReadOnly}
-                          title={isReadOnly ? 'Points are read-only after saving' : (point.imported ? 'Cannot delete imported points' : 'Delete this point')}
-                          style={{
-                            padding: '4px 8px',
-                            backgroundColor: (point.imported || isReadOnly) ? '#ccc' : '#f44336',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '4px',
-                            cursor: (point.imported || isReadOnly) ? 'not-allowed' : 'pointer',
-                          }}
-                        >
-                          🗑 Delete
-                        </button>
+                      <td className="value-cell">
+                        {typeof point.x === 'number' && !isNaN(point.x) ? point.x.toFixed(4) : 'Invalid'}
+                      </td>
+                      <td className="value-cell">
+                        {typeof point.y === 'number' && !isNaN(point.y) ? point.y.toFixed(4) : 'Invalid'}
+                      </td>
+                      <td className="action-cell">
+                        {!isReadOnly && (
+                          <>
+                            <button
+                              onClick={() => handleEditClick(index)}
+                              className="btn btn-small btn-primary"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleDeletePoint(index)}
+                              className="btn btn-small btn-danger"
+                            >
+                              Delete
+                            </button>
+                          </>
+                        )}
                       </td>
                     </>
                   )}
@@ -333,8 +326,8 @@ const CapturedPointsList = ({ isReadOnly = false }) => {
               ))}
             </tbody>
           </table>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 };

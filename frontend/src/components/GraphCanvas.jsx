@@ -184,37 +184,52 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '' })
 
   const drawDataPoints = (ctx) => {
     dataPoints.forEach((point, index) => {
-      // Skip rendering imported points (keep them in table but not on canvas)
-      if (point.imported) return;
-
       // Only draw if point has valid canvas coordinates
       if (typeof point.canvasX !== 'number' || typeof point.canvasY !== 'number' || 
           isNaN(point.canvasX) || isNaN(point.canvasY)) {
         return;
       }
       
-      // Draw white border for better visibility
-      ctx.strokeStyle = 'white';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.arc(point.canvasX, point.canvasY, 5, 0, 2 * Math.PI);
-      ctx.stroke();
-      
-      // Draw red fill
-      ctx.fillStyle = 'red';
-      ctx.beginPath();
-      ctx.arc(point.canvasX, point.canvasY, 5, 0, 2 * Math.PI);
-      ctx.fill();
+      const pointRadius = 4;
+      // Draw imported points in a red-like color, user-captured points in red
+      if (point.imported) {
+        // Imported point: Deep orange/red tone for distinction
+        ctx.strokeStyle = '#FF7043'; // Deep orange
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(point.canvasX, point.canvasY, pointRadius, 0, 2 * Math.PI);
+        ctx.stroke();
+        
+        // Soft red/orange fill for distinction
+        ctx.fillStyle = '#FFCCBC'; // Light red-orange
+        ctx.beginPath();
+        ctx.arc(point.canvasX, point.canvasY, pointRadius, 0, 2 * Math.PI);
+        ctx.fill();
+      } else {
+        // User-captured point: Red filled circle (existing behavior)
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(point.canvasX, point.canvasY, pointRadius, 0, 2 * Math.PI);
+        ctx.stroke();
+        
+        ctx.fillStyle = 'red';
+        ctx.beginPath();
+        ctx.arc(point.canvasX, point.canvasY, pointRadius, 0, 2 * Math.PI);
+        ctx.fill();
+      }
     });
   };
 
   // Draw lines connecting all captured points
   const drawFixPoints = (ctx) => {
-    if (dataPoints.length < 2) return;
-    
+    // Only draw if there are at least 2 valid points with canvas coordinates (imported + captured)
+    const validPoints = dataPoints.filter(p => typeof p.canvasX === 'number' && typeof p.canvasY === 'number' && !isNaN(p.canvasX) && !isNaN(p.canvasY));
+    if (validPoints.length < 2) return;
+
     // Sort points by X coordinate (left to right) to avoid zig-zag
-    const sortedPoints = [...dataPoints].sort((a, b) => a.canvasX - b.canvasX);
-    
+    const sortedPoints = [...validPoints].sort((a, b) => a.canvasX - b.canvasX);
+
     ctx.save();
     ctx.strokeStyle = '#1976d2';
     ctx.lineWidth = 4;
@@ -272,12 +287,13 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '' })
       setResizeMode(mode);
       setInitialArea(area);
       setInitialMouse({ x, y });
-      setIsResizing(true);
+      setIsResizing(false); // Don't start resizing yet
       // Make box visible during resize so user can see what they're doing
       setBoxTransparent(false);
+      // Store that a handle was clicked, but don't resize until mouse moves
       return;
     }
-    
+
     setIsSelecting(true);
     setStartPos({ x, y });
   };
@@ -291,44 +307,50 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '' })
     const x = (e.clientX - rect.left) * scaleX;
     const y = (e.clientY - rect.top) * scaleY;
 
-    // Resize existing box
+    // Only start resizing if mouse moves enough after clicking a handle
     if (resizeMode && initialArea) {
       const dx = x - initialMouse.x;
       const dy = y - initialMouse.y;
-      const minSize = 20;
-      const canvasW = canvas.width;
-      const canvasH = canvas.height;
-
-      let { x: nx, y: ny, width: nw, height: nh } = initialArea;
-
-      if (resizeMode.includes('left')) {
-        nx = initialArea.x + dx;
-        nw = initialArea.width - dx;
+      const moveDistance = Math.sqrt(dx * dx + dy * dy);
+      if (!isResizing && moveDistance > 3) {
+        setIsResizing(true);
       }
-      if (resizeMode.includes('right')) {
-        nw = initialArea.width + dx;
-      }
-      if (resizeMode.includes('top')) {
-        ny = initialArea.y + dy;
-        nh = initialArea.height - dy;
-      }
-      if (resizeMode.includes('bottom')) {
-        nh = initialArea.height + dy;
-      }
+      if (isResizing) {
+        const minSize = 20;
+        const canvasW = canvas.width;
+        const canvasH = canvas.height;
 
-      // Apply constraints
-      // Ensure minimum size
-      if (nw < minSize) nw = minSize;
-      if (nh < minSize) nh = minSize;
+        let { x: nx, y: ny, width: nw, height: nh } = initialArea;
 
-      // Ensure boundaries (allow resizing all the way to canvas edges)
-      if (nx < 0) nx = 0;
-      if (ny < 0) ny = 0;
-      if (nx + nw > canvasW) nw = canvasW - nx;
-      if (ny + nh > canvasH) nh = canvasH - ny;
+        if (resizeMode.includes('left')) {
+          nx = initialArea.x + dx;
+          nw = initialArea.width - dx;
+        }
+        if (resizeMode.includes('right')) {
+          nw = initialArea.width + dx;
+        }
+        if (resizeMode.includes('top')) {
+          ny = initialArea.y + dy;
+          nh = initialArea.height - dy;
+        }
+        if (resizeMode.includes('bottom')) {
+          nh = initialArea.height + dy;
+        }
 
-      setGraphArea({ x: nx, y: ny, width: nw, height: nh });
-      return;
+        // Apply constraints
+        // Ensure minimum size
+        if (nw < minSize) nw = minSize;
+        if (nh < minSize) nh = minSize;
+
+        // Ensure boundaries (allow resizing all the way to canvas edges)
+        if (nx < 0) nx = 0;
+        if (ny < 0) ny = 0;
+        if (nx + nw > canvasW) nw = canvasW - nx;
+        if (ny + nh > canvasH) nh = canvasH - ny;
+
+        setGraphArea({ x: nx, y: ny, width: nw, height: nh });
+        return;
+      }
     }
 
     // Draw new box
@@ -390,6 +412,10 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '' })
     // Don't add points while selecting, resizing, or if this was a drag (box drawing)
     if (isSelecting || isResizing || justFinishedResizingRef.current || dragDistance > DRAG_THRESHOLD) {
       setDragDistance(0); // Reset for next interaction
+      if (justFinishedResizingRef.current) {
+        // Only reset the flag after ignoring a click
+        justFinishedResizingRef.current = false;
+      }
       return;
     }
     // Prevent adding points if box is not drawn
@@ -516,22 +542,12 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '' })
     let graphX, graphY;
     
     // Parse config values as numbers
+    // User enters min/max in display units (e.g., 0-100 for 0-100 μJ)
+    // We do NOT multiply by unit prefix here - values stay in display units
     let xMin = parseFloat(graphConfig.xMin);
     let xMax = parseFloat(graphConfig.xMax);
     let yMin = parseFloat(graphConfig.yMin);
     let yMax = parseFloat(graphConfig.yMax);
-    
-    // Apply unit prefix multipliers only for linear scales (not for exponents in log scales)
-    if (graphConfig.xScale !== 'Logarithmic') {
-      const xMultiplier = graphConfig.xUnitPrefix ? parseFloat(graphConfig.xUnitPrefix) : 1;
-      xMin = xMin * xMultiplier;
-      xMax = xMax * xMultiplier;
-    }
-    if (graphConfig.yScale !== 'Logarithmic') {
-      const yMultiplier = graphConfig.yUnitPrefix ? parseFloat(graphConfig.yUnitPrefix) : 1;
-      yMin = yMin * yMultiplier;
-      yMax = yMax * yMultiplier;
-    }
     
     if (graphArea.width > 0 && graphArea.height > 0) {
       // Use the drawn box for calculation
@@ -726,10 +742,8 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '' })
         </ul>
       </div>
       {(partNumber || manufacturer) ? (
-        <div style={{ marginBottom: 12, padding: 12, background: '#f5f5f5', borderRadius: 8, maxWidth: 350 }}>
-          <div style={{ fontWeight: 600, fontSize: 14, color: '#222' }}>
-            Part Number: {partNumber && manufacturer ? `${partNumber}(${manufacturer})` : partNumber || ''}
-          </div>
+        <div className="part-info-display">
+          Part Number: {partNumber && manufacturer ? `${partNumber}(${manufacturer})` : partNumber || ''}
         </div>
       ) : null}
       <div
@@ -764,43 +778,40 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '' })
           className="graph-canvas"
         />
       </div>
-      <button
-        className="btn btn-primary"
-        style={{ marginTop: 16, marginLeft: 8, marginBottom: 24 }}
-        onClick={() => setShowFixPoints((prev) => !prev)}
-      >
-        {showFixPoints ? 'Hide fix-points' : 'Draw fix-points'}
-      </button>
-      <button
-        className="btn btn-secondary"
-        style={{ marginTop: 16, marginLeft: 8, marginBottom: 24 }}
-        onClick={() => {
-          if (lastUserBoxRef.current) {
-            // Restore last user-defined box dimensions
-            setGraphArea({ ...lastUserBoxRef.current });
-          } else if (imageSize.width && imageSize.height) {
-            // First time: use full canvas
-            const newBox = {
-              x: MARGIN,
-              y: MARGIN,
-              width: imageSize.width - (MARGIN * 2),
-              height: imageSize.height - (MARGIN * 2),
-            };
-            setGraphArea(newBox);
-            lastUserBoxRef.current = newBox;
-          }
-          // Make box visible again for potential resizing
-          setBoxTransparent(false);
-          setShowRedrawMsg(false);
-        }}
-      >
-        Redraw Box
-      </button>
-      {showRedrawMsg && (
-        <div style={{ color: '#d32f2f', fontWeight: 'bold', marginTop: 8, marginBottom: 8 }}>
-          Please redraw the box
-        </div>
-      )}
+      <div className="canvas-controls">
+        <button
+          className="btn btn-primary"
+          onClick={() => setShowFixPoints((prev) => !prev)}
+        >
+          {showFixPoints ? 'Hide fix-points' : 'Draw fix-points'}
+        </button>
+        <button
+          className="btn btn-secondary"
+          onClick={() => {
+            if (lastUserBoxRef.current) {
+              setGraphArea({ ...lastUserBoxRef.current });
+            } else if (imageSize.width && imageSize.height) {
+              const newBox = {
+                x: MARGIN,
+                y: MARGIN,
+                width: imageSize.width - (MARGIN * 2),
+                height: imageSize.height - (MARGIN * 2),
+              };
+              setGraphArea(newBox);
+              lastUserBoxRef.current = newBox;
+            }
+            setBoxTransparent(false);
+            setShowRedrawMsg(false);
+          }}
+        >
+          Redraw Box
+        </button>
+        {showRedrawMsg && (
+          <div className="redraw-message">
+            Please redraw the box
+          </div>
+        )}
+      </div>
       {showMagnifier && (
         <canvas
           ref={magnifierRef}

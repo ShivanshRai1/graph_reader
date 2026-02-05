@@ -118,11 +118,11 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
 
   return (
     <div className="graph-config-container">
-      <h3>Graph Configuration</h3>
+      <h3 className="config-title">Graph Configuration</h3>
       
       <div className="config-section">
-        <label>
-          Curve/Line Name:
+        <label className="config-label">
+          <span>Curve/Line Name:</span>
           <input
             type="text"
             name="curveName"
@@ -130,10 +130,11 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             onChange={handleChange}
             placeholder="Enter curve name"
             readOnly={isCurveNameReadOnly}
+            className="config-input"
           />
         </label>
-        <label>
-          Graph Title:
+        <label className="config-label">
+          <span>Graph Title:</span>
           <input
             type="text"
             name="graphTitle"
@@ -141,39 +142,40 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             onChange={handleChange}
             placeholder="Enter graph title"
             readOnly={isGraphTitleReadOnly}
+            className="config-input"
           />
         </label>
         {showTctj && (
-          <label>
-            TC/TJ (Temperature):
+          <label className="config-label">
+            <span>TC/TJ (Temperature):</span>
             <input
               type="text"
               name="temperature"
               value={graphConfig.temperature}
               onChange={handleChange}
               placeholder="e.g., -40°C, 25°C"
-              style={{ background: '#2d2d2d', color: '#ffffff', border: '1px solid #444' }}
+              className="config-input"
             />
           </label>
         )}
       </div>
 
-      <div className="config-row">
-        <div className="config-section">
-          <h4>Y-Axis</h4>
-          <label>
-            Scale:
-            <select name="yScale" value={graphConfig.yScale} onChange={handleChange}>
+      <div className="config-axis-grid">
+        <div className="config-axis-section">
+          <h4 className="axis-title">Y-Axis</h4>
+          <label className="config-label">
+            <span>Scale:</span>
+            <select name="yScale" value={graphConfig.yScale} onChange={handleChange} className="config-select">
               <option value="Linear">Linear</option>
               <option value="Logarithmic">Logarithmic</option>
             </select>
           </label>
           {graphConfig.yScale === 'Logarithmic' && (
-            <small className="helper-text">For Logarithmic values Enter EITHER the exponent OR the actual value (not both)</small>
+            <small className="log-note">For Logarithmic values Enter EITHER the exponent OR the actual value (not both)</small>
           )}
-          <label>
-            Unit:
-            <select name="yUnitPrefix" value={graphConfig.yUnitPrefix} onChange={handleChange}>
+          <label className="config-label">
+            <span>Unit:</span>
+            <select name="yUnitPrefix" value={graphConfig.yUnitPrefix} onChange={handleChange} className="config-select">
               <option value="">-select-</option>
               <option value="1e-12">pico (p) = 1e-12</option>
               <option value="1e-9">nano (n) = 1e-9</option>
@@ -189,14 +191,14 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
           
           {graphConfig.yScale === 'Logarithmic' ? (
             <>
-              <label>
-                Min (10^x):
-                <div style={{ display: 'flex', gap: '8px', fontSize: 12, color: '#1976d2', marginBottom: 4 }}>
-                  <span style={{ flex: 1 }}>Log Exponent</span>
-                  <span style={{ flex: 1 }}>Graph Scale Value</span>
+              <label className="config-label">
+                <span>Min (10^x):</span>
+                <div className="log-input-group">
+                  <span className="log-input-label">Log Exponent</span>
+                  <span className="log-input-label">Graph Scale Value</span>
                 </div>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <div style={{ flex: 1, position: 'relative' }}>
+                <div className="log-input-flex">
+                  <div>
                     <input
                       type="text"
                       inputMode="decimal"
@@ -204,11 +206,12 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
                       onChange={(e) => handleLogExponentChange('yMin', e.target.value)}
                       onFocus={() => handleExponentFocus('yMin')}
                       placeholder="e.g., 5 for 10^5"
-                      style={{ width: '100%', opacity: logInputMode.yMin === 'actual' ? 0.5 : 1 }}
+                      className="config-input"
+                      style={{ opacity: logInputMode.yMin === 'actual' ? 0.5 : 1 }}
                       title="Enter the exponent (e.g., 5 for 10^5 = 100000)"
                     />
                   </div>
-                  <div style={{ flex: 1, position: 'relative' }}>
+                  <div>
                     <input
                       type="text"
                       inputMode="decimal"
@@ -216,21 +219,22 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
                       onChange={(e) => handleLogActualChange('yMin', e.target.value)}
                       onFocus={() => handleActualFocus('yMin')}
                       placeholder="e.g., 100k or 1e5"
-                      style={{ width: '100%', opacity: logInputMode.yMin === 'exponent' ? 0.5 : 1 }}
+                      className="config-input"
+                      style={{ opacity: logInputMode.yMin === 'exponent' ? 0.5 : 1 }}
                       title="Enter the actual value (e.g., 100000 or 1e5). It will be converted to exponent."
                     />
                   </div>
                 </div>
-                {logError.y && <span style={{ color: '#d32f2f', fontSize: 12 }}>{logError.y}</span>}
+                {logError.y && <span className="log-error">{logError.y}</span>}
               </label>
-              <label>
-                Max (10^x):
-                <div style={{ display: 'flex', gap: '8px', fontSize: 12, color: '#1976d2', marginBottom: 4 }}>
-                  <span style={{ flex: 1 }}>Log Exponent</span>
-                  <span style={{ flex: 1 }}>Graph Scale Value</span>
+              <label className="config-label">
+                <span>Max (10^x):</span>
+                <div className="log-input-group">
+                  <span className="log-input-label">Log Exponent</span>
+                  <span className="log-input-label">Graph Scale Value</span>
                 </div>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <div style={{ flex: 1, position: 'relative' }}>
+                <div className="log-input-flex">
+                  <div>
                     <input
                       type="text"
                       inputMode="decimal"
@@ -238,11 +242,12 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
                       onChange={(e) => handleLogExponentChange('yMax', e.target.value)}
                       onFocus={() => handleExponentFocus('yMax')}
                       placeholder="e.g., 5 for 10^5"
-                      style={{ width: '100%', opacity: logInputMode.yMax === 'actual' ? 0.5 : 1 }}
+                      className="config-input"
+                      style={{ opacity: logInputMode.yMax === 'actual' ? 0.5 : 1 }}
                       title="Enter the exponent (e.g., 5 for 10^5 = 100000)"
                     />
                   </div>
-                  <div style={{ flex: 1, position: 'relative' }}>
+                  <div>
                     <input
                       type="text"
                       inputMode="decimal"
@@ -250,7 +255,8 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
                       onChange={(e) => handleLogActualChange('yMax', e.target.value)}
                       onFocus={() => handleActualFocus('yMax')}
                       placeholder="e.g., 100k or 1e5"
-                      style={{ width: '100%', opacity: logInputMode.yMax === 'exponent' ? 0.5 : 1 }}
+                      className="config-input"
+                      style={{ opacity: logInputMode.yMax === 'exponent' ? 0.5 : 1 }}
                       title="Enter the actual value (e.g., 100000 or 1e5). It will be converted to exponent."
                     />
                   </div>
@@ -259,44 +265,46 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             </>
           ) : (
             <>
-              <label>
-                Min:
+              <label className="config-label">
+                <span>Min:</span>
                 <input
                   type="number"
                   name="yMin"
                   value={graphConfig.yMin}
                   onChange={handleChange}
+                  className="config-input"
                 />
               </label>
-              <label>
-                Max:
+              <label className="config-label">
+                <span>Max:</span>
                 <input
                   type="number"
                   name="yMax"
                   value={graphConfig.yMax}
                   onChange={handleChange}
+                  className="config-input"
                 />
-                {logError.y && <span style={{ color: '#d32f2f', fontSize: 12, display: 'block', marginTop: 4 }}>{logError.y}</span>}
+                {logError.y && <span className="log-error">{logError.y}</span>}
               </label>
             </>
           )}
         </div>
 
-        <div className="config-section">
-          <h4>X-Axis</h4>
-          <label>
-            Scale:
-            <select name="xScale" value={graphConfig.xScale} onChange={handleChange}>
+        <div className="config-axis-section">
+          <h4 className="axis-title">X-Axis</h4>
+          <label className="config-label">
+            <span>Scale:</span>
+            <select name="xScale" value={graphConfig.xScale} onChange={handleChange} className="config-select">
               <option value="Linear">Linear</option>
               <option value="Logarithmic">Logarithmic</option>
             </select>
           </label>
           {graphConfig.xScale === 'Logarithmic' && (
-            <small className="helper-text">For Logarithmic values Enter EITHER the exponent OR the actual value (not both)</small>
+            <small className="log-note">For Logarithmic values Enter EITHER the exponent OR the actual value (not both)</small>
           )}
-          <label>
-            Unit:
-            <select name="xUnitPrefix" value={graphConfig.xUnitPrefix} onChange={handleChange}>
+          <label className="config-label">
+            <span>Unit:</span>
+            <select name="xUnitPrefix" value={graphConfig.xUnitPrefix} onChange={handleChange} className="config-select">
               <option value="">-select-</option>
               <option value="1e-12">pico (p) = 1e-12</option>
               <option value="1e-9">nano (n) = 1e-9</option>
@@ -312,14 +320,14 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
           
           {graphConfig.xScale === 'Logarithmic' ? (
             <>
-              <label>
-                Min (10^x):
-                <div style={{ display: 'flex', gap: '8px', fontSize: 12, color: '#1976d2', marginBottom: 4 }}>
-                  <span style={{ flex: 1 }}>Log Exponent</span>
-                  <span style={{ flex: 1 }}>Graph Scale Value</span>
+              <label className="config-label">
+                <span>Min (10^x):</span>
+                <div className="log-input-group">
+                  <span className="log-input-label">Log Exponent</span>
+                  <span className="log-input-label">Graph Scale Value</span>
                 </div>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <div style={{ flex: 1, position: 'relative' }}>
+                <div className="log-input-flex">
+                  <div>
                     <input
                       type="text"
                       inputMode="decimal"
@@ -327,11 +335,12 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
                       onChange={(e) => handleLogExponentChange('xMin', e.target.value)}
                       onFocus={() => handleExponentFocus('xMin')}
                       placeholder="e.g., 5 for 10^5"
-                      style={{ width: '100%', opacity: logInputMode.xMin === 'actual' ? 0.5 : 1 }}
+                      className="config-input"
+                      style={{ opacity: logInputMode.xMin === 'actual' ? 0.5 : 1 }}
                       title="Enter the exponent (e.g., 5 for 10^5 = 100000)"
                     />
                   </div>
-                  <div style={{ flex: 1, position: 'relative' }}>
+                  <div>
                     <input
                       type="text"
                       inputMode="decimal"
@@ -339,21 +348,22 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
                       onChange={(e) => handleLogActualChange('xMin', e.target.value)}
                       onFocus={() => handleActualFocus('xMin')}
                       placeholder="e.g., 100k or 1e5"
-                      style={{ width: '100%', opacity: logInputMode.xMin === 'exponent' ? 0.5 : 1 }}
+                      className="config-input"
+                      style={{ opacity: logInputMode.xMin === 'exponent' ? 0.5 : 1 }}
                       title="Enter the actual value (e.g., 100000 or 1e5). It will be converted to exponent."
                     />
                   </div>
                 </div>
-                {logError.x && <span style={{ color: '#d32f2f', fontSize: 12 }}>{logError.x}</span>}
+                {logError.x && <span className="log-error">{logError.x}</span>}
               </label>
-              <label>
-                Max (10^x):
-                <div style={{ display: 'flex', gap: '8px', fontSize: 12, color: '#1976d2', marginBottom: 4 }}>
-                  <span style={{ flex: 1 }}>Log Exponent</span>
-                  <span style={{ flex: 1 }}>Graph Scale Value</span>
+              <label className="config-label">
+                <span>Max (10^x):</span>
+                <div className="log-input-group">
+                  <span className="log-input-label">Log Exponent</span>
+                  <span className="log-input-label">Graph Scale Value</span>
                 </div>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <div style={{ flex: 1, position: 'relative' }}>
+                <div className="log-input-flex">
+                  <div>
                     <input
                       type="text"
                       inputMode="decimal"
@@ -361,11 +371,12 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
                       onChange={(e) => handleLogExponentChange('xMax', e.target.value)}
                       onFocus={() => handleExponentFocus('xMax')}
                       placeholder="e.g., 5 for 10^5"
-                      style={{ width: '100%', opacity: logInputMode.xMax === 'actual' ? 0.5 : 1 }}
+                      className="config-input"
+                      style={{ opacity: logInputMode.xMax === 'actual' ? 0.5 : 1 }}
                       title="Enter the exponent (e.g., 5 for 10^5 = 100000)"
                     />
                   </div>
-                  <div style={{ flex: 1, position: 'relative' }}>
+                  <div>
                     <input
                       type="text"
                       inputMode="decimal"
@@ -373,7 +384,8 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
                       onChange={(e) => handleLogActualChange('xMax', e.target.value)}
                       onFocus={() => handleActualFocus('xMax')}
                       placeholder="e.g., 100k or 1e5"
-                      style={{ width: '100%', opacity: logInputMode.xMax === 'exponent' ? 0.5 : 1 }}
+                      className="config-input"
+                      style={{ opacity: logInputMode.xMax === 'exponent' ? 0.5 : 1 }}
                       title="Enter the actual value (e.g., 100000 or 1e5). It will be converted to exponent."
                     />
                   </div>
@@ -382,31 +394,31 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             </>
           ) : (
             <>
-              <label>
-                Min:
+              <label className="config-label">
+                <span>Min:</span>
                 <input
                   type="number"
                   name="xMin"
                   value={graphConfig.xMin}
                   onChange={handleChange}
+                  className="config-input"
                 />
               </label>
-              <label>
-                Max:
+              <label className="config-label">
+                <span>Max:</span>
                 <input
                   type="number"
                   name="xMax"
                   value={graphConfig.xMax}
                   onChange={handleChange}
+                  className="config-input"
                 />
-                {logError.x && <span style={{ color: '#d32f2f', fontSize: 12, display: 'block', marginTop: 4 }}>{logError.x}</span>}
+                {logError.x && <span className="log-error">{logError.x}</span>}
               </label>
             </>
           )}
         </div>
       </div>
-
-      {/* Temperature input moved above */}
     </div>
   );
 };

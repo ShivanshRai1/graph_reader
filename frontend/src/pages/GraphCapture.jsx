@@ -547,7 +547,6 @@ const GraphCapture = () => {
                 isGraphTitleReadOnly={!!urlParams.graph_title}
                 isCurveNameReadOnly={!!urlParams.curve_title}
               />
-              
 
               {/* Dynamic Symbol Input Boxes - Only show if other_symb exists in URL */}
               {symbolNames && symbolNames.length > 0 && (

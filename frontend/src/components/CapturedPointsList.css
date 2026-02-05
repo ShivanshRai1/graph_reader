@@ -125,3 +125,61 @@
 .points-list-wrapper::-webkit-scrollbar-thumb:hover {
   background: #555;
 }
+.action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.file-input-hidden {
+  display: none;
+}
+
+.read-only-badge {
+  padding: 4px 12px;
+  background-color: #e3f2fd;
+  color: #1976d2;
+  font-size: 12px;
+  border-radius: 12px;
+  font-weight: 500;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 40px;
+  color: #999;
+  font-style: italic;
+  background-color: #fafafa;
+  border: 2px dashed #ddd;
+  border-radius: 8px;
+}
+
+.points-table-wrapper {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.value-cell {
+  text-align: right;
+  font-family: monospace;
+}
+
+.action-cell {
+  text-align: center;
+}
+
+.edit-input {
+  width: 100%;
+  padding: 6px;
+  border: 1px solid #2196F3;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 14px;
+}
+
+.btn-small {
+  padding: 6px 12px;
+  font-size: 12px;
+  margin: 2px;
+}
