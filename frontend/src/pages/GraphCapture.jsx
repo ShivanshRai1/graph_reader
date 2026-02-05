@@ -257,6 +257,8 @@ const GraphCapture = () => {
 
       const COMPANY_API_SAVE_URL = 'https://www.discoveree.io/graph_capture_api.php';
 
+      console.log('Attempting to call company API:', COMPANY_API_SAVE_URL);
+      
       const response = await fetch(COMPANY_API_SAVE_URL, {
         method: 'POST',
         headers: {
@@ -264,6 +266,9 @@ const GraphCapture = () => {
         },
         body: JSON.stringify(companyApiPayload),
       });
+
+      console.log('API Response status:', response.status);
+      console.log('API Response headers:', response.headers);
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -284,8 +289,16 @@ const GraphCapture = () => {
       }
       return true;
     } catch (error) {
-      console.error('Error sending to company database:', error);
-      alert('Error saving to company database: ' + error.message);
+      console.error('Full error object:', error);
+      console.error('Error name:', error.name);
+      console.error('Error message:', error.message);
+      
+      // Check if it's a CORS or network error
+      if (error.message === 'Failed to fetch' || error.name === 'TypeError') {
+        alert('Error saving to company database: Network or CORS error.\n\nThis is likely a CORS issue. The API at discoveree.io needs to allow requests from Netlify.\n\nPlease contact the API administrator to add CORS headers for: https://graph-capture.netlify.app');
+      } else {
+        alert('Error saving to company database: ' + error.message);
+      }
       return false;
     }
   };
