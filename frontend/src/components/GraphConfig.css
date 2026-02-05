@@ -42,6 +42,12 @@
   border: 1px solid #ccc;
   border-radius: 4px;
   font-size: 14px;
+  color: #000;
+}
+
+.config-section input::placeholder {
+  color: #888;
+  opacity: 1;
 }
 
 .config-section input:focus,
@@ -85,6 +91,12 @@
   border: 1px solid #ccc;
   border-radius: 4px;
   font-size: 14px;
+  color: #000;
+}
+
+.config-input::placeholder {
+  color: #888;
+  opacity: 1;
 }
 
 .config-input:focus,

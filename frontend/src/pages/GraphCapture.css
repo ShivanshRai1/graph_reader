@@ -103,13 +103,3 @@
   }
 }
 
-/* Placeholder styling */
-.config-input::placeholder {
-  color: #888;
-  opacity: 1;
-}
-
-.config-input {
-  color: #f0f0f0;
-}
-
