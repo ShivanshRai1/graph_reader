@@ -272,7 +272,7 @@ const GraphCapture = () => {
 
       const detailPayload = {
         curve_title: urlParams.curve_title || graphConfig.curveName || "",
-        xy: JSON.stringify(xyPoints),
+        xy: xyPoints.map(point => `{x:${point.x},y:${point.y}}`).join(','),
         tctj: tctjValue,
         xscale: graphConfig.xScale || "1",
         yscale: graphConfig.yScale || "1",
@@ -347,8 +347,8 @@ const GraphCapture = () => {
         console.log('🔗 Return URL found, constructing redirect...');
         const returnUrl = constructReturnUrl(urlParams.return_url, companyGraphId);
         console.log('🔗 Final redirect URL:', returnUrl);
-        console.log('⏸️ Redirect paused for debugging.');
-        alert('Redirect paused for debugging. Check console for the final return URL.');
+        console.log('🔗 Redirecting now...');
+        window.location.href = returnUrl;
       } else {
         console.log('✅ No return URL - showing success message');
         alert('Data saved to company database successfully!');
