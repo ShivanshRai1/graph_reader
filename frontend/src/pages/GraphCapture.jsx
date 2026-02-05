@@ -49,16 +49,14 @@ const GraphCapture = () => {
     });
     setSymbolValues(initialSymbolValues);
     
-    // Extract return parameters (format: key:value)
+    // Extract return parameters (format: return_paramName=value, excluding return_url)
     const returnParamsObj = {};
     const keys = Array.from(searchParams.keys());
     keys.forEach(key => {
-      if (key.startsWith('return_param_')) {
-        const value = searchParams.get(key);
-        if (value && value.includes(':')) {
-          const [paramKey, paramValue] = value.split(':');
-          returnParamsObj[paramKey.trim()] = paramValue.trim();
-        }
+      if (key.startsWith('return_') && key !== 'return_url') {
+        const paramName = key.substring(7); // Remove 'return_' prefix
+        const paramValue = searchParams.get(key);
+        returnParamsObj[paramName] = paramValue;
       }
     });
     setReturnParams(returnParamsObj);
@@ -95,11 +93,18 @@ const GraphCapture = () => {
   }, [setGraphConfig]);
 
   const handleSave = async () => {
+    console.log('=== HANDLE SAVE STARTED ===');
+    console.log('GraphConfig:', graphConfig);
+    console.log('DataPoints count:', dataPoints.length);
+    console.log('DataPoints:', dataPoints);
+    
     if (!graphConfig.curveName) {
+      console.error('❌ Validation failed: No curve name');
       alert('Please enter a curve name');
       return;
     }
     if (dataPoints.length === 0) {
+      console.error('❌ Validation failed: No data points captured');
       alert('Please capture at least one data point');
       return;
     }
@@ -109,18 +114,25 @@ const GraphCapture = () => {
     const yMin = parseFloat(graphConfig.yMin);
     const yMax = parseFloat(graphConfig.yMax);
     
+    console.log('Parsed min/max values:', { xMin, xMax, yMin, yMax });
+    
     if (isNaN(xMin) || isNaN(xMax) || isNaN(yMin) || isNaN(yMax)) {
+      console.error('❌ Validation failed: Invalid numeric values');
       alert('Please enter valid numeric values for all min/max fields');
       return;
     }
     if (xMin >= xMax) {
+      console.error('❌ Validation failed: X-axis min >= max');
       alert('X-axis: Min must be less than Max');
       return;
     }
     if (yMin >= yMax) {
+      console.error('❌ Validation failed: Y-axis min >= max');
       alert('Y-axis: Min must be less than Max');
       return;
     }
+    console.log('✅ All validations passed');
+    
     setIsSaving(true);
     try {
       // Show informative message if backend might be cold starting
@@ -151,15 +163,15 @@ const GraphCapture = () => {
         })),
       };
 
-      console.log('URL Params:', urlParams);
-      console.log('Sending payload:', payload);
-
-      console.log('Sending payload:', payload);
+      console.log('📋 URL Params extracted:', urlParams);
+      console.log('📦 Backend payload being sent:', payload);
+      console.log('📊 Data points to be saved:', payload.data_points);
 
       // Add timeout for cold starts
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 180000); // 3 minute timeout
       
+      console.log(`🌐 Making POST request to: ${apiUrl}/api/curves`);
       const response = await fetch(`${apiUrl}/api/curves`, {
         method: 'POST',
         headers: {
@@ -172,16 +184,19 @@ const GraphCapture = () => {
       clearTimeout(timeoutId);
       const elapsed = Date.now() - startTime;
       
-      console.log('Response status:', response.status);
-      console.log(`Request took ${(elapsed / 1000).toFixed(1)}s`);
+      console.log('📬 Backend response status:', response.status);
+      console.log(`⏱️ Backend request took ${(elapsed / 1000).toFixed(1)}s`);
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        console.error('Error response:', errorData);
+        console.error('❌ Backend error response:', errorData);
         throw new Error(`HTTP error! status: ${response.status}. ${errorData.detail || ''}`);
       }
 
       const result = await response.json();
+      console.log('✅ Backend save successful! Response:', result);
+      console.log('📌 Graph ID from backend:', result.id);
+      
       if (!urlParams.return_url) {
         alert(`Curve saved successfully! (ID: ${result.id})${elapsed > 10000 ? '\n\nNote: First request took longer due to server startup.' : ''}`);
       }
@@ -190,14 +205,23 @@ const GraphCapture = () => {
       // After successful save to local backend, send to company's database
       // Get the image URL if available
       const graphImageUrl = uploadedImage || '';
-      await sendToCompanyDatabase(graphImageUrl, result.id);
+      console.log('✅ Local save successful, calling sendToCompanyDatabase...');
+      const companyDbResult = await sendToCompanyDatabase(graphImageUrl, result.id);
+      console.log('📊 sendToCompanyDatabase returned:', companyDbResult);
       
       setIsSaving(false);
     } catch (error) {
-      console.error('Full error:', error);
+      console.error('❌ === HANDLE SAVE ERROR ===');
+      console.error('❌ Full error object:', error);
+      console.error('❌ Error name:', error.name);
+      console.error('❌ Error message:', error.message);
+      console.error('❌ Error stack:', error.stack);
+      
       if (error.name === 'AbortError') {
+        console.error('🚨 Abort error - request timed out');
         alert('Request timed out. The server may be starting up (takes 1-2 minutes on first use). Please try again.');
       } else {
+        console.error('🚨 Other error in handleSave');
         alert('Error saving curve: ' + error.message + '\n\nMake sure backend is running or try again if server is starting up.');
       }
       setIsSaving(false);
@@ -210,6 +234,10 @@ const GraphCapture = () => {
     // ============================================================
     const SEND_TO_API = true;
     
+    console.log('🚀 === SENDING TO COMPANY DATABASE STARTED ===');
+    console.log('📌 Local Graph ID:', graphId);
+    console.log('🖼️ Graph Image URL:', graphImageUrl);
+    
     try {
       const xyPoints = dataPoints
         .filter(point => Number.isFinite(point.x) && Number.isFinite(point.y))
@@ -218,16 +246,21 @@ const GraphCapture = () => {
           y: String(point.y),
         }));
 
-      console.log('Filtered XY Points being sent:', xyPoints);
+      console.log('📊 Raw data points count:', dataPoints.length);
+      console.log('✅ Filtered valid XY Points count:', xyPoints.length);
+      console.log('📋 Filtered XY Points being sent:', xyPoints);
 
       if (xyPoints.length === 0) {
+        console.error('❌ No valid data points after filtering');
         alert('No valid data points to send to the company API.');
         return false;
       }
 
+      console.log('🔤 Symbol values:', symbolValues);
       const tctjValue = (symbolValues && Object.keys(symbolValues).length > 0)
         ? symbolValues
         : (graphConfig.temperature || "");
+      console.log('🌡️ TCTJ Value:', tctjValue);
 
       const detailPayload = {
         curve_title: urlParams.curve_title || graphConfig.curveName || "",
@@ -256,7 +289,9 @@ const GraphCapture = () => {
         details: [detailPayload],
       };
 
-      console.log('Company API Payload:', companyApiPayload);
+      console.log('📦 Complete Company API Payload:', companyApiPayload);
+      console.log('📋 Graph object:', companyApiPayload.graph);
+      console.log('📊 Details array:', companyApiPayload.details);
 
       // Skip API call if in testing mode
       if (!SEND_TO_API) {
@@ -264,7 +299,7 @@ const GraphCapture = () => {
         // Simulate successful response for testing redirect
         if (urlParams.return_url) {
           const returnUrl = constructReturnUrl(urlParams.return_url, graphId);
-          console.log('Redirecting to:', returnUrl);
+          console.log('🔗 Redirecting to:', returnUrl);
           window.location.href = returnUrl;
         } else {
           alert('Data saved to local backend successfully! (API call skipped for testing)');
@@ -274,7 +309,8 @@ const GraphCapture = () => {
 
       const COMPANY_API_SAVE_URL = 'https://www.discoveree.io/graph_capture_api.php';
 
-      console.log('Attempting to call company API:', COMPANY_API_SAVE_URL);
+      console.log('🌐 Making request to Company API:', COMPANY_API_SAVE_URL);
+      console.log('📤 Request body:', JSON.stringify(companyApiPayload, null, 2));
       
       const response = await fetch(COMPANY_API_SAVE_URL, {
         method: 'POST',
@@ -284,37 +320,44 @@ const GraphCapture = () => {
         body: JSON.stringify(companyApiPayload),
       });
 
-      console.log('API Response status:', response.status);
-      console.log('API Response headers:', response.headers);
+      console.log('📬 Company API Response status:', response.status);
+      console.log('📬 Company API Response headers:', Object.fromEntries(response.headers.entries()));
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        console.error('Company API Error:', errorData);
+        console.error('❌ Company API Error response:', errorData);
         throw new Error(`Company API error! status: ${response.status}. ${errorData.detail || errorData.message || ''}`);
       }
 
       const result = await response.json();
-      console.log('Company API Response:', result);
+      console.log('✅ Company API Response received:', result);
+      console.log('📌 Company Graph ID from API:', result?.graph_id);
       const companyGraphId = result?.graph_id ?? graphId;
       
       // Handle return URL redirect if configured
       if (urlParams.return_url) {
+        console.log('🔗 Return URL found, constructing redirect...');
         const returnUrl = constructReturnUrl(urlParams.return_url, companyGraphId);
-        console.log('Redirecting to:', returnUrl);
+        console.log('🔗 Final redirect URL:', returnUrl);
+        console.log('🔗 Redirecting now...');
         window.location.href = returnUrl;
       } else {
+        console.log('✅ No return URL - showing success message');
         alert('Data saved to company database successfully!');
       }
       return true;
     } catch (error) {
-      console.error('Full error object:', error);
-      console.error('Error name:', error.name);
-      console.error('Error message:', error.message);
+      console.error('❌ Full error object:', error);
+      console.error('❌ Error name:', error.name);
+      console.error('❌ Error message:', error.message);
+      console.error('❌ Error stack:', error.stack);
       
       // Check if it's a CORS or network error
       if (error.message === 'Failed to fetch' || error.name === 'TypeError') {
+        console.error('🚨 Detected CORS/Network error');
         alert('Error saving to company database: Network or CORS error.\n\nThis is likely a CORS issue. The API at discoveree.io needs to allow requests from Netlify.\n\nPlease contact the API administrator to add CORS headers for: https://graph-capture.netlify.app');
       } else {
+        console.error('🚨 Other error detected');
         alert('Error saving to company database: ' + error.message);
       }
       return false;
@@ -322,15 +365,23 @@ const GraphCapture = () => {
   };
 
   const constructReturnUrl = (baseUrl, graphId) => {
+    console.log('🔗 === CONSTRUCTING RETURN URL ===');
+    console.log('🔗 Base URL:', baseUrl);
+    console.log('🔗 Graph ID:', graphId);
+    console.log('🔗 Return params to add:', returnParams);
+    
     const url = new URL(baseUrl);
     
     // Add return parameters
     Object.entries(returnParams).forEach(([key, value]) => {
+      console.log(`🔗 Adding param: ${key} = ${value}`);
       url.searchParams.append(key, value);
     });
     
     // Add return_graph_id
     if (graphId) {
+      console.log(`🔗 Adding return_graph_id = ${graphId}`);
+
       url.searchParams.append('return_graph_id', graphId);
     }
     
