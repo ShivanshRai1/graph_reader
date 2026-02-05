@@ -347,8 +347,8 @@ const GraphCapture = () => {
         console.log('🔗 Return URL found, constructing redirect...');
         const returnUrl = constructReturnUrl(urlParams.return_url, companyGraphId);
         console.log('🔗 Final redirect URL:', returnUrl);
-        console.log('🔗 Redirecting now...');
-        window.location.href = returnUrl;
+        console.log('⏸️ Redirect paused for debugging.');
+        alert('Redirect paused for debugging. Check console for the final return URL.');
       } else {
         console.log('✅ No return URL - showing success message');
         alert('Data saved to company database successfully!');
