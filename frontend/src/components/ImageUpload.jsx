@@ -46,6 +46,33 @@ const ImageUpload = () => {
         style={{ width: '100%', resize: 'vertical', fontSize: 15, padding: 8, border: '2px solid #222', borderRadius: 4, background: '#fafafa', color: '#222', outline: 'none', boxSizing: 'border-box' }}
         title="Paste your screenshot image here"
       />
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleFileSelect}
+        style={{ display: 'none' }}
+      />
+      <button
+        onClick={handleBrowseClick}
+        style={{
+          marginTop: 8,
+          width: '100%',
+          padding: '10px',
+          backgroundColor: '#007bff',
+          color: '#fff',
+          border: 'none',
+          borderRadius: 4,
+          cursor: 'pointer',
+          fontSize: 14,
+          fontWeight: 500,
+          transition: 'background-color 0.2s'
+        }}
+        onMouseEnter={(e) => e.target.style.backgroundColor = '#0056b3'}
+        onMouseLeave={(e) => e.target.style.backgroundColor = '#007bff'}
+      >
+        📁 Browse Files
+      </button>
     </div>
   );
 };
