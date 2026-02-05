@@ -237,10 +237,18 @@ const GraphCapture = () => {
     console.log('🚀 === SENDING TO COMPANY DATABASE STARTED ===');
     console.log('📌 Local Graph ID:', graphId);
     console.log('🖼️ Graph Image URL:', graphImageUrl);
+    console.log('📊 Full dataPoints object from context:', dataPoints);
+    console.log('📊 dataPoints type:', typeof dataPoints);
+    console.log('📊 dataPoints is array?:', Array.isArray(dataPoints));
     
     try {
+      console.log('🔍 Before filtering - dataPoints length:', dataPoints ? dataPoints.length : 'dataPoints is null/undefined');
+      
       const xyPoints = dataPoints
-        .filter(point => Number.isFinite(point.x) && Number.isFinite(point.y))
+        .filter(point => {
+          console.log(`  🔍 Checking point:`, point, `isFinite(x)=${Number.isFinite(point.x)}, isFinite(y)=${Number.isFinite(point.y)}`);
+          return Number.isFinite(point.x) && Number.isFinite(point.y);
+        })
         .map(point => ({
           x: String(point.x),
           y: String(point.y),
