@@ -272,7 +272,7 @@ const GraphCapture = () => {
 
       const detailPayload = {
         curve_title: urlParams.curve_title || graphConfig.curveName || "",
-        xy: xyPoints,
+        xy: JSON.stringify(xyPoints),
         tctj: tctjValue,
         xscale: graphConfig.xScale || "1",
         yscale: graphConfig.yScale || "1",
