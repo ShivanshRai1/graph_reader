@@ -550,11 +550,11 @@ const GraphCapture = () => {
 
               {/* Dynamic Symbol Input Boxes - Only show if other_symb exists in URL */}
               {symbolNames && symbolNames.length > 0 && (
-                <div style={{ marginTop: 16, padding: 12, border: '1px solid #ddd', borderRadius: 8, backgroundColor: '#f9f9f9' }}>
-                  <h3 style={{ marginTop: 0, marginBottom: 12, fontSize: 14 }}>Symbol Values</h3>
+                <div style={{ marginTop: 16, padding: 16, border: '1px solid var(--border-color, #ddd)', borderRadius: 8, backgroundColor: 'var(--bg-light, #f9f9f9)' }}>
+                  <h3 style={{ marginTop: 0, marginBottom: 12, fontSize: 14, color: 'var(--text-dark, #333)' }}>Symbol Values</h3>
                   {symbolNames.map(symbol => (
-                    <div key={symbol} style={{ marginBottom: 10 }}>
-                      <label style={{ display: 'block', marginBottom: 4, fontSize: 12, fontWeight: 500 }}>
+                    <div key={symbol} style={{ marginBottom: 12 }}>
+                      <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 500, color: 'var(--text-dark, #333)' }}>
                         {symbol}
                       </label>
                       <input
@@ -562,10 +562,35 @@ const GraphCapture = () => {
                         value={symbolValues[symbol] || ''}
                         onChange={(e) => setSymbolValues({ ...symbolValues, [symbol]: e.target.value })}
                         placeholder={`Enter value for ${symbol}`}
-                        style={{ width: '100%', padding: '8px', background: '#2d2d2d', color: '#ffffff', border: '1px solid #444', borderRadius: '4px' }}
+                        className="config-input"
                       />
                     </div>
                   ))}
+                  <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border-color, #ddd)' }}>
+                    <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 500, color: 'var(--text-dark, #333)' }}>
+                      Upload Graph Image
+                    </label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (event) => {
+                            const img = new Image();
+                            img.src = event.target?.result;
+                            img.onload = () => {
+                              // Image loaded successfully
+                            };
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                      className="config-input"
+                      style={{ cursor: 'pointer' }}
+                    />
+                  </div>
                 </div>
               )}
               
