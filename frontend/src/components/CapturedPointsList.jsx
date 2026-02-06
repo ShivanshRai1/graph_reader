@@ -250,18 +250,19 @@ const CapturedPointsList = ({ isReadOnly = false }) => {
             <thead>
               <tr>
                 <th>#</th>
-                <th>X Value</th>
-                <th>Y Value</th>
-                <th>Actions</th>
+                <th>#</th>
+                <th className="x-value-header">X Value</th>
+                <th className="y-value-header">Y Value</th>
+                <th className="action-header">Actions</th>
               </tr>
             </thead>
             <tbody>
               {dataPoints.map((point, index) => (
                 <tr key={index}>
-                  <td>{index + 1}</td>
+                  <td style={{ textAlign: 'right' }}>{index + 1}</td>
                   {editingIndex === index ? (
                     <>
-                      <td>
+                      <td className="value-cell">
                         <input
                           type="number"
                           value={editX}
@@ -270,7 +271,7 @@ const CapturedPointsList = ({ isReadOnly = false }) => {
                           className="edit-input"
                         />
                       </td>
-                      <td>
+                      <td className="value-cell">
                         <input
                           type="number"
                           value={editY}
@@ -297,10 +298,18 @@ const CapturedPointsList = ({ isReadOnly = false }) => {
                   ) : (
                     <>
                       <td className="value-cell">
-                        {typeof point.x === 'number' && !isNaN(point.x) ? point.x.toFixed(4) : 'Invalid'}
+                        {typeof point.x === 'number' && !isNaN(point.x)
+                          ? (Math.abs(point.x) > 0 && Math.abs(point.x) < 0.0001
+                              ? point.x.toExponential(4)
+                              : point.x.toFixed(4))
+                          : 'Invalid'}
                       </td>
                       <td className="value-cell">
-                        {typeof point.y === 'number' && !isNaN(point.y) ? point.y.toFixed(4) : 'Invalid'}
+                        {typeof point.y === 'number' && !isNaN(point.y)
+                          ? (Math.abs(point.y) > 0 && Math.abs(point.y) < 0.0001
+                              ? point.y.toExponential(4)
+                              : point.y.toFixed(4))
+                          : 'Invalid'}
                       </td>
                       <td className="action-cell">
                         {!isReadOnly && (

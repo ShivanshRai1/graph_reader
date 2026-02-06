@@ -91,6 +91,15 @@
   border-bottom: 2px solid #ddd;
 }
 
+/* Right-align X and Y value headers */
+.points-table th.x-value-header,
+.points-table th.y-value-header {
+  text-align: right;
+}
+.points-table th.action-header {
+  text-align: center;
+}
+
 .points-table td {
   padding: 10px 12px;
   border-bottom: 1px solid #eee;
@@ -163,6 +172,9 @@
 .value-cell {
   text-align: right;
   font-family: monospace;
+}
+.action-cell {
+  text-align: center;
 }
 
 .action-cell {

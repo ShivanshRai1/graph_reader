@@ -2,6 +2,14 @@ import { useGraph } from '../context/GraphContext';
 import './GraphConfig.css';
 import { useState, useEffect } from 'react';
 
+// Utility to make a string more readable: replace _ with space and capitalize words
+function toReadable(str) {
+  if (!str) return '';
+  return str
+    .replace(/_/g, ' ')
+    .replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase());
+}
+
 const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNameReadOnly = false }) => {
   const { graphConfig, setGraphConfig } = useGraph();
   const [logError, setLogError] = useState({ x: '', y: '' });
@@ -129,9 +137,13 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             value={graphConfig.curveName}
             onChange={handleChange}
             placeholder="Enter curve name"
-            readOnly={isCurveNameReadOnly}
             className="config-input"
+            readOnly={false}
+            disabled={false}
           />
+          <div style={{ color: '#888', fontSize: '0.95em', marginTop: 2 }}>
+            {toReadable(graphConfig.curveName)}
+          </div>
         </label>
         <label className="config-label">
           <span>Graph Title:</span>
@@ -141,9 +153,13 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             value={graphConfig.graphTitle || ''}
             onChange={handleChange}
             placeholder="Enter graph title"
-            readOnly={isGraphTitleReadOnly}
             className="config-input"
+            readOnly={false}
+            disabled={false}
           />
+          <div style={{ color: '#888', fontSize: '0.95em', marginTop: 2 }}>
+            {toReadable(graphConfig.graphTitle)}
+          </div>
         </label>
         {showTctj && (
           <label className="config-label">

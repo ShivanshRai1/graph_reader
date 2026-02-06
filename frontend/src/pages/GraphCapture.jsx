@@ -544,8 +544,8 @@ const GraphCapture = () => {
             <div className="config-section">
               <GraphConfig 
                 showTctj={urlParams.tctj !== "0"} 
-                isGraphTitleReadOnly={!!urlParams.graph_title}
-                isCurveNameReadOnly={!!urlParams.curve_title}
+                isGraphTitleReadOnly={false}
+                isCurveNameReadOnly={false}
               />
 
               {/* Dynamic Symbol Input Boxes - Only show if other_symb exists in URL */}
@@ -579,7 +579,7 @@ const GraphCapture = () => {
                   className="btn btn-primary"
                   disabled={isSaving}
                 >
-                  {isSaving ? 'Saving...' : 'Save Graph and Return'}
+                  {isSaving ? 'Saving...' : 'Fit, convert and export to RC ladder sim'}
                 </button>
               </div>
 
