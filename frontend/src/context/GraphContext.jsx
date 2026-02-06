@@ -143,14 +143,19 @@ export const GraphProvider = ({ children }) => {
   const addDataPoint = (point) => {
     // Convert canvas coordinates to graph coordinates
     const graphCoords = convertCanvasToGraphCoordinates(point.canvasX, point.canvasY);
-    
+    // Debug: Log the captured graph coordinates
+    console.log('Captured point:', {
+      canvasX: point.canvasX,
+      canvasY: point.canvasY,
+      x: graphCoords.x,
+      y: graphCoords.y,
+    });
     const dataPoint = {
       canvasX: point.canvasX,
       canvasY: point.canvasY,
       x: graphCoords.x,
       y: graphCoords.y,
     };
-    
     setDataPoints([...dataPoints, dataPoint]);
   };
 
