@@ -1,6 +1,5 @@
 import { useRef, useState, useEffect } from 'react';
 import { useGraph } from '../context/GraphContext';
-import './GraphCanvas.css';
 
 const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '' }) => {
   const { uploadedImage, graphArea, setGraphArea, dataPoints, addDataPoint, clearDataPoints, graphConfig, deleteDataPoint } = useGraph();
@@ -731,10 +730,10 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '' })
   }
 
   return (
-    <div className="graph-canvas-container">
-      <div className="canvas-instructions">
-        <p><strong>Instructions:</strong></p>
-        <ul>
+    <div className="w-full p-5 bg-white rounded-lg mt-5">
+      <div className="bg-blue-50 p-4 rounded mb-4">
+        <p className="text-blue-700 font-medium mb-2"><strong>Instructions:</strong></p>
+        <ul className="list-disc pl-5 text-gray-700">
           <li>Drag to select the graph area (blue box)</li>
           <li>Click inside the blue box to add data points</li>
           <li>Use the buttons below to manage your data points</li>
@@ -742,18 +741,18 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '' })
         </ul>
       </div>
       {(partNumber || manufacturer) ? (
-        <div className="part-info-display">
+        <div className="mb-4 p-3 bg-gray-100 rounded font-semibold text-gray-800 max-w-xs">
           Part Number: {partNumber && manufacturer ? `${partNumber}(${manufacturer})` : partNumber || ''}
         </div>
       ) : null}
       <div
-        className="coordinate-display-static"
+        className="mb-2 inline-block bg-black bg-opacity-85 text-white border-2 border-green-500 px-4 py-2 rounded font-mono text-base font-bold shadow transition-opacity duration-150"
         style={{ visibility: showCoords ? 'visible' : 'hidden', opacity: showCoords ? 1 : 0.35 }}
       >
         x={typeof mousePos.x === 'number' && !isNaN(mousePos.x) ? mousePos.x.toFixed(3) : 'N/A'} y={typeof mousePos.y === 'number' && !isNaN(mousePos.y) ? mousePos.y.toFixed(3) : 'N/A'}
       </div>
       <div
-        className="coord-warning-display"
+        className="block mt-2 mb-4 min-h-6 text-red-600 text-xs italic transition-opacity duration-200"
         style={{
           visibility: (zeroWarnActive || stuckWarnActive) ? 'visible' : 'hidden',
           opacity: (zeroWarnActive || stuckWarnActive) ? 1 : 0,
@@ -763,7 +762,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '' })
         {zeroWarnActive && stuckWarnActive ? ' ' : null}
         {stuckWarnActive ? '⚠️ Coordinates are barely changing while you move. Verify scale, min/max, and units match the graph.' : null}
       </div>
-      <div className="canvas-wrapper">
+      <div className="border border-gray-200 rounded mb-4 overflow-auto">
         <canvas
           ref={canvasRef}
           onMouseDown={handleMouseDown}
@@ -775,18 +774,18 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '' })
           onMouseLeave={handleMouseLeaveCanvas}
           onClick={handleCanvasClick}
           onContextMenu={handleCanvasContextMenu}
-          className="graph-canvas"
+          className="w-full block cursor-default max-w-full"
         />
       </div>
-      <div className="canvas-controls">
+      <div className="flex items-center gap-4 mt-4 mb-6">
         <button
-          className="btn btn-primary"
+          className="px-4 py-2 rounded bg-blue-600 text-white font-medium"
           onClick={() => setShowFixPoints((prev) => !prev)}
         >
           {showFixPoints ? 'Hide fix-points' : 'Draw fix-points'}
         </button>
         <button
-          className="btn btn-secondary"
+          className="px-4 py-2 rounded bg-gray-700 text-white font-medium"
           onClick={() => {
             if (lastUserBoxRef.current) {
               setGraphArea({ ...lastUserBoxRef.current });
@@ -807,7 +806,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '' })
           Redraw Box
         </button>
         {showRedrawMsg && (
-          <div className="redraw-message">
+          <div className="text-red-600 font-bold mt-2">
             Please redraw the box
           </div>
         )}
@@ -815,7 +814,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '' })
       {showMagnifier && (
         <canvas
           ref={magnifierRef}
-          className="magnifier-canvas"
+          className="fixed border-4 border-gray-800 rounded shadow bg-white top-12 right-5 z-50"
         />
       )}
     </div>

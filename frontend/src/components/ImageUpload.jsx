@@ -1,6 +1,5 @@
 import { useState, useRef } from 'react';
 import { useGraph } from '../context/GraphContext';
-import './ImageUpload.css';
 
 const ImageUpload = () => {
   const { setUploadedImage } = useGraph();
@@ -37,13 +36,12 @@ const ImageUpload = () => {
   };
 
   return (
-    <div className="image-upload-container">
+    <div className="w-full p-5 bg-gray-50 rounded-lg mt-5">
       <textarea
-        className="paste-textarea"
+        className="w-full resize-vertical text-sm px-3 py-2 border-2 border-gray-300 rounded bg-white text-gray-800 outline-none box-border"
         placeholder="Click here and paste screenshot image"
         onPaste={handlePaste}
         rows={3}
-        style={{ width: '100%', resize: 'vertical', fontSize: 15, padding: 8, border: '2px solid #222', borderRadius: 4, background: '#fafafa', color: '#222', outline: 'none', boxSizing: 'border-box' }}
         title="Paste your screenshot image here"
       />
       <input
@@ -51,25 +49,11 @@ const ImageUpload = () => {
         type="file"
         accept="image/*"
         onChange={handleFileSelect}
-        style={{ display: 'none' }}
+        className="hidden"
       />
       <button
         onClick={handleBrowseClick}
-        style={{
-          marginTop: 8,
-          width: '100%',
-          padding: '10px',
-          backgroundColor: '#007bff',
-          color: '#fff',
-          border: 'none',
-          borderRadius: 4,
-          cursor: 'pointer',
-          fontSize: 14,
-          fontWeight: 500,
-          transition: 'background-color 0.2s'
-        }}
-        onMouseEnter={(e) => e.target.style.backgroundColor = '#0056b3'}
-        onMouseLeave={(e) => e.target.style.backgroundColor = '#007bff'}
+        className="mt-2 w-full px-4 py-2 rounded bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors"
       >
         📁 Browse Files
       </button>

@@ -1,6 +1,5 @@
 import { useGraph } from '../context/GraphContext';
 import { parseFile } from '../utils/fileParser';
-import './CapturedPointsList.css';
 import { useEffect, useState } from 'react';
 
 const CapturedPointsList = ({ isReadOnly = false }) => {
@@ -184,25 +183,25 @@ const CapturedPointsList = ({ isReadOnly = false }) => {
   };
 
   return (
-    <div className="captured-points-container">
-      <div className="points-header">
-        <h3>Captured Points: {dataPoints.length}</h3>
+    <div className="bg-white border border-gray-200 rounded-lg p-5 mt-5">
+      <div className="flex justify-between items-center mb-4 pb-4 border-b-2 border-gray-100">
+        <h3 className="text-gray-800 text-lg font-semibold m-0">Captured Points: {dataPoints.length}</h3>
         {isReadOnly && (
-          <span className="read-only-badge">Read-only (saved)</span>
+          <span className="px-3 py-1 bg-gray-100 text-blue-700 text-xs rounded-full font-medium">Read-only (saved)</span>
         )}
       </div>
 
-      <div className="action-buttons">
+      <div className="flex flex-wrap gap-2 mb-4">
         <input 
           type="file" 
           id="file-import" 
           accept=".csv,.json"
           onChange={handleFileImport}
-          className="file-input-hidden"
+          className="hidden"
         />
         <button 
           onClick={() => document.getElementById('file-import').click()} 
-          className="btn btn-primary"
+          className="px-4 py-2 rounded bg-blue-600 text-white font-medium disabled:opacity-50"
           disabled={isReadOnly || !isConfigValid()}
           title={isReadOnly ? 'Points are read-only after saving' : !isConfigValid() ? 'Setup required: 1) Draw the graph area (blue box), 2) Set X/Y Min/Max values, 3) Select X/Y Scale, 4) Select X/Y Unit' : 'Import data points from CSV or JSON file'}
         >
@@ -210,21 +209,21 @@ const CapturedPointsList = ({ isReadOnly = false }) => {
         </button>
         <button 
           onClick={exportToCSV} 
-          className="btn btn-secondary"
+          className="px-4 py-2 rounded bg-gray-700 text-white font-medium disabled:opacity-50"
           disabled={dataPoints.length === 0}
         >
           📄 Export CSV
         </button>
         <button 
           onClick={exportToJSON} 
-          className="btn btn-secondary"
+          className="px-4 py-2 rounded bg-gray-700 text-white font-medium disabled:opacity-50"
           disabled={dataPoints.length === 0}
         >
           📋 Export JSON
         </button>
         <button
           onClick={copyToClipboard}
-          className="btn btn-secondary"
+          className="px-4 py-2 rounded bg-gray-700 text-white font-medium disabled:opacity-50"
           disabled={dataPoints.length === 0}
           title="Copy all points as table for pasting into Notepad, Word, etc."
         >
@@ -232,64 +231,63 @@ const CapturedPointsList = ({ isReadOnly = false }) => {
         </button>
         <button 
           onClick={clearDataPoints} 
-          className="btn btn-danger"
+          className="px-4 py-2 rounded bg-red-600 text-white font-medium disabled:opacity-50"
           disabled={dataPoints.length === 0 || isReadOnly}
           title={isReadOnly ? 'Points are read-only after saving' : 'Clear all points'}
         >
           🗑️ Clear All
         </button>
       </div>
-      
+
       {dataPoints.length === 0 ? (
-        <div className="empty-state">
+        <div className="text-center p-10 text-gray-500 italic bg-gray-50 border-2 border-dashed border-gray-200 rounded-lg">
           <p>No points captured yet. Click on the graph to add points.</p>
         </div>
       ) : (
-        <div className="points-table-wrapper">
-          <table className="points-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>#</th>
-                <th className="x-value-header">X Value</th>
-                <th className="y-value-header">Y Value</th>
-                <th className="action-header">Actions</th>
+        <div className="max-h-96 overflow-y-auto">
+          <table className="w-full border-collapse">
+            <thead className="sticky top-0 bg-blue-50">
+              <tr className="border-b-2 border-gray-300">
+                <th className="text-right px-3 py-2 text-sm font-semibold text-gray-900 bg-blue-50 border-r border-gray-300">#</th>
+                <th className="text-right px-3 py-2 text-sm font-semibold text-gray-900 bg-blue-50 border-r border-gray-300">X Value</th>
+                <th className="text-right px-3 py-2 text-sm font-semibold text-gray-900 bg-blue-50 border-r border-gray-300">Y Value</th>
+                <th className="text-center px-3 py-2 text-sm font-semibold text-gray-900 bg-blue-50">Actions</th>
               </tr>
             </thead>
             <tbody>
               {dataPoints.map((point, index) => (
-                <tr key={index}>
-                  <td style={{ textAlign: 'right' }}>{index + 1}</td>
+                <tr key={index} className="border-b border-gray-200 hover:bg-gray-50">
+                  <td className="text-right px-3 py-2 text-sm text-gray-900 bg-white border-r border-gray-300">{index + 1}</td>
                   {editingIndex === index ? (
                     <>
-                      <td className="value-cell">
+                      <td className="text-right px-3 py-2 border-r border-gray-300">
                         <input
                           type="number"
                           value={editX}
                           onChange={(e) => setEditX(e.target.value)}
                           step="any"
-                          className="edit-input"
+                          className="w-full px-2 py-1 border border-blue-600 rounded font-mono text-sm text-gray-900 bg-white"
                         />
                       </td>
-                      <td className="value-cell">
+                      <td className="text-right px-3 py-2 border-r border-gray-300">
                         <input
                           type="number"
                           value={editY}
                           onChange={(e) => setEditY(e.target.value)}
                           step="any"
-                          className="edit-input"
+                          className="w-full px-2 py-1 border border-blue-600 rounded font-mono text-sm text-gray-900 bg-white"
                         />
                       </td>
-                      <td className="action-cell">
+                      <td className="text-center px-3 py-2">
                         <button
                           onClick={() => handleSaveEdit(index)}
-                          className="btn btn-small btn-primary"
+                          className="px-3 py-1 rounded bg-blue-600 text-white text-xs font-medium mr-1"
                         >
                           Save
                         </button>
                         <button
                           onClick={handleCancelEdit}
-                          className="btn btn-small btn-secondary"
+                          className="px-3 py-1 rounded bg-gray-700 text-white text-xs font-medium"
                         >
                           Cancel
                         </button>
@@ -297,32 +295,32 @@ const CapturedPointsList = ({ isReadOnly = false }) => {
                     </>
                   ) : (
                     <>
-                      <td className="value-cell">
+                      <td className="text-right px-3 py-2 font-mono text-sm text-gray-900 bg-white border-r border-gray-300">
                         {typeof point.x === 'number' && !isNaN(point.x)
                           ? (Math.abs(point.x) > 0 && Math.abs(point.x) < 0.0001
                               ? point.x.toExponential(4)
                               : point.x.toFixed(4))
                           : 'Invalid'}
                       </td>
-                      <td className="value-cell">
+                      <td className="text-right px-3 py-2 font-mono text-sm text-gray-900 bg-white border-r border-gray-300">
                         {typeof point.y === 'number' && !isNaN(point.y)
                           ? (Math.abs(point.y) > 0 && Math.abs(point.y) < 0.0001
                               ? point.y.toExponential(4)
                               : point.y.toFixed(4))
                           : 'Invalid'}
                       </td>
-                      <td className="action-cell">
+                      <td className="text-center px-3 py-2">
                         {!isReadOnly && (
                           <>
                             <button
                               onClick={() => handleEditClick(index)}
-                              className="btn btn-small btn-primary"
+                              className="px-3 py-1 rounded bg-blue-600 text-white text-xs font-medium mr-1"
                             >
                               Edit
                             </button>
                             <button
                               onClick={() => handleDeletePoint(index)}
-                              className="btn btn-small btn-danger"
+                              className="px-3 py-1 rounded bg-red-600 text-white text-xs font-medium"
                             >
                               Delete
                             </button>

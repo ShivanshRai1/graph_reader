@@ -4,7 +4,6 @@ import GraphConfig from '../components/GraphConfig';
 import CapturedPointsList from '../components/CapturedPointsList';
 import { useGraph } from '../context/GraphContext';
 import { useState, useEffect } from 'react';
-import './GraphCapture.css';
 
 const GraphCapture = () => {
   const { uploadedImage, graphConfig, dataPoints, setGraphConfig, replaceDataPoints } = useGraph();
@@ -524,24 +523,22 @@ const GraphCapture = () => {
   };
 
   return (
-    <div className="graph-capture-page">
-      <header className="page-header">
-        <h1>Graph Data Capture Tool</h1>
-        <p>Upload graph images and extract data points easily</p>
+    <div className="w-full min-h-screen bg-gray-50 p-8">
+      <header className="mb-8">
+        <h1 className="text-2xl font-bold text-gray-800 mb-2">Graph Capture Tool</h1>
+        {/* <p className="text-gray-600">Upload graph images and extract data points easily</p> */}
       </header>
 
-      <div className="page-content">
+      <div className="flex flex-col gap-8">
         {!uploadedImage ? (
           <ImageUpload />
         ) : (
-          <div className="capture-workspace">
-
-            <div className="canvas-section">
+          <div className="flex flex-col lg:flex-row gap-8">
+            <div className="w-full lg:w-2/5 flex flex-col gap-4">
               <GraphCanvas isReadOnly={isReadOnly} partNumber={urlParams.partno} manufacturer={urlParams.manufacturer} />
               <CapturedPointsList isReadOnly={isReadOnly} />
             </div>
-
-            <div className="config-section">
+            <div className="w-full lg:w-3/5">
               <GraphConfig 
                 showTctj={urlParams.tctj !== "0"} 
                 isGraphTitleReadOnly={false}
@@ -550,11 +547,11 @@ const GraphCapture = () => {
 
               {/* Dynamic Symbol Input Boxes - Only show if other_symb exists in URL */}
               {symbolNames && symbolNames.length > 0 && (
-                <div style={{ marginTop: 16, padding: 16, border: '1px solid var(--border-color, #ddd)', borderRadius: 8, backgroundColor: 'var(--bg-light, #f9f9f9)' }}>
-                  <h3 style={{ marginTop: 0, marginBottom: 12, fontSize: 14, color: 'var(--text-dark, #333)' }}>Symbol Values</h3>
+                <div className="mt-4 p-4 border border-gray-200 rounded bg-white">
+                  <h3 className="mb-3 text-sm font-semibold text-gray-700">Symbol Values</h3>
                   {symbolNames.map(symbol => (
-                    <div key={symbol} style={{ marginBottom: 12 }}>
-                      <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 500, color: 'var(--text-dark, #333)' }}>
+                    <div key={symbol} className="mb-3">
+                      <label className="block mb-1 text-sm font-medium text-gray-800">
                         {symbol}
                       </label>
                       <input
@@ -562,21 +559,17 @@ const GraphCapture = () => {
                         value={symbolValues[symbol] || ''}
                         onChange={(e) => setSymbolValues({ ...symbolValues, [symbol]: e.target.value })}
                         placeholder={`Enter value for ${symbol}`}
-                        className="config-input"
-                        style={{ 
-                          color: '#f0f0f0'
-                        }}
+                        className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-200"
                       />
                     </div>
                   ))}
                 </div>
               )}
-              
 
-              <div className="action-buttons">
+              <div className="mt-6">
                 <button 
                   onClick={handleSave} 
-                  className="btn btn-primary"
+                  className="px-4 py-2 rounded bg-blue-600 text-white font-medium disabled:opacity-50"
                   disabled={isSaving}
                 >
                   {isSaving ? 'Saving...' : 'Fit, convert and export to RC ladder sim'}
@@ -584,10 +577,10 @@ const GraphCapture = () => {
               </div>
 
               {/* Temporarily disabled - View Saved Points button */}
-              {/* <div style={{ marginTop: 16 }}>
+              {/* <div className="mt-4">
                 <button
                   onClick={handleViewSavedPoints}
-                  className="btn btn-outline"
+                  className="px-4 py-2 rounded border border-gray-400 text-gray-700 bg-white disabled:opacity-50"
                   disabled={isFetchingSaved}
                 >
                   {isFetchingSaved ? 'Loading Saved Points...' : 'View Saved Points'}
@@ -595,7 +588,7 @@ const GraphCapture = () => {
 
                 {showSavedPanel ? (
                   <div
-                    style={{
+                    style={{{
                       marginTop: 12,
                       padding: 12,
                       border: '1px solid #ddd',
