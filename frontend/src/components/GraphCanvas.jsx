@@ -147,33 +147,34 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '' })
         ctx.globalAlpha = 1;
         
         if (isHovered || isActive) {
-          // Hovered/Active state: Filled circle with border
-          // Draw outer border (stroke)
+          // Hovered/Active state: Transparent circle with border and glow
           ctx.strokeStyle = '#666666'; // Gray border
           ctx.lineWidth = 2;
-          ctx.fillStyle = '#666666'; // Gray fill
+          ctx.globalAlpha = 0.7;
+          ctx.fillStyle = 'rgba(255,255,255,0)'; // Fully transparent fill
           ctx.beginPath();
           ctx.arc(handle.x, handle.y, currentSize, 0, 2 * Math.PI);
           ctx.fill();
           ctx.stroke();
-          
-          // Add glow effect
           ctx.shadowColor = '#666666';
           ctx.shadowBlur = 8;
           ctx.beginPath();
           ctx.arc(handle.x, handle.y, currentSize, 0, 2 * Math.PI);
-          ctx.fill();
+          ctx.stroke();
           ctx.shadowColor = 'transparent';
           ctx.shadowBlur = 0;
+          ctx.globalAlpha = 1;
         } else {
-          // Normal state: Hollow circle with gray border
+          // Normal state: Transparent circle with thin border
           ctx.strokeStyle = '#666666'; // Gray border
           ctx.lineWidth = 2;
-          ctx.fillStyle = 'white'; // White fill
+          ctx.globalAlpha = 0.7;
+          ctx.fillStyle = 'rgba(255,255,255,0)'; // Fully transparent fill
           ctx.beginPath();
           ctx.arc(handle.x, handle.y, currentSize, 0, 2 * Math.PI);
           ctx.fill();
           ctx.stroke();
+          ctx.globalAlpha = 1;
         }
         
         ctx.globalAlpha = 1; // Reset opacity
@@ -804,6 +805,12 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '' })
           }}
         >
           Redraw Box
+        </button>
+        <button
+          className="px-4 py-2 rounded bg-red-700 text-white font-medium"
+          onClick={handleClearPoints}
+        >
+          Clear All
         </button>
         {showRedrawMsg && (
           <div className="text-red-600 font-bold mt-2">
