@@ -3,6 +3,7 @@ import GraphCanvas from '../components/GraphCanvas';
 import GraphConfig from '../components/GraphConfig';
 import CapturedPointsList from '../components/CapturedPointsList';
 import SavedGraphPreview from '../components/SavedGraphPreview';
+import SavedGraphCombinedPreview from '../components/SavedGraphCombinedPreview';
 import { useGraph } from '../context/GraphContext';
 import { useState, useEffect, useMemo, useRef } from 'react';
 
@@ -72,6 +73,15 @@ const MiniGraphCanvas = ({ points }) => {
   );
 };
 
+const buildGraphGroupId = (imageUrl) => {
+  if (!imageUrl) return 'graph_unknown';
+  let hash = 0;
+  for (let i = 0; i < imageUrl.length; i += 1) {
+    hash = (hash * 31 + imageUrl.charCodeAt(i)) >>> 0;
+  }
+  return `graph_${hash.toString(36)}`;
+};
+
 const GraphCapture = () => {
   const {
     uploadedImage,
@@ -84,6 +94,7 @@ const GraphCapture = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [isReadOnly, setIsReadOnly] = useState(false);
   const [savedCurves, setSavedCurves] = useState([]);
+  const [combinedGroupId, setCombinedGroupId] = useState('');
   const [isFetchingSaved, setIsFetchingSaved] = useState(false);
   const [savedCurvesError, setSavedCurvesError] = useState('');
   const [selectedCurveId, setSelectedCurveId] = useState('');
@@ -111,10 +122,25 @@ const GraphCapture = () => {
   const [returnGraphId, setReturnGraphId] = useState('');
 
   const selectedCurve = savedCurves.find((curve) => curve.id === selectedCurveId);
-  const displayedCurves = useMemo(() => {
+  const groupedCurves = useMemo(() => {
     if (!Array.isArray(savedCurves)) return [];
-    return savedCurves.slice(-10).reverse();
+    const groups = new Map();
+
+    savedCurves.forEach((curve, index) => {
+      const imageUrl = curve.graphImageUrl ?? curve.graph_img ?? '';
+      const groupId = curve.graphGroupId ?? buildGraphGroupId(imageUrl) ?? `graph_${index}`;
+      const existing = groups.get(groupId) || {
+        id: groupId,
+        imageUrl,
+        curves: [],
+      };
+      existing.curves.push(curve);
+      groups.set(groupId, existing);
+    });
+
+    return Array.from(groups.values());
   }, [savedCurves]);
+  const selectedGroup = groupedCurves.find((group) => group.id === combinedGroupId);
   const selectedCurvePoints = selectedCurve?.points ?? selectedCurve?.data_points ?? [];
 
   const normalizeCurveConfig = (curve) => ({
@@ -291,8 +317,7 @@ const GraphCapture = () => {
       // Show only one success message after saving
       alert('Data saved successfully!');
 
-
-
+      const graphGroupId = buildGraphGroupId(uploadedImage || '');
       const graphImageUrl = uploadedImage || '';
       console.log('Local save successful, calling sendToCompanyDatabase...');
       const companyGraphId = await sendToCompanyDatabase(graphImageUrl, result.id, allowRedirect);
@@ -306,6 +331,8 @@ const GraphCapture = () => {
           name: payload.curve_name,
           points: payload.data_points,
           config: { ...graphConfig },
+          graphGroupId,
+          graphImageUrl,
         },
       ]);
 
@@ -735,18 +762,37 @@ const GraphCapture = () => {
                   <h2 className="text-lg font-bold mb-4" style={{ color: '#213547' }}>
                     Saved Graphs
                   </h2>
-                  <div className="flex flex-col gap-3 max-h-80 overflow-y-auto pr-2">
-                    {displayedCurves.map((curve) => (
-                      <div
-                        key={curve.id}
-                        className="rounded shadow p-4 min-w-55 cursor-pointer hover:bg-gray-100"
-                        style={{ backgroundColor: '#ffffff', color: '#213547', border: '1px solid var(--color-border)' }}
-                        onClick={() => setSelectedCurveId(curve.id)}
-                      >
-                        <div className="font-semibold mb-2" style={{ color: '#213547' }}>
-                          {curve.name || `Curve #${curve.id}`}
+                  <div className="flex flex-col gap-4 max-h-80 overflow-y-auto pr-2">
+                    {groupedCurves.map((group, groupIndex) => (
+                      <div key={group.id} className="rounded p-3" style={{ border: '1px solid var(--color-border)', background: '#ffffff' }}>
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="font-semibold" style={{ color: '#213547' }}>
+                            Graph {groupIndex + 1} ({group.curves.length} curves)
+                          </div>
+                          <button
+                            className="px-3 py-1 rounded bg-gray-900 text-white text-xs"
+                            onClick={() => setCombinedGroupId(group.id)}
+                          >
+                            View combined
+                          </button>
                         </div>
-                        <div className="text-xs mb-1">Points: {curve.points?.length ?? curve.data_points?.length ?? 0}</div>
+                        <div className="flex flex-col gap-2">
+                          {group.curves.map((curve) => (
+                            <div
+                              key={curve.id}
+                              className="rounded p-3 cursor-pointer hover:bg-gray-100"
+                              style={{ backgroundColor: '#ffffff', color: '#213547', border: '1px solid var(--color-border)' }}
+                              onClick={() => setSelectedCurveId(curve.id)}
+                            >
+                              <div className="font-semibold mb-1" style={{ color: '#213547' }}>
+                                {curve.name || curve.curve_name || `Curve #${curve.id}`}
+                              </div>
+                              <div className="text-xs mb-1">
+                                Points: {curve.points?.length ?? curve.data_points?.length ?? 0}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -906,6 +952,70 @@ const GraphCapture = () => {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+      {selectedGroup && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            background: 'rgba(0,0,0,0.35)',
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+          onClick={() => setCombinedGroupId('')}
+        >
+          <div
+            style={{
+              background: '#fff',
+              color: '#213547',
+              borderRadius: 8,
+              minWidth: 560,
+              maxWidth: 820,
+              maxHeight: '85vh',
+              overflowY: 'auto',
+              boxShadow: '0 4px 32px rgba(0,0,0,0.18)',
+              padding: 24,
+              position: 'relative',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              style={{
+                position: 'absolute',
+                top: 8,
+                right: 12,
+                background: 'none',
+                border: 'none',
+                fontSize: 22,
+                color: '#888',
+                cursor: 'pointer',
+              }}
+              onClick={() => setCombinedGroupId('')}
+              aria-label="Close"
+            >
+              ×
+            </button>
+            <div className="font-semibold mb-2" style={{ color: '#213547', fontSize: 18 }}>
+              Combined curves ({selectedGroup.curves.length})
+            </div>
+            <div style={{ marginTop: 12 }}>
+              <SavedGraphCombinedPreview
+                curves={selectedGroup.curves}
+                config={normalizeCurveConfig(selectedGroup.curves[0])}
+                width={700}
+                height={280}
+              />
+            </div>
+            <div className="mt-3 text-xs" style={{ color: '#6b7280' }}>
+              Hover points to see values. Each curve uses a different color.
+            </div>
           </div>
         </div>
       )}
