@@ -62,37 +62,36 @@ def create_curve(curve: CurveCreate, db: Session = Depends(get_db)):
     """Create a new curve with data points"""
     try:
         # Create curve
-        # db_curve = Curve(
-        #     part_number=curve.part_number,
-        #     curve_name=curve.curve_name,
-        #     x_scale=curve.x_scale,
-        #     y_scale=curve.y_scale,
-        #     x_unit=curve.x_unit,
-        #     y_unit=curve.y_unit,
-        #     x_min=curve.x_min,
-        #     x_max=curve.x_max,
-        #     y_min=curve.y_min,
-        #     y_max=curve.y_max,
-        #     temperature=curve.temperature,
-        #     manufacturer=curve.manufacturer,
-        #     graph_title=curve.graph_title,
-        #     x_label=curve.x_label,
-        #     y_label=curve.y_label,
-        #     other_symbols=curve.other_symbols,
-        #     discoveree_cat_id=curve.discoveree_cat_id,
-        # )
-        # # Add data points
-        # for point in curve.data_points:
-        #     db_point = DataPoint(
-        #         x_value=point.x_value,
-        #         y_value=point.y_value,
-        #     )
-        #     db_curve.data_points.append(db_point)
-        # db.add(db_curve)
-        # db.commit()
-        # db.refresh(db_curve)
-        # return db_curve
-        return {"message": "Curve creation disabled: DB write commented out."}
+        db_curve = Curve(
+            part_number=curve.part_number,
+            curve_name=curve.curve_name,
+            x_scale=curve.x_scale,
+            y_scale=curve.y_scale,
+            x_unit=curve.x_unit,
+            y_unit=curve.y_unit,
+            x_min=curve.x_min,
+            x_max=curve.x_max,
+            y_min=curve.y_min,
+            y_max=curve.y_max,
+            temperature=curve.temperature,
+            manufacturer=curve.manufacturer,
+            graph_title=curve.graph_title,
+            x_label=curve.x_label,
+            y_label=curve.y_label,
+            other_symbols=curve.other_symbols,
+            discoveree_cat_id=curve.discoveree_cat_id,
+        )
+        # Add data points
+        for point in curve.data_points:
+            db_point = DataPoint(
+                x_value=point.x_value,
+                y_value=point.y_value,
+            )
+            db_curve.data_points.append(db_point)
+        db.add(db_curve)
+        db.commit()
+        db.refresh(db_curve)
+        return db_curve
     except Exception as e:
         db.rollback()
         raise HTTPException(
