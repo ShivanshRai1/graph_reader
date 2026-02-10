@@ -62,38 +62,37 @@ def create_curve(curve: CurveCreate, db: Session = Depends(get_db)):
     """Create a new curve with data points"""
     try:
         # Create curve
-        db_curve = Curve(
-            part_number=curve.part_number,
-            curve_name=curve.curve_name,
-            x_scale=curve.x_scale,
-            y_scale=curve.y_scale,
-            x_unit=curve.x_unit,
-            y_unit=curve.y_unit,
-            x_min=curve.x_min,
-            x_max=curve.x_max,
-            y_min=curve.y_min,
-            y_max=curve.y_max,
-            temperature=curve.temperature,
-            manufacturer=curve.manufacturer,
-            graph_title=curve.graph_title,
-            x_label=curve.x_label,
-            y_label=curve.y_label,
-            other_symbols=curve.other_symbols,
-            discoveree_cat_id=curve.discoveree_cat_id,
-        )
-        
-        # Add data points
-        for point in curve.data_points:
-            db_point = DataPoint(
-                x_value=point.x_value,
-                y_value=point.y_value,
-            )
-            db_curve.data_points.append(db_point)
-        
-        db.add(db_curve)
-        db.commit()
-        db.refresh(db_curve)
-        return db_curve
+        # db_curve = Curve(
+        #     part_number=curve.part_number,
+        #     curve_name=curve.curve_name,
+        #     x_scale=curve.x_scale,
+        #     y_scale=curve.y_scale,
+        #     x_unit=curve.x_unit,
+        #     y_unit=curve.y_unit,
+        #     x_min=curve.x_min,
+        #     x_max=curve.x_max,
+        #     y_min=curve.y_min,
+        #     y_max=curve.y_max,
+        #     temperature=curve.temperature,
+        #     manufacturer=curve.manufacturer,
+        #     graph_title=curve.graph_title,
+        #     x_label=curve.x_label,
+        #     y_label=curve.y_label,
+        #     other_symbols=curve.other_symbols,
+        #     discoveree_cat_id=curve.discoveree_cat_id,
+        # )
+        # # Add data points
+        # for point in curve.data_points:
+        #     db_point = DataPoint(
+        #         x_value=point.x_value,
+        #         y_value=point.y_value,
+        #     )
+        #     db_curve.data_points.append(db_point)
+        # db.add(db_curve)
+        # db.commit()
+        # db.refresh(db_curve)
+        # return db_curve
+        return {"message": "Curve creation disabled: DB write commented out."}
     except Exception as e:
         db.rollback()
         raise HTTPException(
@@ -136,21 +135,20 @@ def get_curve(curve_id: int, db: Session = Depends(get_db)):
 def update_curve(curve_id: int, curve_update: CurveUpdate, db: Session = Depends(get_db)):
     """Update a curve"""
     try:
-        curve = db.query(Curve).filter(Curve.id == curve_id).first()
-        if not curve:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Curve not found"
-            )
-        
-        # Update fields
-        update_data = curve_update.model_dump(exclude_unset=True)
-        for field, value in update_data.items():
-            setattr(curve, field, value)
-        
-        db.commit()
-        db.refresh(curve)
-        return curve
+        # curve = db.query(Curve).filter(Curve.id == curve_id).first()
+        # if not curve:
+        #     raise HTTPException(
+        #         status_code=status.HTTP_404_NOT_FOUND,
+        #         detail="Curve not found"
+        #     )
+        # # Update fields
+        # update_data = curve_update.model_dump(exclude_unset=True)
+        # for field, value in update_data.items():
+        #     setattr(curve, field, value)
+        # db.commit()
+        # db.refresh(curve)
+        # return curve
+        return {"message": "Curve update disabled: DB write commented out."}
     except HTTPException:
         raise
     except Exception as e:
@@ -164,16 +162,16 @@ def update_curve(curve_id: int, curve_update: CurveUpdate, db: Session = Depends
 def delete_curve(curve_id: int, db: Session = Depends(get_db)):
     """Delete a curve and its data points"""
     try:
-        curve = db.query(Curve).filter(Curve.id == curve_id).first()
-        if not curve:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Curve not found"
-            )
-        
-        db.delete(curve)
-        db.commit()
-        return None
+        # curve = db.query(Curve).filter(Curve.id == curve_id).first()
+        # if not curve:
+        #     raise HTTPException(
+        #         status_code=status.HTTP_404_NOT_FOUND,
+        #         detail="Curve not found"
+        #     )
+        # db.delete(curve)
+        # db.commit()
+        # return None
+        return {"message": "Curve deletion disabled: DB write commented out."}
     except HTTPException:
         raise
     except Exception as e:
@@ -189,22 +187,22 @@ def delete_curve(curve_id: int, db: Session = Depends(get_db)):
 def add_data_point(curve_id: int, point: DataPointCreate, db: Session = Depends(get_db)):
     """Add a single data point to a curve"""
     try:
-        curve = db.query(Curve).filter(Curve.id == curve_id).first()
-        if not curve:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Curve not found"
-            )
-        
-        db_point = DataPoint(
-            curve_id=curve_id,
-            x_value=point.x_value,
-            y_value=point.y_value,
-        )
-        db.add(db_point)
-        db.commit()
-        db.refresh(db_point)
-        return db_point
+        # curve = db.query(Curve).filter(Curve.id == curve_id).first()
+        # if not curve:
+        #     raise HTTPException(
+        #         status_code=status.HTTP_404_NOT_FOUND,
+        #         detail="Curve not found"
+        #     )
+        # db_point = DataPoint(
+        #     curve_id=curve_id,
+        #     x_value=point.x_value,
+        #     y_value=point.y_value,
+        # )
+        # db.add(db_point)
+        # db.commit()
+        # db.refresh(db_point)
+        # return db_point
+        return {"message": "Data point creation disabled: DB write commented out."}
     except HTTPException:
         raise
     except Exception as e:
@@ -239,16 +237,16 @@ def get_data_points(curve_id: int, db: Session = Depends(get_db)):
 def delete_data_point(point_id: int, db: Session = Depends(get_db)):
     """Delete a specific data point"""
     try:
-        point = db.query(DataPoint).filter(DataPoint.id == point_id).first()
-        if not point:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Data point not found"
-            )
-        
-        db.delete(point)
-        db.commit()
-        return None
+        # point = db.query(DataPoint).filter(DataPoint.id == point_id).first()
+        # if not point:
+        #     raise HTTPException(
+        #         status_code=status.HTTP_404_NOT_FOUND,
+        #         detail="Data point not found"
+        #     )
+        # db.delete(point)
+        # db.commit()
+        # return None
+        return {"message": "Data point deletion disabled: DB write commented out."}
     except HTTPException:
         raise
     except Exception as e:
