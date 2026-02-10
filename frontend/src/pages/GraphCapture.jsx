@@ -722,7 +722,7 @@ const GraphCapture = () => {
               <CapturedPointsList isReadOnly={isReadOnly} />
             </div>
             <div className="w-full lg:w-3/5">
-              <GraphConfig showTctj={urlParams.tctj !== '0'} isGraphTitleReadOnly={false} isCurveNameReadOnly={false} />
+              <GraphConfig showTctj={urlParams.tctj !== '0'} isGraphTitleReadOnly={false} isCurveNameReadOnly={false} initialCurveName={urlParams.curve_title} initialGraphTitle={urlParams.graph_title} />
 
               {/* Dynamic Symbol Input Boxes - Only show if other_symb exists in URL */}
               {symbolNames && symbolNames.length > 0 && (

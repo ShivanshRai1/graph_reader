@@ -1,9 +1,21 @@
 import { useGraph } from '../context/GraphContext';
 import { useState, useEffect } from 'react';
 
-const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNameReadOnly = false }) => {
+const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNameReadOnly = false, initialCurveName = '', initialGraphTitle = '' }) => {
   const { graphConfig, setGraphConfig } = useGraph();
   const [logError, setLogError] = useState({ x: '', y: '' });
+  
+  // Apply initial values from props when component mounts
+  useEffect(() => {
+    if (initialCurveName || initialGraphTitle) {
+      setGraphConfig((prevConfig) => ({
+        ...prevConfig,
+        curveName: initialCurveName || prevConfig.curveName,
+        graphTitle: initialGraphTitle || prevConfig.graphTitle,
+      }));
+    }
+  }, [initialCurveName, initialGraphTitle, setGraphConfig]);
+  
   // Synced values for logarithmic inputs (exponent <-> actual)
   const [logValues, setLogValues] = useState({
     xMin: { exp: '', actual: '' },
