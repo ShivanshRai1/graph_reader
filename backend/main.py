@@ -14,9 +14,24 @@ app = FastAPI(
     title="Graph Data Capture API",
     description="API for capturing and managing graph data points",
     version="1.0.0"
+import threading
+import time
+from sqlalchemy import text
 )
 
 # Add CORS middleware for React frontend
+def keep_db_alive():
+    while True:
+        try:
+            db = next(get_db())
+            db.execute(text('SELECT 1'))
+            db.close()
+        except Exception as e:
+            print(f"[KeepAlive] DB ping failed: {e}")
+        time.sleep(240)  # every 4 minutes
+
+# Start keep-alive thread
+threading.Thread(target=keep_db_alive, daemon=True).start()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
