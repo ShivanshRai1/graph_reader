@@ -912,7 +912,7 @@ const GraphCapture = () => {
             </div>
             <div className="mb-2 text-xs">Points: {selectedCurvePoints.length}</div>
             <a
-              href={`${window.location.origin}/?view=curve&curveId=${selectedCurve.id}`}
+              href={`${window.location.origin}/?view=curve&curveId=${selectedCurve.discoveree_cat_id || selectedCurve.id}`}
               target="_blank"
               rel="noopener noreferrer"
               style={{ color: '#1d4ed8', textDecoration: 'underline', fontSize: 13 }}
