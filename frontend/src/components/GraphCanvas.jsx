@@ -193,34 +193,18 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '' })
         return;
       }
       
-      const pointRadius = 4;
-      // Draw imported points in a red-like color, user-captured points in red
-      if (point.imported) {
-        // Imported point: Deep orange/red tone for distinction
-        ctx.strokeStyle = '#FF7043'; // Deep orange
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.arc(point.canvasX, point.canvasY, pointRadius, 0, 2 * Math.PI);
-        ctx.stroke();
-        
-        // Soft red/orange fill for distinction
-        ctx.fillStyle = '#FFCCBC'; // Light red-orange
-        ctx.beginPath();
-        ctx.arc(point.canvasX, point.canvasY, pointRadius, 0, 2 * Math.PI);
-        ctx.fill();
-      } else {
-        // User-captured point: Red filled circle (existing behavior)
-        ctx.strokeStyle = 'white';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.arc(point.canvasX, point.canvasY, pointRadius, 0, 2 * Math.PI);
-        ctx.stroke();
-        
-        ctx.fillStyle = 'red';
-        ctx.beginPath();
-        ctx.arc(point.canvasX, point.canvasY, pointRadius, 0, 2 * Math.PI);
-        ctx.fill();
-      }
+      const pointRadius = 2.5;
+      // All points (imported and captured) are drawn in red
+      ctx.strokeStyle = 'white';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(point.canvasX, point.canvasY, pointRadius, 0, 2 * Math.PI);
+      ctx.stroke();
+      
+      ctx.fillStyle = 'red';
+      ctx.beginPath();
+      ctx.arc(point.canvasX, point.canvasY, pointRadius, 0, 2 * Math.PI);
+      ctx.fill();
     });
   };
 
