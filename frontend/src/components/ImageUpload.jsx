@@ -2,13 +2,26 @@ import { useState, useRef } from 'react';
 import { useGraph } from '../context/GraphContext';
 
 const ImageUpload = () => {
-  const { setUploadedImage } = useGraph();
+  const { setUploadedImage, clearDataPoints, setGraphConfig } = useGraph();
   const fileInputRef = useRef(null);
 
   const handlePaste = (e) => {
     const items = e.clipboardData.items;
     for (let i = 0; i < items.length; i++) {
       if (items[i].type.indexOf('image') !== -1) {
+        // Clear previous graph state for a fresh start
+        setUploadedImage(null);
+        clearDataPoints();
+        setGraphConfig((prev) => ({
+          ...prev,
+          curveName: '',
+          graphTitle: '',
+          xMin: 0,
+          xMax: 100,
+          yMin: 0,
+          yMax: 100,
+          // Optionally reset other fields if needed
+        }));
         const blob = items[i].getAsFile();
         const reader = new FileReader();
         reader.onload = (ev) => {
