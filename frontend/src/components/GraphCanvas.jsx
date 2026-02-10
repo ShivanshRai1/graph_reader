@@ -32,7 +32,6 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '' })
   const warningHoldTimeoutRef = useRef(null);
   const [boxTransparent, setBoxTransparent] = useState(false);
   const lastUserBoxRef = useRef(null); // Store last manually set box dimensions
-  const pendingResizeHandleRef = useRef(null);
 
   const MARGIN = 16; // Margin from edges for resize handles visibility
   const EDGE_GAP = 12; // Hysteresis for edge checks to reduce flicker
@@ -285,11 +284,9 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '' })
     }
 
     if (mode) {
-      pendingResizeHandleRef.current = mode;
+      setResizeMode(mode);
       setInitialArea(area);
       setInitialMouse({ x, y });
-      setIsResizing(false); // Don't start resizing yet
-      // Store that a handle was clicked, but don't resize until mouse moves
       return;
     }
 
@@ -306,25 +303,12 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '' })
     const x = (e.clientX - rect.left) * scaleX;
     const y = (e.clientY - rect.top) * scaleY;
 
-    // Only start resizing if mouse moves enough after clicking a handle
-    if (!resizeMode && pendingResizeHandleRef.current && initialArea) {
-      const dx = x - initialMouse.x;
-      const dy = y - initialMouse.y;
-      const moveDistance = Math.sqrt(dx * dx + dy * dy);
-      if (moveDistance > 6) {
-        setResizeMode(pendingResizeHandleRef.current);
-        setIsResizing(true);
-        setBoxTransparent(false);
-        pendingResizeHandleRef.current = null;
-      }
-    }
-
     if (resizeMode && initialArea) {
       const dx = x - initialMouse.x;
       const dy = y - initialMouse.y;
-      const moveDistance = Math.sqrt(dx * dx + dy * dy);
-      if (!isResizing && moveDistance > 6) {
+      if (!isResizing) {
         setIsResizing(true);
+        setBoxTransparent(false);
       }
       if (isResizing) {
         const minSize = 20;
@@ -405,13 +389,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '' })
       // Make box transparent after resize is done (entering capture mode)
       setBoxTransparent(true);
       setTimeout(() => {
-        justFinishedResizingRef.current = false;
-      }, 100);
-    }
-    if (isDrawingBox) {
-      // Store box dimensions when user finishes drawing
-      lastUserBoxRef.current = { ...graphArea };
-      // Make box transparent after drawing is done (entering capture mode)
+         Make box transparent after drawing is done (entering capture mode)
       setBoxTransparent(true);
     }
     setIsSelecting(false);
@@ -678,9 +656,6 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '' })
     setZeroWarnActive(false);
     setStuckWarnActive(false);
     
-    if (pendingResizeHandleRef.current) {
-      pendingResizeHandleRef.current = null;
-    }
     // Cancel any active resize operation when mouse leaves canvas
     if (isResizing) {
       setResizeMode(null);
