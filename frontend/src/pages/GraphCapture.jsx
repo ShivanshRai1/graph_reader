@@ -709,11 +709,20 @@ const GraphCapture = () => {
                   className="px-4 py-2 rounded bg-blue-600 text-white font-medium disabled:opacity-50"
                   disabled={isSaving}
                 >
-                  {isSaving ? 'Saving...' : 'Fit, convert and export to RC ladder sim'}
+                  Fit, convert and export to RC ladder sim
                 </button>
-                <button onClick={handleSaveDataPoints} className="px-4 py-2 rounded bg-green-600 text-white font-medium">
+                <button
+                  onClick={handleSaveDataPoints}
+                  className="px-4 py-2 rounded bg-green-600 text-white font-medium disabled:opacity-50"
+                  disabled={isSaving}
+                >
                   Save Data Points
                 </button>
+                {isSaving ? (
+                  <span className="text-sm" style={{ color: '#6b7280' }}>
+                    Processing...
+                  </span>
+                ) : null}
               </div>
 
               {/* Saved Graphs Section */}
