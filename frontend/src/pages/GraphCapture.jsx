@@ -1013,9 +1013,6 @@ const GraphCapture = () => {
                 height={280}
               />
             </div>
-            <div className="mt-3 text-xs" style={{ color: '#6b7280' }}>
-              Hover points to see values. Each curve uses a different color.
-            </div>
           </div>
         </div>
       )}

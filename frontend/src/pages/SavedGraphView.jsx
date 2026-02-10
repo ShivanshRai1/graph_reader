@@ -81,6 +81,9 @@ const SavedGraphView = ({ curveId }) => {
         <h1 className="text-2xl font-bold" style={{ color: '#213547' }}>
           {curve.curve_name || curve.graph_title || 'Saved Graph'}
         </h1>
+        <p className="text-sm mt-2" style={{ color: '#6b7280' }}>
+          ID: {curve.id}
+        </p>
       </header>
 
       <div className="flex flex-col gap-6">
