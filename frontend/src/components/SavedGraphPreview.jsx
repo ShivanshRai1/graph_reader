@@ -169,6 +169,27 @@ const SavedGraphPreview = ({ points, config, width = 520, height = 220, animate 
     );
   }
 
+  const handleMouseMove = (event) => {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const mouseX = event.clientX - bounds.left;
+    const mouseY = event.clientY - bounds.top;
+    let nearest = null;
+    let nearestDistance = Infinity;
+    const maxDistance = 16;
+
+    pointCoords.forEach((point) => {
+      const dx = point.svgX - mouseX;
+      const dy = point.svgY - mouseY;
+      const distance = Math.hypot(dx, dy);
+      if (distance < maxDistance && distance < nearestDistance) {
+        nearest = point;
+        nearestDistance = distance;
+      }
+    });
+
+    setHoveredPoint(nearest);
+  };
+
   return (
     <svg
       width={width}
@@ -179,6 +200,8 @@ const SavedGraphPreview = ({ points, config, width = 520, height = 220, animate 
         borderRadius: 8,
         background: '#ffffff',
       }}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={() => setHoveredPoint(null)}
     >
       <rect x={0} y={0} width={width} height={height} fill="#ffffff" />
       <line
@@ -260,13 +283,9 @@ const SavedGraphPreview = ({ points, config, width = 520, height = 220, animate 
         }
       />
       {pointCoords.map((point) => (
-        <g
-          key={`${point.x}-${point.y}`}
-          onMouseEnter={() => setHoveredPoint(point)}
-          onMouseLeave={() => setHoveredPoint(null)}
-        >
-          <circle cx={point.svgX} cy={point.svgY} r={9} fill="transparent" pointerEvents="all" />
-          <circle cx={point.svgX} cy={point.svgY} r={4} fill="#2563eb" />
+        <g key={`${point.x}-${point.y}`}>
+          <circle cx={point.svgX} cy={point.svgY} r={9} fill="transparent" pointerEvents="none" />
+          <circle cx={point.svgX} cy={point.svgY} r={4} fill="#2563eb" pointerEvents="none" />
         </g>
       ))}
 
