@@ -389,7 +389,13 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '' })
       // Make box transparent after resize is done (entering capture mode)
       setBoxTransparent(true);
       setTimeout(() => {
-         Make box transparent after drawing is done (entering capture mode)
+        justFinishedResizingRef.current = false;
+      }, 100);
+    }
+    if (isDrawingBox) {
+      // Store box dimensions when user finishes drawing
+      lastUserBoxRef.current = { ...graphArea };
+      // Make box transparent after drawing is done (entering capture mode)
       setBoxTransparent(true);
     }
     setIsSelecting(false);
