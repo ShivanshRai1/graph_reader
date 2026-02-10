@@ -338,6 +338,14 @@ const GraphCapture = () => {
     try {
       console.log('Before filtering - dataPoints length:', dataPoints ? dataPoints.length : 'dataPoints is null/undefined');
 
+      const unitFactor = (value) => {
+        const num = parseFloat(value);
+        return Number.isFinite(num) ? num : 1;
+      };
+
+      const xUnitFactor = unitFactor(graphConfig.xUnitPrefix);
+      const yUnitFactor = unitFactor(graphConfig.yUnitPrefix);
+
       const xyPoints = dataPoints
         .filter((point) => {
           console.log(
@@ -348,8 +356,8 @@ const GraphCapture = () => {
           return Number.isFinite(point.x) && Number.isFinite(point.y);
         })
         .map((point) => ({
-          x: String(point.x),
-          y: String(point.y),
+          x: String(point.x * xUnitFactor),
+          y: String(point.y * yUnitFactor),
         }));
 
       console.log('Raw data points count:', dataPoints.length);
