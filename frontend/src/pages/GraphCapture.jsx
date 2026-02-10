@@ -210,7 +210,7 @@ const GraphCapture = () => {
       partNumber: partno || prevConfig.partNumber,
       temperature: tctjValue && tctjValue !== '0' ? tctjValue : prevConfig.temperature,
     }));
-  }, [setGraphConfig]);
+  }, []);
 
   const saveCurveToBackend = async ({ allowRedirect }) => {
     console.log('=== SAVE CURVE STARTED ===');
