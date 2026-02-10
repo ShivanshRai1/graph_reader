@@ -377,10 +377,12 @@ const GraphCapture = () => {
       };
 
       // Build the JSON payload for company's API
+      // Always use a unique identifier for each save to ensure a new graph is created
+      const uniqueIdentifier = `usergraph_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
       const companyApiPayload = {
         graph: {
           discoveree_cat_id: urlParams.discoveree_cat_id ? String(urlParams.discoveree_cat_id) : '',
-          identifier: urlParams.identifier || '',
+          identifier: uniqueIdentifier,
           partno: urlParams.partno || '',
           manf: urlParams.manufacturer || '',
           graph_title: urlParams.graph_title || '',
