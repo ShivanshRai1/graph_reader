@@ -17,3 +17,9 @@ body {
   padding: 0;
 }
 
+@keyframes savedGraphLine {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+

@@ -2,8 +2,9 @@ import ImageUpload from '../components/ImageUpload';
 import GraphCanvas from '../components/GraphCanvas';
 import GraphConfig from '../components/GraphConfig';
 import CapturedPointsList from '../components/CapturedPointsList';
+import SavedGraphPreview from '../components/SavedGraphPreview';
 import { useGraph } from '../context/GraphContext';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 
 const MiniGraphCanvas = ({ points }) => {
   const canvasRef = useRef(null);
@@ -110,9 +111,25 @@ const GraphCapture = () => {
   const [returnGraphId, setReturnGraphId] = useState('');
 
   const selectedCurve = savedCurves.find((curve) => curve.id === selectedCurveId);
-  const selectedDiscovereeId = selectedCurve
-    ? selectedCurve.discovereeId ?? selectedCurve.graph_id ?? null
-    : null;
+  const displayedCurves = useMemo(() => {
+    if (!Array.isArray(savedCurves)) return [];
+    return savedCurves.slice(-10).reverse();
+  }, [savedCurves]);
+  const selectedCurvePoints = selectedCurve?.points ?? selectedCurve?.data_points ?? [];
+
+  const normalizeCurveConfig = (curve) => ({
+    xMin: curve?.config?.xMin ?? curve?.x_min,
+    xMax: curve?.config?.xMax ?? curve?.x_max,
+    yMin: curve?.config?.yMin ?? curve?.y_min,
+    yMax: curve?.config?.yMax ?? curve?.y_max,
+    xScale: curve?.config?.xScale ?? curve?.x_scale,
+    yScale: curve?.config?.yScale ?? curve?.y_scale,
+    xUnit: curve?.config?.xUnitPrefix ?? curve?.x_unit,
+    yUnit: curve?.config?.yUnitPrefix ?? curve?.y_unit,
+    xLabel: curve?.config?.xLabel ?? curve?.x_label,
+    yLabel: curve?.config?.yLabel ?? curve?.y_label,
+    graphTitle: curve?.config?.graphTitle ?? curve?.graph_title ?? curve?.name,
+  });
 
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
@@ -708,8 +725,8 @@ const GraphCapture = () => {
                   <h2 className="text-lg font-bold mb-4" style={{ color: '#213547' }}>
                     Saved Graphs
                   </h2>
-                  <div className="flex flex-wrap gap-6">
-                    {savedCurves.map((curve) => (
+                  <div className="flex flex-col gap-3 max-h-80 overflow-y-auto pr-2">
+                    {displayedCurves.map((curve) => (
                       <div
                         key={curve.id}
                         className="rounded shadow p-4 min-w-55 cursor-pointer hover:bg-gray-100"
@@ -719,10 +736,7 @@ const GraphCapture = () => {
                         <div className="font-semibold mb-2" style={{ color: '#213547' }}>
                           {curve.name || `Curve #${curve.id}`}
                         </div>
-                        <div className="text-xs mb-1">Points: {curve.points.length}</div>
-                        <div className="text-xs text-gray-500">
-                          {curve.discovereeId ? 'Discoveree link ready' : 'Discoveree link pending'}
-                        </div>
+                        <div className="text-xs mb-1">Points: {curve.points?.length ?? curve.data_points?.length ?? 0}</div>
                       </div>
                     ))}
                   </div>
@@ -840,21 +854,24 @@ const GraphCapture = () => {
             <div className="font-semibold mb-2" style={{ color: '#213547', fontSize: 18 }}>
               {selectedCurve.name || `Curve #${selectedCurve.id}`}
             </div>
-            <div className="mb-2 text-xs">Points: {selectedCurve.points.length}</div>
-            {selectedDiscovereeId ? (
-              <a
-                href={`https://www.discoveree.io/show_graph.php?id=${selectedDiscovereeId}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ color: '#1d4ed8', textDecoration: 'underline', fontSize: 13 }}
-              >
-                View graph in new tab
-              </a>
-            ) : (
-              <div className="text-xs" style={{ color: '#b45309' }}>
-                Discoveree graph link unavailable yet.
-              </div>
-            )}
+            <div className="mb-2 text-xs">Points: {selectedCurvePoints.length}</div>
+            <a
+              href={`${window.location.origin}/?view=curve&curveId=${selectedCurve.id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: '#1d4ed8', textDecoration: 'underline', fontSize: 13 }}
+            >
+              View graph in new tab
+            </a>
+            <div style={{ marginTop: 12 }}>
+              <SavedGraphPreview
+                points={selectedCurvePoints}
+                config={normalizeCurveConfig(selectedCurve)}
+                width={600}
+                height={240}
+                animate
+              />
+            </div>
             <table className="mt-2 w-full text-xs border" style={{ borderColor: 'var(--color-border)', marginTop: 12 }}>
               <thead>
                 <tr style={{ backgroundColor: '#222', color: '#fff' }}>
@@ -867,7 +884,7 @@ const GraphCapture = () => {
                 </tr>
               </thead>
               <tbody>
-                {selectedCurve.points.map((pt, idx) => (
+                {selectedCurvePoints.map((pt, idx) => (
                   <tr key={idx}>
                     <td className="px-2 py-1 border" style={{ borderColor: 'var(--color-border)', color: '#213547', background: '#fff' }}>
                       {pt.x_value}
