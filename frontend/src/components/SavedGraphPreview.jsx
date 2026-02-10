@@ -300,22 +300,22 @@ const SavedGraphPreview = ({ points, config, width = 520, height = 220, animate 
             fill="#111827"
             opacity="0.9"
           />
-          <text
-            x={Math.min(hoveredPoint.svgX + 14, width - 134)}
-            y={Math.max(hoveredPoint.svgY - 12, 24)}
-            fontSize="10"
-            fill="#f9fafb"
-          >
-            X: {formatNumber(hoveredPoint.x)}
-          </text>
-          <text
-            x={Math.min(hoveredPoint.svgX + 14, width - 134)}
-            y={Math.max(hoveredPoint.svgY + 2, 38)}
-            fontSize="10"
-            fill="#f9fafb"
-          >
-            Y: {formatNumber(hoveredPoint.y)}
-          </text>
+            <text
+              x={Math.min(hoveredPoint.svgX + 14, width - 134)}
+              y={Math.max(hoveredPoint.svgY - 12, 24)}
+              fontSize="10"
+              fill="#f9fafb"
+            >
+              X: {formatNumber(hoveredPoint.x.toFixed(2))}
+            </text>
+            <text
+              x={Math.min(hoveredPoint.svgX + 14, width - 134)}
+              y={Math.max(hoveredPoint.svgY + 2, 38)}
+              fontSize="10"
+              fill="#f9fafb"
+            >
+              Y: {formatNumber(hoveredPoint.y.toFixed(2))}
+            </text>
         </g>
       ) : null}
     </svg>
