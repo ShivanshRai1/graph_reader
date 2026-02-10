@@ -32,12 +32,14 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '' })
   const warningHoldTimeoutRef = useRef(null);
   const [boxTransparent, setBoxTransparent] = useState(false);
   const lastUserBoxRef = useRef(null); // Store last manually set box dimensions
+  const potentialResizeHandleRef = useRef(null); // Track which handle was clicked
 
   const MARGIN = 16; // Margin from edges for resize handles visibility
   const EDGE_GAP = 12; // Hysteresis for edge checks to reduce flicker
   const EPS = 1e-6;
   const WARN_CLEAR_DELAY = 180; // ms to hold warning before clearing
   const DRAG_THRESHOLD = 50; // Threshold to distinguish between click and drag
+  const RESIZE_ACTIVATION_THRESHOLD = 3; // pixels to move before activating resize
 
   const normalizeArea = (area) => {
     let { x, y, width, height } = area;
@@ -284,7 +286,8 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '' })
     }
 
     if (mode) {
-      setResizeMode(mode);
+      // Store that a handle was clicked, but don't resize yet
+      potentialResizeHandleRef.current = mode;
       setInitialArea(area);
       setInitialMouse({ x, y });
       return;
@@ -303,49 +306,54 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '' })
     const x = (e.clientX - rect.left) * scaleX;
     const y = (e.clientY - rect.top) * scaleY;
 
-    if (resizeMode && initialArea) {
+    // Check if we need to activate resize mode based on potential handle
+    if (!resizeMode && potentialResizeHandleRef.current && initialArea) {
       const dx = x - initialMouse.x;
       const dy = y - initialMouse.y;
-      if (!isResizing) {
+      const moveDistance = Math.sqrt(dx * dx + dy * dy);
+      
+      // Only activate resize if mouse moved enough
+      if (moveDistance > RESIZE_ACTIVATION_THRESHOLD) {
+        setResizeMode(potentialResizeHandleRef.current);
         setIsResizing(true);
         setBoxTransparent(false);
       }
-      if (isResizing) {
-        const minSize = 20;
-        const canvasW = canvas.width;
-        const canvasH = canvas.height;
+    }
 
-        let { x: nx, y: ny, width: nw, height: nh } = initialArea;
+    if (resizeMode && initialArea) {
+      const dx = x - initialMouse.x;
+      const dy = y - initialMouse.y;
+      const minSize = 20;
+      const canvasW = canvas.width;
+      const canvasH = canvas.height;
 
-        if (resizeMode.includes('left')) {
-          nx = initialArea.x + dx;
-          nw = initialArea.width - dx;
-        }
-        if (resizeMode.includes('right')) {
-          nw = initialArea.width + dx;
-        }
-        if (resizeMode.includes('top')) {
-          ny = initialArea.y + dy;
-          nh = initialArea.height - dy;
-        }
-        if (resizeMode.includes('bottom')) {
-          nh = initialArea.height + dy;
-        }
+      let { x: nx, y: ny, width: nw, height: nh } = initialArea;
 
-        // Apply constraints
-        // Ensure minimum size
-        if (nw < minSize) nw = minSize;
-        if (nh < minSize) nh = minSize;
-
-        // Ensure boundaries (allow resizing all the way to canvas edges)
-        if (nx < 0) nx = 0;
-        if (ny < 0) ny = 0;
-        if (nx + nw > canvasW) nw = canvasW - nx;
-        if (ny + nh > canvasH) nh = canvasH - ny;
-
-        setGraphArea({ x: nx, y: ny, width: nw, height: nh });
-        return;
+      if (resizeMode.includes('left')) {
+        nx = initialArea.x + dx;
+        nw = initialArea.width - dx;
       }
+      if (resizeMode.includes('right')) {
+        nw = initialArea.width + dx;
+      }
+      if (resizeMode.includes('top')) {
+        ny = initialArea.y + dy;
+        nh = initialArea.height - dy;
+      }
+      if (resizeMode.includes('bottom')) {
+        nh = initialArea.height + dy;
+      }
+
+      // Apply constraints
+      if (nw < minSize) nw = minSize;
+      if (nh < minSize) nh = minSize;
+      if (nx < 0) nx = 0;
+      if (ny < 0) ny = 0;
+      if (nx + nw > canvasW) nw = canvasW - nx;
+      if (ny + nh > canvasH) nh = canvasH - ny;
+
+      setGraphArea({ x: nx, y: ny, width: nw, height: nh });
+      return;
     }
 
     // Draw new box
@@ -376,54 +384,50 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '' })
   };
 
   const handleMouseUp = () => {
-    if (pendingResizeHandleRef.current && !isResizing) {
-      pendingResizeHandleRef.current = null;
-      setResizeMode(null);
-      setInitialArea(null);
-      setIsResizing(false);
-    }
-    if (isResizing) {
+    // If a handle was clicked but not dragged far enough, allow point capture
+    if (potentialResizeHandleRef.current && !resizeMode) {
+      potentialResizeHandleRef.current = null;
+      // Don't prevent point capture if user just clicked on a handle
+    } else if (isResizing) {
       justFinishedResizingRef.current = true;
-      // Store the final resized box dimensions
       lastUserBoxRef.current = { ...graphArea };
-      // Make box transparent after resize is done (entering capture mode)
       setBoxTransparent(true);
       setTimeout(() => {
         justFinishedResizingRef.current = false;
       }, 100);
-    }
-    if (isDrawingBox) {
-      // Store box dimensions when user finishes drawing
+    } else if (isDrawingBox) {
       lastUserBoxRef.current = { ...graphArea };
-      // Make box transparent after drawing is done (entering capture mode)
       setBoxTransparent(true);
     }
+    
+    potentialResizeHandleRef.current = null;
     setIsSelecting(false);
     setIsDrawingBox(false);
     setResizeMode(null);
     setInitialArea(null);
     setIsResizing(false);
-    setDragDistance(0); // Reset drag distance after mouse up
+    setDragDistance(0);
   };
 
   const handleCanvasClick = (e) => {
     if (isReadOnly) {
       return;
     }
-    // Don't add points while selecting, resizing, or if this was a drag (box drawing)
-    if (isSelecting || isResizing || justFinishedResizingRef.current || dragDistance > DRAG_THRESHOLD) {
-      setDragDistance(0); // Reset for next interaction
+    // Only skip point capture if we were actually resizing or drawing a box (not just clicked on handle)
+    if (isResizing || justFinishedResizingRef.current || (isSelecting && dragDistance > DRAG_THRESHOLD)) {
+      setDragDistance(0);
       if (justFinishedResizingRef.current) {
-        // Only reset the flag after ignoring a click
         justFinishedResizingRef.current = false;
       }
       return;
     }
+    
     // Prevent adding points if box is not drawn
     if (graphArea.width === 0 || graphArea.height === 0) {
       setShowRedrawMsg(true);
       return;
     }
+    
     // Get exact canvas position relative to viewport, accounting for scaling
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
@@ -661,6 +665,9 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '' })
     setShowMagnifier(false);
     setZeroWarnActive(false);
     setStuckWarnActive(false);
+    
+    // Clean up potential resize handle
+    potentialResizeHandleRef.current = null;
     
     // Cancel any active resize operation when mouse leaves canvas
     if (isResizing) {
