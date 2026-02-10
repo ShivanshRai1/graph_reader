@@ -1,11 +1,11 @@
 .graph-capture-page {
   min-height: 100vh;
-  background-color: #f0f2f5;
+  background-color: var(--color-bg);
 }
 
 .page-header {
-  background-color: #2c3e50;
-  color: white;
+  background-color: var(--color-bg-light);
+  color: var(--color-text-inverse);
   padding: 30px 20px;
   text-align: center;
 }
@@ -25,13 +25,14 @@
   max-width: 1400px;
   margin: 0 auto;
   padding: 20px;
+  color: var(--color-text);
 }
 
 .capture-workspace {
   display: grid;
   grid-template-columns: 2fr 1fr;
   gap: 20px;
-  background-color: white;
+  background-color: var(--color-bg-panel);
   padding: 20px;
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
@@ -72,33 +73,33 @@
   background-color: #45a049;
 }
 
+.btn-primary {
+  background-color: var(--color-bg-button);
+  color: var(--color-text-inverse);
+}
+.btn-primary:hover {
+  background-color: var(--color-bg-button-hover);
+}
 .btn-primary:disabled {
-  background-color: #999;
+  background-color: var(--color-bg-button-disabled);
   cursor: not-allowed;
   opacity: 0.7;
 }
-
 .btn-secondary {
   background-color: #2196F3;
-  color: white;
+  color: var(--color-text-inverse);
 }
-
 .btn-secondary:hover {
   background-color: #0b7dda;
 }
-
 .btn-outline {
-  background-color: white;
+  background-color: var(--color-bg-outline);
   color: #666;
-  border: 1px solid #ddd;
+  border: 1px solid var(--color-border);
 }
-
 .btn-outline:hover {
   background-color: #f5f5f5;
 }
-
-@media (max-width: 1024px) {
-  .capture-workspace {
     grid-template-columns: 1fr;
   }
 }

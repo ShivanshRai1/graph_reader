@@ -1,14 +1,30 @@
 @import "tailwindcss";
 
+
 :root {
   font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
-
   color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-
+  --color-bg: #242424;
+  --color-bg-secondary: #1a1a1a;
+  --color-bg-light: #2c3e50;
+  --color-bg-panel: #22252a;
+  --color-bg-button: #4CAF50;
+  --color-bg-button-hover: #45a049;
+  --color-bg-button-disabled: #999;
+  --color-bg-outline: #fff;
+  --color-text: rgba(255, 255, 255, 0.87);
+  --color-text-secondary: #b0b0b0;
+  --color-text-inverse: #213547;
+  --color-link: #646cff;
+  --color-link-hover: #535bf2;
+  --color-border: #ddd;
+  --color-table-header: #1a1a1a;
+  --color-table-row: #22252a;
+  --color-table-row-alt: #242424;
+  background-color: var(--color-bg);
+  color: var(--color-text);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -58,13 +74,24 @@ button:focus-visible {
 
 @media (prefers-color-scheme: light) {
   :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
-  a:hover {
-    color: #747bff;
-  }
-  button {
-    background-color: #f9f9f9;
+    --color-bg: #f0f2f5;
+    --color-bg-secondary: #fff;
+    --color-bg-light: #fff;
+    --color-bg-panel: #fff;
+    --color-bg-button: #4CAF50;
+    --color-bg-button-hover: #45a049;
+    --color-bg-button-disabled: #999;
+    --color-bg-outline: #fff;
+    --color-text: #213547;
+    --color-text-secondary: #444;
+    --color-text-inverse: #fff;
+    --color-link: #646cff;
+    --color-link-hover: #747bff;
+    --color-border: #ddd;
+    --color-table-header: #f0f2f5;
+    --color-table-row: #fff;
+    --color-table-row-alt: #f9f9f9;
+    background-color: var(--color-bg);
+    color: var(--color-text);
   }
 }
