@@ -77,16 +77,21 @@ const SavedGraphPreview = ({ points, config, width = 520, height = 220, animate 
 
   const { plottedPoints, xMin, xMax, yMin, yMax } = plotData;
 
-  const padding = 28;
-  const drawableWidth = Math.max(width - padding * 2, 1);
-  const drawableHeight = Math.max(height - padding * 2, 1);
+  const padding = {
+    left: 52,
+    right: 20,
+    top: 16,
+    bottom: 32,
+  };
+  const drawableWidth = Math.max(width - padding.left - padding.right, 1);
+  const drawableHeight = Math.max(height - padding.top - padding.bottom, 1);
 
   const svgPoints = useMemo(() => {
     if (plottedPoints.length === 0) return '';
     return plottedPoints
       .map((point) => {
-        const x = padding + ((point.plotX - xMin) / Math.max(xMax - xMin, 1e-9)) * drawableWidth;
-        const y = padding + (1 - (point.plotY - yMin) / Math.max(yMax - yMin, 1e-9)) * drawableHeight;
+        const x = padding.left + ((point.plotX - xMin) / Math.max(xMax - xMin, 1e-9)) * drawableWidth;
+        const y = padding.top + (1 - (point.plotY - yMin) / Math.max(yMax - yMin, 1e-9)) * drawableHeight;
         return `${x},${y}`;
       })
       .join(' ');
@@ -94,8 +99,8 @@ const SavedGraphPreview = ({ points, config, width = 520, height = 220, animate 
 
   const pointCoords = useMemo(() => {
     return plottedPoints.map((point) => {
-      const x = padding + ((point.plotX - xMin) / Math.max(xMax - xMin, 1e-9)) * drawableWidth;
-      const y = padding + (1 - (point.plotY - yMin) / Math.max(yMax - yMin, 1e-9)) * drawableHeight;
+      const x = padding.left + ((point.plotX - xMin) / Math.max(xMax - xMin, 1e-9)) * drawableWidth;
+      const y = padding.top + (1 - (point.plotY - yMin) / Math.max(yMax - yMin, 1e-9)) * drawableHeight;
       return {
         ...point,
         svgX: x,
@@ -176,15 +181,36 @@ const SavedGraphPreview = ({ points, config, width = 520, height = 220, animate 
       }}
     >
       <rect x={0} y={0} width={width} height={height} fill="#ffffff" />
-      <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} stroke="#d1d5db" strokeWidth="1" />
-      <line x1={padding} y1={padding} x2={padding} y2={height - padding} stroke="#d1d5db" strokeWidth="1" />
+      <line
+        x1={padding.left}
+        y1={height - padding.bottom}
+        x2={width - padding.right}
+        y2={height - padding.bottom}
+        stroke="#d1d5db"
+        strokeWidth="1"
+      />
+      <line
+        x1={padding.left}
+        y1={padding.top}
+        x2={padding.left}
+        y2={height - padding.bottom}
+        stroke="#d1d5db"
+        strokeWidth="1"
+      />
 
       {xTicks.map((tick) => {
-        const x = padding + ((tick - xMin) / Math.max(xMax - xMin, 1e-9)) * drawableWidth;
+        const x = padding.left + ((tick - xMin) / Math.max(xMax - xMin, 1e-9)) * drawableWidth;
         return (
           <g key={`x-${tick}`}>
-            <line x1={x} y1={height - padding} x2={x} y2={height - padding + 4} stroke="#cbd5f5" strokeWidth="1" />
-            <text x={x} y={height - padding + 16} textAnchor="middle" fontSize="10" fill="#6b7280">
+            <line
+              x1={x}
+              y1={height - padding.bottom}
+              x2={x}
+              y2={height - padding.bottom + 4}
+              stroke="#cbd5f5"
+              strokeWidth="1"
+            />
+            <text x={x} y={height - padding.bottom + 18} textAnchor="middle" fontSize="10" fill="#6b7280">
               {formatTickLabel(tick, xScale)}
             </text>
           </g>
@@ -192,11 +218,25 @@ const SavedGraphPreview = ({ points, config, width = 520, height = 220, animate 
       })}
 
       {yTicks.map((tick) => {
-        const y = padding + (1 - (tick - yMin) / Math.max(yMax - yMin, 1e-9)) * drawableHeight;
+        const y = padding.top + (1 - (tick - yMin) / Math.max(yMax - yMin, 1e-9)) * drawableHeight;
         return (
           <g key={`y-${tick}`}>
-            <line x1={padding - 4} y1={y} x2={padding} y2={y} stroke="#cbd5f5" strokeWidth="1" />
-            <text x={padding - 8} y={y + 3} textAnchor="end" fontSize="10" fill="#6b7280">
+            <line
+              x1={padding.left - 4}
+              y1={y}
+              x2={padding.left}
+              y2={y}
+              stroke="#cbd5f5"
+              strokeWidth="1"
+            />
+            <text
+              x={padding.left - 10}
+              y={y}
+              textAnchor="end"
+              dominantBaseline="middle"
+              fontSize="10"
+              fill="#6b7280"
+            >
               {formatTickLabel(tick, yScale)}
             </text>
           </g>
@@ -220,15 +260,14 @@ const SavedGraphPreview = ({ points, config, width = 520, height = 220, animate 
         }
       />
       {pointCoords.map((point) => (
-        <circle
+        <g
           key={`${point.x}-${point.y}`}
-          cx={point.svgX}
-          cy={point.svgY}
-          r={4}
-          fill="#2563eb"
           onMouseEnter={() => setHoveredPoint(point)}
           onMouseLeave={() => setHoveredPoint(null)}
-        />
+        >
+          <circle cx={point.svgX} cy={point.svgY} r={9} fill="transparent" pointerEvents="all" />
+          <circle cx={point.svgX} cy={point.svgY} r={4} fill="#2563eb" />
+        </g>
       ))}
 
       {hoveredPoint ? (
