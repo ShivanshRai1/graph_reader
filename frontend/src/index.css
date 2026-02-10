@@ -72,6 +72,20 @@ button:focus-visible {
   outline: 4px auto -webkit-focus-ring-color;
 }
 
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill,
+textarea:-webkit-autofill:hover,
+textarea:-webkit-autofill:focus,
+select:-webkit-autofill,
+select:-webkit-autofill:hover,
+select:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px #ffffff inset;
+  -webkit-text-fill-color: #111827;
+  caret-color: #111827;
+}
+
 @media (prefers-color-scheme: light) {
   :root {
     --color-bg: #f0f2f5;

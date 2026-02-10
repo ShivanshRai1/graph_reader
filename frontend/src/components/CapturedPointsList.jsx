@@ -229,14 +229,6 @@ const CapturedPointsList = ({ isReadOnly = false }) => {
         >
           📋 Copy Table
         </button>
-        <button 
-          onClick={clearDataPoints} 
-          className="px-4 py-2 rounded bg-red-600 text-white font-medium disabled:opacity-50"
-          disabled={dataPoints.length === 0 || isReadOnly}
-          title={isReadOnly ? 'Points are read-only after saving' : 'Clear all points'}
-        >
-          🗑️ Clear All
-        </button>
       </div>
 
       {dataPoints.length === 0 ? (

@@ -1,14 +1,6 @@
 import { useGraph } from '../context/GraphContext';
 import { useState, useEffect } from 'react';
 
-// Utility to make a string more readable: replace _ with space and capitalize words
-function toReadable(str) {
-  if (!str) return '';
-  return str
-    .replace(/_/g, ' ')
-    .replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase());
-}
-
 const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNameReadOnly = false }) => {
   const { graphConfig, setGraphConfig } = useGraph();
   const [logError, setLogError] = useState({ x: '', y: '' });
@@ -139,9 +131,6 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             readOnly={false}
             disabled={false}
           />
-          <div className="text-gray-500 dark:text-gray-400 text-xs mt-1">
-            {toReadable(graphConfig.curveName)}
-          </div>
         </label>
         <label className="block mb-3 font-medium text-gray-800">
           <span className="block mb-1 text-sm text-gray-800">Graph Title:</span>
@@ -155,9 +144,6 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             readOnly={false}
             disabled={false}
           />
-          <div className="text-gray-500 dark:text-gray-400 text-xs mt-1">
-            {toReadable(graphConfig.graphTitle)}
-          </div>
         </label>
         {showTctj && (
           <label className="block mb-3 font-medium text-gray-800">

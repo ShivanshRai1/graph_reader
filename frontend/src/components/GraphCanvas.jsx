@@ -312,7 +312,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '' })
       const dx = x - initialMouse.x;
       const dy = y - initialMouse.y;
       const moveDistance = Math.sqrt(dx * dx + dy * dy);
-      if (!isResizing && moveDistance > 3) {
+      if (!isResizing && moveDistance > 6) {
         setIsResizing(true);
       }
       if (isResizing) {
