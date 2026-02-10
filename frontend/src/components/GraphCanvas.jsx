@@ -319,6 +319,8 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '' })
         setResizeMode(potentialResizeHandleRef.current);
         setIsResizing(true);
         setBoxTransparent(false);
+        // Clear the handle click flag since this is now a drag/resize, not a quick click
+        clickedOnHandleRef.current = false;
       }
     }
 
