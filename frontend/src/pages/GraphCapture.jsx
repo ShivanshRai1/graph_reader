@@ -291,7 +291,7 @@ const GraphCapture = () => {
       // Show only one success message after saving
       alert('Data saved successfully!');
 
-      setIsReadOnly(true);
+
 
       const graphImageUrl = uploadedImage || '';
       console.log('Local save successful, calling sendToCompanyDatabase...');
@@ -310,6 +310,7 @@ const GraphCapture = () => {
       ]);
 
       clearDataPoints();
+      setIsReadOnly(false);
       setIsSaving(false);
       return result.id;
     } catch (error) {
