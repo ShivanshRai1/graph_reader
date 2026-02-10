@@ -6,6 +6,9 @@ from database import engine, get_db, Base
 from models import Curve, DataPoint
 from schemas import CurveCreate, CurveResponse, CurveUpdate, DataPointCreate, DataPointResponse
 import os
+import threading
+import time
+from sqlalchemy import text
 
 # Create tables
 Base.metadata.create_all(bind=engine)
@@ -14,9 +17,6 @@ app = FastAPI(
     title="Graph Data Capture API",
     description="API for capturing and managing graph data points",
     version="1.0.0"
-import threading
-import time
-from sqlalchemy import text
 )
 
 # Add CORS middleware for React frontend
