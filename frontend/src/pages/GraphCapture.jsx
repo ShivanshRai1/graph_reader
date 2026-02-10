@@ -271,13 +271,8 @@ const GraphCapture = () => {
       console.log('Backend save successful! Response:', result);
       console.log('Graph ID from backend:', result.id);
 
-      if (!urlParams.return_url) {
-        alert(
-          `Curve saved successfully! (ID: ${result.id})${
-            elapsed > 10000 ? '\n\nNote: First request took longer due to server startup.' : ''
-          }`
-        );
-      }
+      // Show only one success message after saving
+      alert('Data saved successfully!');
 
       setIsReadOnly(true);
 
@@ -453,8 +448,8 @@ const GraphCapture = () => {
       } else if (allowRedirect && urlParams.return_url && !companyGraphId) {
         alert('Company graph ID missing. Saved locally, but cannot redirect without a company graph ID.');
       } else {
-        console.log('No return URL - showing success message');
-        alert('Data saved to company database successfully!');
+        // Do not show a second success message
+        console.log('No return URL - data saved.');
       }
       return companyGraphId;
     } catch (error) {
