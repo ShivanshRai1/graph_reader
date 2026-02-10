@@ -327,7 +327,7 @@ const GraphCapture = () => {
         ...prev,
         {
           id: result.id,
-          discovereeId: companyGraphId,
+          discoveree_cat_id: companyGraphId,
           name: payload.curve_name,
           points: payload.data_points,
           config: { ...graphConfig },
@@ -492,6 +492,27 @@ const GraphCapture = () => {
       console.log('Company API Response received:', result);
       console.log('Company Graph ID from API:', result?.graph_id);
       const companyGraphId = result?.graph_id ?? null;
+
+      // Update local backend with the real discoveree_cat_id
+      if (companyGraphId && graphId) {
+        console.log('Updating local curve with discoveree_cat_id:', companyGraphId);
+        try {
+          const updateResponse = await fetch(`${apiUrl}/api/curves/${graphId}/discoveree-id?discoveree_cat_id=${companyGraphId}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          });
+          if (updateResponse.ok) {
+            console.log('Successfully updated local curve with discoveree_cat_id');
+          } else {
+            console.warn('Failed to update local curve with discoveree_cat_id');
+          }
+        } catch (updateError) {
+          console.error('Error updating local curve:', updateError);
+          // Don't fail the whole operation if update fails
+        }
+      }
 
       // Handle return URL redirect if configured
       if (allowRedirect && urlParams.return_url && companyGraphId) {

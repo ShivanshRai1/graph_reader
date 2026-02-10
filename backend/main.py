@@ -158,6 +158,29 @@ def update_curve(curve_id: int, curve_update: CurveUpdate, db: Session = Depends
             detail=f"Error updating curve: {str(e)}"
         )
 
+@app.put("/api/curves/{curve_id}/discoveree-id")
+def update_discoveree_id(curve_id: int, discoveree_cat_id: int, db: Session = Depends(get_db)):
+    """Update only the discoveree_cat_id field for a curve"""
+    try:
+        curve = db.query(Curve).filter(Curve.id == curve_id).first()
+        if not curve:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Curve not found"
+            )
+        curve.discoveree_cat_id = discoveree_cat_id
+        db.commit()
+        db.refresh(curve)
+        return {"id": curve.id, "discoveree_cat_id": curve.discoveree_cat_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error updating discoveree_cat_id: {str(e)}"
+        )
+
 @app.delete("/api/curves/{curve_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_curve(curve_id: int, db: Session = Depends(get_db)):
     """Delete a curve and its data points"""
