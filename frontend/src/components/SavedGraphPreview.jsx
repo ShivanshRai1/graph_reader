@@ -306,7 +306,7 @@ const SavedGraphPreview = ({ points, config, width = 520, height = 220, animate 
               fontSize="10"
               fill="#fff"
             >
-              X: {formatNumber(hoveredPoint.x.toFixed(2))}
+                X: {Number.isFinite(hoveredPoint.x) ? hoveredPoint.x.toFixed(2) : ''}
             </text>
             <text
               x={Math.min(hoveredPoint.svgX + 14, width - 134)}
@@ -314,7 +314,7 @@ const SavedGraphPreview = ({ points, config, width = 520, height = 220, animate 
               fontSize="10"
               fill="#fff"
             >
-              Y: {formatNumber(hoveredPoint.y.toFixed(2))}
+                Y: {Number.isFinite(hoveredPoint.y) ? hoveredPoint.y.toFixed(2) : ''}
             </text>
         </g>
       ) : null}
