@@ -130,6 +130,25 @@ def get_curve(curve_id: int, db: Session = Depends(get_db)):
             detail=f"Error fetching curve: {str(e)}"
         )
 
+@app.get("/api/curves/by-discoveree/{discoveree_id}", response_model=CurveResponse)
+def get_curve_by_discoveree_id(discoveree_id: int, db: Session = Depends(get_db)):
+    """Get a specific curve by discoveree_cat_id"""
+    try:
+        curve = db.query(Curve).filter(Curve.discoveree_cat_id == discoveree_id).first()
+        if not curve:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Curve not found"
+            )
+        return curve
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching curve: {str(e)}"
+        )
+
 @app.put("/api/curves/{curve_id}", response_model=CurveResponse)
 def update_curve(curve_id: int, curve_update: CurveUpdate, db: Session = Depends(get_db)):
     """Update a curve"""

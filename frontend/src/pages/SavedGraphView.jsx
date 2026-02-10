@@ -32,7 +32,15 @@ const SavedGraphView = ({ curveId }) => {
       try {
         setIsLoading(true);
         setError('');
-        const response = await fetch(`${apiUrl}/api/curves/${curveId}`);
+        
+        // Try to fetch by discoveree_cat_id first (real ID from company API)
+        let response = await fetch(`${apiUrl}/api/curves/by-discoveree/${curveId}`);
+        
+        // If not found by discoveree_cat_id, try by local ID
+        if (!response.ok) {
+          response = await fetch(`${apiUrl}/api/curves/${curveId}`);
+        }
+        
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
