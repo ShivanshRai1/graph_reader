@@ -33,6 +33,7 @@ class Curve(Base):
     def to_dict(self):
         return {
             "id": self.id,
+            "discoveree_cat_id": self.discoveree_cat_id,
             "part_number": self.part_number,
             "curve_name": self.curve_name,
             "x_scale": self.x_scale,
@@ -49,8 +50,8 @@ class Curve(Base):
             "x_label": self.x_label,
             "y_label": self.y_label,
             "other_symbols": self.other_symbols,
-            "discoveree_cat_id": self.discoveree_cat_id,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
             "data_points": [point.to_dict() for point in self.data_points],
         }
 

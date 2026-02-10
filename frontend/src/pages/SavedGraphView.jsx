@@ -82,7 +82,7 @@ const SavedGraphView = ({ curveId }) => {
           {curve.curve_name || curve.graph_title || 'Saved Graph'}
         </h1>
         <p className="text-sm mt-2" style={{ color: '#6b7280' }}>
-          ID: {curve.id}
+          ID: {curve.discoveree_cat_id || curve.id}
         </p>
       </header>
 
