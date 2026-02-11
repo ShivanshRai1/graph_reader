@@ -236,13 +236,23 @@ const CapturedPointsList = ({ isReadOnly = false }) => {
           <p>No points captured yet. Click on the graph to add points.</p>
         </div>
       ) : (
-        <div className="max-h-96 overflow-y-auto">
+        <>
+          {(graphConfig.xScale === 'Logarithmic' || graphConfig.yScale === 'Logarithmic') && (
+            <div className="mb-3 p-2 bg-blue-50 border border-blue-200 rounded text-sm text-blue-800">
+              <strong>Note:</strong> Logarithmic values are shown as exponents (e.g., 2.5 = 10^2.5 ≈ 316.2)
+            </div>
+          )}
+          <div className="max-h-96 overflow-y-auto">
           <table className="w-full border-collapse">
             <thead className="sticky top-0 bg-blue-50">
               <tr className="border-b-2 border-gray-300">
                 <th className="text-right px-3 py-2 text-sm font-semibold text-gray-900 bg-blue-50 border-r border-gray-300">#</th>
-                <th className="text-right px-3 py-2 text-sm font-semibold text-gray-900 bg-blue-50 border-r border-gray-300">X Value</th>
-                <th className="text-right px-3 py-2 text-sm font-semibold text-gray-900 bg-blue-50 border-r border-gray-300">Y Value</th>
+                <th className="text-right px-3 py-2 text-sm font-semibold text-gray-900 bg-blue-50 border-r border-gray-300">
+                  X Value{graphConfig.xScale === 'Logarithmic' ? ' (log₁₀)' : ''}
+                </th>
+                <th className="text-right px-3 py-2 text-sm font-semibold text-gray-900 bg-blue-50 border-r border-gray-300">
+                  Y Value{graphConfig.yScale === 'Logarithmic' ? ' (log₁₀)' : ''}
+                </th>
                 <th className="text-center px-3 py-2 text-sm font-semibold text-gray-900 bg-blue-50">Actions</th>
               </tr>
             </thead>
@@ -326,6 +336,7 @@ const CapturedPointsList = ({ isReadOnly = false }) => {
             </tbody>
           </table>
         </div>
+        </>
       )}
     </div>
   );

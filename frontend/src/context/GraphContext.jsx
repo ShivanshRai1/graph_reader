@@ -98,13 +98,8 @@ export const GraphProvider = ({ children }) => {
     let graphY = yMax - 
       ((canvasY - graphArea.y) / graphArea.height) * (yMax - yMin);
     
-    // Convert back from exponent to actual value for logarithmic scales
-    if (graphConfig.xScale === 'Logarithmic') {
-      graphX = Math.pow(10, graphX);
-    }
-    if (graphConfig.yScale === 'Logarithmic') {
-      graphY = Math.pow(10, graphY);
-    }
+    // For logarithmic scales, keep the exponent value (don't convert to actual)
+    // This prevents database overflow and is the correct representation for log data
     
     return { x: graphX, y: graphY };
   };
@@ -149,6 +144,9 @@ export const GraphProvider = ({ children }) => {
       canvasY: point.canvasY,
       x: graphCoords.x,
       y: graphCoords.y,
+      xScale: graphConfig.xScale,
+      yScale: graphConfig.yScale,
+      note: graphConfig.yScale === 'Logarithmic' ? 'y value is log/exponent (prevents DB overflow)' : '',
     });
     const dataPoint = {
       canvasX: point.canvasX,
