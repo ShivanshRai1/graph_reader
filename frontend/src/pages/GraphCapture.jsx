@@ -799,22 +799,45 @@ const GraphCapture = () => {
                             className="px-3 py-1 rounded bg-gray-900 text-white text-xs"
                             onClick={() => setCombinedGroupId(group.id)}
                           >
-                            View combined
+                            View combined graph
                           </button>
                         </div>
                         <div className="flex flex-col gap-2">
                           {group.curves.map((curve) => (
                             <div
                               key={curve.id}
-                              className="rounded p-3 cursor-pointer hover:bg-gray-100"
+                              className="rounded p-3 hover:bg-gray-100"
                               style={{ backgroundColor: '#ffffff', color: '#213547', border: '1px solid var(--color-border)' }}
-                              onClick={() => setSelectedCurveId(curve.id)}
                             >
                               <div className="font-semibold mb-1" style={{ color: '#213547' }}>
                                 {curve.config?.curveName || curve.curve_name || curve.name || `Curve #${curve.id}`}
                               </div>
                               <div className="text-xs mb-1">
                                 Points: {curve.points?.length ?? curve.data_points?.length ?? 0}
+                              </div>
+                              <div className="flex gap-2 mt-2">
+                                <button
+                                  className="px-3 py-1 rounded bg-blue-600 text-white text-xs"
+                                  onClick={() => setSelectedCurveId(curve.id)}
+                                >
+                                  View
+                                </button>
+                                <button
+                                  className="px-3 py-1 rounded bg-red-600 text-white text-xs"
+                                  onClick={() => {
+                                    // Remove this curve from savedCurves
+                                    setSavedCurves((prev) => prev.filter((c) => c.id !== curve.id));
+                                  }}
+                                >
+                                  Remove
+                                </button>
+                                <button
+                                  className="px-3 py-1 rounded bg-yellow-500 text-white text-xs"
+                                  // Edit logic to be implemented later
+                                  onClick={() => {}}
+                                >
+                                  Edit
+                                </button>
                               </div>
                             </div>
                           ))}
