@@ -793,7 +793,7 @@ const GraphCapture = () => {
                       <div key={group.id} className="rounded p-3" style={{ border: '1px solid var(--color-border)', background: '#ffffff' }}>
                         <div className="flex items-center justify-between mb-2">
                           <div className="font-semibold" style={{ color: '#213547' }}>
-                            Graph {groupIndex + 1} ({group.curves.length} curves)
+                            {group.curves[0]?.config?.graphTitle || group.curves[0]?.graph_title || `Graph ${groupIndex + 1}`} ({group.curves.length} curves)
                           </div>
                           <button
                             className="px-3 py-1 rounded bg-gray-900 text-white text-xs"
@@ -811,7 +811,7 @@ const GraphCapture = () => {
                               onClick={() => setSelectedCurveId(curve.id)}
                             >
                               <div className="font-semibold mb-1" style={{ color: '#213547' }}>
-                                {curve.name || curve.curve_name || `Curve #${curve.id}`}
+                                {curve.config?.curveName || curve.curve_name || curve.name || `Curve #${curve.id}`}
                               </div>
                               <div className="text-xs mb-1">
                                 Points: {curve.points?.length ?? curve.data_points?.length ?? 0}
