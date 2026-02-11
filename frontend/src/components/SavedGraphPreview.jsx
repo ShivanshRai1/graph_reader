@@ -30,6 +30,7 @@ const toPlotConfigValue = (value, scale, mode) => {
 const formatNumber = (value) => {
   if (!Number.isFinite(value)) return '';
   const absValue = Math.abs(value);
+  if (absValue < 1e-9) return '0';
   if (absValue >= 1000) return value.toFixed(0);
   if (absValue >= 100) return value.toFixed(1);
   if (absValue >= 10) return value.toFixed(2);
@@ -147,6 +148,8 @@ const SavedGraphPreview = ({ points, config, width = 520, height = 220, animate 
     });
   }, [plottedPoints, xMin, xMax, yMin, yMax, padding, drawableWidth, drawableHeight]);
 
+  const maxXTicks = Math.max(3, Math.floor(drawableWidth / 120));
+
   const xTicks = useMemo(() => {
     if (xScale === 'Logarithmic') {
       const start = Math.floor(xMin);
@@ -155,10 +158,11 @@ const SavedGraphPreview = ({ points, config, width = 520, height = 220, animate 
       for (let i = start; i <= end; i += 1) {
         ticks.push(i);
       }
-      return ticks.slice(0, 6);
+      const step = Math.max(1, Math.ceil(ticks.length / maxXTicks));
+      return ticks.filter((_, idx) => idx % step === 0);
     }
-    return buildTicks(xMin, xMax, 5);
-  }, [xMin, xMax, xScale]);
+    return buildTicks(xMin, xMax, maxXTicks);
+  }, [xMin, xMax, xScale, maxXTicks]);
 
   const yTicks = useMemo(() => {
     if (yScale === 'Logarithmic') {

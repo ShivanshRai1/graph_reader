@@ -30,6 +30,7 @@ const toPlotConfigValue = (value, scale, mode) => {
 const formatNumber = (value) => {
   if (!Number.isFinite(value)) return '';
   const absValue = Math.abs(value);
+  if (absValue < 1e-9) return '0';
   if (absValue >= 1000) return value.toFixed(0);
   if (absValue >= 100) return value.toFixed(1);
   if (absValue >= 10) return value.toFixed(2);
@@ -148,14 +149,18 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260 }
     });
   }, [parsedCurves, plotBounds, padding, drawableWidth, drawableHeight]);
 
+  const maxXTicks = Math.max(3, Math.floor(drawableWidth / 120));
+
   const xTicks = useMemo(() => {
     if (xScale === 'Logarithmic') {
       const start = Math.floor(plotBounds.xMin);
       const end = Math.ceil(plotBounds.xMax);
-      return Array.from({ length: Math.min(end - start + 1, 6) }, (_, idx) => start + idx);
+      const ticks = Array.from({ length: Math.max(end - start + 1, 1) }, (_, idx) => start + idx);
+      const step = Math.max(1, Math.ceil(ticks.length / maxXTicks));
+      return ticks.filter((_, idx) => idx % step === 0);
     }
-    return buildTicks(plotBounds.xMin, plotBounds.xMax, 5);
-  }, [plotBounds, xScale]);
+    return buildTicks(plotBounds.xMin, plotBounds.xMax, maxXTicks);
+  }, [plotBounds, xScale, maxXTicks]);
 
   const yTicks = useMemo(() => {
     if (yScale === 'Logarithmic') {
