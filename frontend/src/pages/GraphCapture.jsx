@@ -120,6 +120,13 @@ const GraphCapture = () => {
   const [symbolNames, setSymbolNames] = useState([]);
   const [returnParams, setReturnParams] = useState({});
   const [returnGraphId, setReturnGraphId] = useState('');
+  const [editingCurveId, setEditingCurveId] = useState('');
+  const [editCurveMeta, setEditCurveMeta] = useState({
+    xScale: 'Linear',
+    yScale: 'Linear',
+    xUnitPrefix: '1',
+    yUnitPrefix: '1',
+  });
 
   const selectedCurve = savedCurves.find((curve) => curve.id === selectedCurveId);
   const groupedCurves = useMemo(() => {
@@ -142,6 +149,55 @@ const GraphCapture = () => {
   }, [savedCurves]);
   const selectedGroup = groupedCurves.find((group) => group.id === combinedGroupId);
   const selectedCurvePoints = selectedCurve?.points ?? selectedCurve?.data_points ?? [];
+
+  const unitOptions = [
+    { value: '1e-12', label: 'pico (p) = 1e-12' },
+    { value: '1e-9', label: 'nano (n) = 1e-9' },
+    { value: '1e-6', label: 'micro (μ) = 1e-6' },
+    { value: '1e-3', label: 'milli (m) = 1e-3' },
+    { value: '1', label: '1' },
+    { value: '1e3', label: 'Kilo (k) = 1e3' },
+    { value: '1e6', label: 'Mega (M) = 1e6' },
+    { value: '1e9', label: 'Giga (G) = 1e9' },
+    { value: '1e12', label: 'Tera (T) = 1e12' },
+  ];
+
+  const handleEditCurveStart = (curve) => {
+    setEditingCurveId(curve.id);
+    setEditCurveMeta({
+      xScale: curve.config?.xScale || curve.x_scale || 'Linear',
+      yScale: curve.config?.yScale || curve.y_scale || 'Linear',
+      xUnitPrefix: curve.config?.xUnitPrefix || curve.x_unit || '1',
+      yUnitPrefix: curve.config?.yUnitPrefix || curve.y_unit || '1',
+    });
+  };
+
+  const handleEditCurveCancel = () => {
+    setEditingCurveId('');
+  };
+
+  const handleEditCurveUpdate = (curveId) => {
+    setSavedCurves((prev) =>
+      prev.map((curve) => {
+        if (curve.id !== curveId) return curve;
+        return {
+          ...curve,
+          config: {
+            ...(curve.config || {}),
+            xScale: editCurveMeta.xScale,
+            yScale: editCurveMeta.yScale,
+            xUnitPrefix: editCurveMeta.xUnitPrefix,
+            yUnitPrefix: editCurveMeta.yUnitPrefix,
+          },
+          x_scale: editCurveMeta.xScale,
+          y_scale: editCurveMeta.yScale,
+          x_unit: editCurveMeta.xUnitPrefix,
+          y_unit: editCurveMeta.yUnitPrefix,
+        };
+      })
+    );
+    setEditingCurveId('');
+  };
 
   const normalizeCurveConfig = (curve) => ({
     xMin: curve?.config?.xMin ?? curve?.x_min,
@@ -824,30 +880,100 @@ const GraphCapture = () => {
                                 X unit: {curve.config?.xUnitPrefix || curve.x_unit || '-'} | Y unit: {curve.config?.yUnitPrefix || curve.y_unit || '-'}<br />
                                 X scale: {curve.config?.xScale || curve.x_scale || '-'} | Y scale: {curve.config?.yScale || curve.y_scale || '-'}
                               </div>
-                              <div className="flex gap-2 mt-2">
-                                <button
-                                  className="px-3 py-1 rounded bg-blue-600 text-white text-xs"
-                                  onClick={() => setSelectedCurveId(curve.id)}
-                                >
-                                  View
-                                </button>
-                                <button
-                                  className="px-3 py-1 rounded bg-red-600 text-white text-xs"
-                                  onClick={() => {
-                                    // Remove this curve from savedCurves
-                                    setSavedCurves((prev) => prev.filter((c) => c.id !== curve.id));
-                                  }}
-                                >
-                                  Remove
-                                </button>
-                                <button
-                                  className="px-3 py-1 rounded bg-yellow-500 text-white text-xs"
-                                  // Edit logic to be implemented later
-                                  onClick={() => {}}
-                                >
-                                  Edit
-                                </button>
-                              </div>
+                              {editingCurveId === curve.id ? (
+                                <div className="mt-2">
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <label className="text-xs text-gray-700">
+                                      Y Scale
+                                      <select
+                                        className="w-full mt-1 px-2 py-1 border border-gray-300 rounded text-xs"
+                                        value={editCurveMeta.yScale}
+                                        onChange={(e) => setEditCurveMeta({ ...editCurveMeta, yScale: e.target.value })}
+                                      >
+                                        <option value="Linear">Linear</option>
+                                        <option value="Logarithmic">Logarithmic</option>
+                                      </select>
+                                    </label>
+                                    <label className="text-xs text-gray-700">
+                                      Y Unit
+                                      <select
+                                        className="w-full mt-1 px-2 py-1 border border-gray-300 rounded text-xs"
+                                        value={editCurveMeta.yUnitPrefix}
+                                        onChange={(e) => setEditCurveMeta({ ...editCurveMeta, yUnitPrefix: e.target.value })}
+                                      >
+                                        {unitOptions.map((option) => (
+                                          <option key={option.value} value={option.value}>
+                                            {option.label}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </label>
+                                    <label className="text-xs text-gray-700">
+                                      X Scale
+                                      <select
+                                        className="w-full mt-1 px-2 py-1 border border-gray-300 rounded text-xs"
+                                        value={editCurveMeta.xScale}
+                                        onChange={(e) => setEditCurveMeta({ ...editCurveMeta, xScale: e.target.value })}
+                                      >
+                                        <option value="Linear">Linear</option>
+                                        <option value="Logarithmic">Logarithmic</option>
+                                      </select>
+                                    </label>
+                                    <label className="text-xs text-gray-700">
+                                      X Unit
+                                      <select
+                                        className="w-full mt-1 px-2 py-1 border border-gray-300 rounded text-xs"
+                                        value={editCurveMeta.xUnitPrefix}
+                                        onChange={(e) => setEditCurveMeta({ ...editCurveMeta, xUnitPrefix: e.target.value })}
+                                      >
+                                        {unitOptions.map((option) => (
+                                          <option key={option.value} value={option.value}>
+                                            {option.label}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </label>
+                                  </div>
+                                  <div className="flex gap-2 mt-3">
+                                    <button
+                                      className="px-3 py-1 rounded bg-green-600 text-white text-xs"
+                                      onClick={() => handleEditCurveUpdate(curve.id)}
+                                    >
+                                      Update Data
+                                    </button>
+                                    <button
+                                      className="px-3 py-1 rounded bg-gray-700 text-white text-xs"
+                                      onClick={handleEditCurveCancel}
+                                    >
+                                      Cancel Edit
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="flex gap-2 mt-2">
+                                  <button
+                                    className="px-3 py-1 rounded bg-blue-600 text-white text-xs"
+                                    onClick={() => setSelectedCurveId(curve.id)}
+                                  >
+                                    View
+                                  </button>
+                                  <button
+                                    className="px-3 py-1 rounded bg-red-600 text-white text-xs"
+                                    onClick={() => {
+                                      // Remove this curve from savedCurves
+                                      setSavedCurves((prev) => prev.filter((c) => c.id !== curve.id));
+                                    }}
+                                  >
+                                    Remove
+                                  </button>
+                                  <button
+                                    className="px-3 py-1 rounded bg-yellow-500 text-white text-xs"
+                                    onClick={() => handleEditCurveStart(curve)}
+                                  >
+                                    Edit
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>
