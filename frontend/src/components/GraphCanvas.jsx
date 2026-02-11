@@ -35,7 +35,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '' })
   const potentialResizeHandleRef = useRef(null); // Track which handle was clicked
   const clickedOnHandleRef = useRef(false); // Track if this click originated on a handle
 
-  const MARGIN = 16; // Margin from edges for resize handles visibility
+  const MARGIN = 6; // Margin from edges for resize handles visibility
   const EDGE_GAP = 12; // Hysteresis for edge checks to reduce flicker
   const EPS = 1e-6;
   const WARN_CLEAR_DELAY = 180; // ms to hold warning before clearing
@@ -55,6 +55,27 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '' })
     return { x, y, width, height };
   };
 
+  const constrainAreaToMargin = (area, canvasW, canvasH) => {
+    const normalized = normalizeArea(area);
+    const minX = MARGIN;
+    const minY = MARGIN;
+    const maxX = Math.max(minX, canvasW - MARGIN);
+    const maxY = Math.max(minY, canvasH - MARGIN);
+
+    let x = Math.min(Math.max(normalized.x, minX), maxX);
+    let y = Math.min(Math.max(normalized.y, minY), maxY);
+    let width = normalized.width;
+    let height = normalized.height;
+
+    const maxWidth = Math.max(0, canvasW - MARGIN - x);
+    const maxHeight = Math.max(0, canvasH - MARGIN - y);
+
+    if (width > maxWidth) width = maxWidth;
+    if (height > maxHeight) height = maxHeight;
+
+    return { x, y, width, height };
+  };
+
   useEffect(() => {
     if (uploadedImage && canvasRef.current) {
       const canvas = canvasRef.current;
@@ -69,12 +90,16 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '' })
         
         // Auto-draw blue selection box covering entire image only on first load (no points captured yet)
         if (graphArea.width === 0 && graphArea.height === 0 && dataPoints.length === 0) {
-          const initialBox = {
-            x: 0,
-            y: 0,
-            width: img.width,
-            height: img.height,
-          };
+          const initialBox = constrainAreaToMargin(
+            {
+              x: 0,
+              y: 0,
+              width: img.width,
+              height: img.height,
+            },
+            img.width,
+            img.height
+          );
           setGraphArea(initialBox);
           lastUserBoxRef.current = initialBox;
         }
@@ -335,12 +360,13 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '' })
       // Apply constraints
       if (nw < minSize) nw = minSize;
       if (nh < minSize) nh = minSize;
-      if (nx < 0) nx = 0;
-      if (ny < 0) ny = 0;
-      if (nx + nw > canvasW) nw = canvasW - nx;
-      if (ny + nh > canvasH) nh = canvasH - ny;
+      const constrained = constrainAreaToMargin(
+        { x: nx, y: ny, width: nw, height: nh },
+        canvasW,
+        canvasH
+      );
 
-      setGraphArea({ x: nx, y: ny, width: nw, height: nh });
+      setGraphArea(constrained);
       return;
     }
 
@@ -362,12 +388,14 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '' })
     if (isDrawingBox) {
       const width = x - startPos.x;
       const height = y - startPos.y;
-      setGraphArea(normalizeArea({
+      const normalized = normalizeArea({
         x: startPos.x,
         y: startPos.y,
         width,
         height,
-      }));
+      });
+      const constrained = constrainAreaToMargin(normalized, canvas.width, canvas.height);
+      setGraphArea(constrained);
     }
   };
 

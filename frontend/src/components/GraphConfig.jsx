@@ -132,19 +132,6 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
       <h3 className="text-gray-900 text-lg font-semibold mb-5">Graph Configuration</h3>
       <div className="mb-5">
         <label className="block mb-3 font-medium text-gray-800">
-          <span className="block mb-1 text-sm text-gray-800">Curve/Line Name:</span>
-          <input
-            type="text"
-            name="curveName"
-            value={graphConfig.curveName}
-            onChange={handleChange}
-            placeholder="Enter curve name"
-            className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white"
-            readOnly={false}
-            disabled={false}
-          />
-        </label>
-        <label className="block mb-3 font-medium text-gray-800">
           <span className="block mb-1 text-sm text-gray-800">Graph Title:</span>
           <input
             type="text"
@@ -152,6 +139,19 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             value={graphConfig.graphTitle || ''}
             onChange={handleChange}
             placeholder="Enter graph title"
+            className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white"
+            readOnly={false}
+            disabled={false}
+          />
+        </label>
+        <label className="block mb-3 font-medium text-gray-800">
+          <span className="block mb-1 text-sm text-gray-800">Curve/Line Name:</span>
+          <input
+            type="text"
+            name="curveName"
+            value={graphConfig.curveName}
+            onChange={handleChange}
+            placeholder="Enter curve name"
             className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white"
             readOnly={false}
             disabled={false}
