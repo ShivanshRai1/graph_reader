@@ -218,9 +218,14 @@ const GraphCapture = () => {
     console.log('DataPoints count:', dataPoints.length);
     console.log('DataPoints:', dataPoints);
 
-    if (!graphConfig.curveName) {
-      console.error('Validation failed: No curve name');
-      alert('Please enter a curve name');
+    if (!graphConfig.graphTitle || !graphConfig.curveName) {
+      if (!graphConfig.graphTitle && !graphConfig.curveName) {
+        alert('Please enter both a graph title and a curve name');
+      } else if (!graphConfig.graphTitle) {
+        alert('Please enter a graph title');
+      } else {
+        alert('Please enter a curve name');
+      }
       return null;
     }
     if (dataPoints.length === 0) {
