@@ -328,17 +328,22 @@ const GraphCapture = () => {
       const companyGraphId = await sendToCompanyDatabase(graphImageUrl, result.id, allowRedirect);
       console.log('sendToCompanyDatabase returned:', companyGraphId);
 
+      const savedCurve = {
+        id: result.id,
+        discoveree_cat_id: companyGraphId,
+        name: payload.curve_name,
+        points: payload.data_points,
+        config: { ...graphConfig },
+        graphGroupId,
+        graphImageUrl,
+      };
+      console.log('Saving curve with config:', savedCurve.config);
+      console.log('xUnitPrefix:', savedCurve.config.xUnitPrefix);
+      console.log('yUnitPrefix:', savedCurve.config.yUnitPrefix);
+      
       setSavedCurves((prev) => [
         ...prev,
-        {
-          id: result.id,
-          discoveree_cat_id: companyGraphId,
-          name: payload.curve_name,
-          points: payload.data_points,
-          config: { ...graphConfig },
-          graphGroupId,
-          graphImageUrl,
-        },
+        savedCurve,
       ]);
 
       clearDataPoints();
@@ -816,7 +821,7 @@ const GraphCapture = () => {
                                 Points: {curve.points?.length ?? curve.data_points?.length ?? 0}
                               </div>
                               <div className="text-xs mb-2 text-gray-700">
-                                X unit: {curve.config?.xUnit || curve.config?.xUnitPrefix || curve.x_unit || curve.x_unit_prefix || '-'} | Y unit: {curve.config?.yUnit || curve.config?.yUnitPrefix || curve.y_unit || curve.y_unit_prefix || '-'}<br />
+                                X unit: {curve.config?.xUnitPrefix || curve.x_unit || '-'} | Y unit: {curve.config?.yUnitPrefix || curve.y_unit || '-'}<br />
                                 X scale: {curve.config?.xScale || curve.x_scale || '-'} | Y scale: {curve.config?.yScale || curve.y_scale || '-'}
                               </div>
                               <div className="flex gap-2 mt-2">
