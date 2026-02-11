@@ -5,6 +5,28 @@ const normalizeNumber = (value, fallback) => {
   return Number.isFinite(num) ? num : fallback;
 };
 
+const inferLogMode = (scale, values, configMode) => {
+  if (scale !== 'Logarithmic') return 'linear';
+  if (configMode === 'exponent' || configMode === 'actual') return configMode;
+  if (values.some((value) => value <= 0)) return 'exponent';
+  return 'actual';
+};
+
+const toPlotValue = (value, scale, mode) => {
+  if (scale !== 'Logarithmic') return value;
+  if (mode === 'exponent') return value;
+  return Math.log10(Math.max(value, 1e-12));
+};
+
+const toPlotConfigValue = (value, scale, mode) => {
+  const num = parseFloat(value);
+  if (!Number.isFinite(num)) return NaN;
+  if (scale !== 'Logarithmic') return num;
+  if (mode === 'exponent') return num;
+  if (num <= 0) return NaN;
+  return Math.log10(Math.max(num, 1e-12));
+};
+
 const formatNumber = (value) => {
   if (!Number.isFinite(value)) return '';
   const absValue = Math.abs(value);
@@ -40,13 +62,24 @@ const SavedGraphPreview = ({ points, config, width = 520, height = 220, animate 
   const xScale = config?.xScale ?? config?.x_scale ?? 'Linear';
   const yScale = config?.yScale ?? config?.y_scale ?? 'Linear';
 
+  const logModeX = inferLogMode(
+    xScale,
+    parsedPoints.map((point) => point.x),
+    config?.logDataModeX
+  );
+  const logModeY = inferLogMode(
+    yScale,
+    parsedPoints.map((point) => point.y),
+    config?.logDataModeY
+  );
+
   const plotData = useMemo(() => {
     if (parsedPoints.length === 0) {
       return { plottedPoints: [], xMin: 0, xMax: 1, yMin: 0, yMax: 1 };
     }
 
-    const toPlotX = (value) => (xScale === 'Logarithmic' ? Math.log10(Math.max(value, 1e-12)) : value);
-    const toPlotY = (value) => (yScale === 'Logarithmic' ? Math.log10(Math.max(value, 1e-12)) : value);
+    const toPlotX = (value) => toPlotValue(value, xScale, logModeX);
+    const toPlotY = (value) => toPlotValue(value, yScale, logModeY);
 
     const sortedPoints = [...parsedPoints].sort((a, b) => a.x - b.x);
     const plottedPoints = sortedPoints.map((point) => ({
@@ -61,10 +94,15 @@ const SavedGraphPreview = ({ points, config, width = 520, height = 220, animate 
     const computedYMin = Math.min(...plottedPoints.map((point) => point.plotY));
     const computedYMax = Math.max(...plottedPoints.map((point) => point.plotY));
 
-    const xMin = normalizeNumber(config?.xMin ?? config?.x_min, computedXMin);
-    const xMax = normalizeNumber(config?.xMax ?? config?.x_max, computedXMax);
-    const yMin = normalizeNumber(config?.yMin ?? config?.y_min, computedYMin);
-    const yMax = normalizeNumber(config?.yMax ?? config?.y_max, computedYMax);
+    const configXMin = toPlotConfigValue(config?.xMin ?? config?.x_min, xScale, logModeX);
+    const configXMax = toPlotConfigValue(config?.xMax ?? config?.x_max, xScale, logModeX);
+    const configYMin = toPlotConfigValue(config?.yMin ?? config?.y_min, yScale, logModeY);
+    const configYMax = toPlotConfigValue(config?.yMax ?? config?.y_max, yScale, logModeY);
+
+    const xMin = Number.isFinite(configXMin) ? configXMin : computedXMin;
+    const xMax = Number.isFinite(configXMax) ? configXMax : computedXMax;
+    const yMin = Number.isFinite(configYMin) ? configYMin : computedYMin;
+    const yMax = Number.isFinite(configYMax) ? configYMax : computedYMax;
 
     return {
       plottedPoints,
@@ -73,7 +111,7 @@ const SavedGraphPreview = ({ points, config, width = 520, height = 220, animate 
       yMin: yMin === yMax ? yMin - 1 : yMin,
       yMax: yMin === yMax ? yMax + 1 : yMax,
     };
-  }, [parsedPoints, config, xScale, yScale]);
+  }, [parsedPoints, config, xScale, yScale, logModeX, logModeY]);
 
   const { plottedPoints, xMin, xMax, yMin, yMax } = plotData;
 

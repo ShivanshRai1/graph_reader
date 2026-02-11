@@ -5,6 +5,28 @@ const normalizeNumber = (value, fallback) => {
   return Number.isFinite(num) ? num : fallback;
 };
 
+const inferLogMode = (scale, values, configMode) => {
+  if (scale !== 'Logarithmic') return 'linear';
+  if (configMode === 'exponent' || configMode === 'actual') return configMode;
+  if (values.some((value) => value <= 0)) return 'exponent';
+  return 'actual';
+};
+
+const toPlotValue = (value, scale, mode) => {
+  if (scale !== 'Logarithmic') return value;
+  if (mode === 'exponent') return value;
+  return Math.log10(Math.max(value, 1e-12));
+};
+
+const toPlotConfigValue = (value, scale, mode) => {
+  const num = parseFloat(value);
+  if (!Number.isFinite(num)) return NaN;
+  if (scale !== 'Logarithmic') return num;
+  if (mode === 'exponent') return num;
+  if (num <= 0) return NaN;
+  return Math.log10(Math.max(num, 1e-12));
+};
+
 const formatNumber = (value) => {
   if (!Number.isFinite(value)) return '';
   const absValue = Math.abs(value);
@@ -34,6 +56,18 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260 }
   const xScale = baseConfig.xScale ?? baseConfig.x_scale ?? 'Linear';
   const yScale = baseConfig.yScale ?? baseConfig.y_scale ?? 'Linear';
 
+  const allXValues = useMemo(
+    () => safeCurves.flatMap((curve) => (curve.points || curve.data_points || []).map((point) => Number(point.x_value ?? point.x))).filter(Number.isFinite),
+    [safeCurves]
+  );
+  const allYValues = useMemo(
+    () => safeCurves.flatMap((curve) => (curve.points || curve.data_points || []).map((point) => Number(point.y_value ?? point.y))).filter(Number.isFinite),
+    [safeCurves]
+  );
+
+  const logModeX = inferLogMode(xScale, allXValues, baseConfig.logDataModeX);
+  const logModeY = inferLogMode(yScale, allYValues, baseConfig.logDataModeY);
+
   const parsedCurves = useMemo(() => {
     return safeCurves.map((curve, curveIndex) => {
       const points = Array.isArray(curve.points)
@@ -48,8 +82,8 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260 }
         }))
         .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
 
-      const toPlotX = (value) => (xScale === 'Logarithmic' ? Math.log10(Math.max(value, 1e-12)) : value);
-      const toPlotY = (value) => (yScale === 'Logarithmic' ? Math.log10(Math.max(value, 1e-12)) : value);
+      const toPlotX = (value) => toPlotValue(value, xScale, logModeX);
+      const toPlotY = (value) => toPlotValue(value, yScale, logModeY);
 
       const sortedPoints = [...parsedPoints].sort((a, b) => a.x - b.x);
       const plottedPoints = sortedPoints.map((point) => ({
@@ -66,7 +100,7 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260 }
         points: plottedPoints,
       };
     });
-  }, [safeCurves, xScale, yScale]);
+  }, [safeCurves, xScale, yScale, logModeX, logModeY]);
 
   const plotBounds = useMemo(() => {
     const allPoints = parsedCurves.flatMap((curve) => curve.points);
@@ -79,10 +113,15 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260 }
     const computedYMin = Math.min(...allPoints.map((point) => point.plotY));
     const computedYMax = Math.max(...allPoints.map((point) => point.plotY));
 
-    const xMin = normalizeNumber(baseConfig.xMin ?? baseConfig.x_min, computedXMin);
-    const xMax = normalizeNumber(baseConfig.xMax ?? baseConfig.x_max, computedXMax);
-    const yMin = normalizeNumber(baseConfig.yMin ?? baseConfig.y_min, computedYMin);
-    const yMax = normalizeNumber(baseConfig.yMax ?? baseConfig.y_max, computedYMax);
+    const configXMin = toPlotConfigValue(baseConfig.xMin ?? baseConfig.x_min, xScale, logModeX);
+    const configXMax = toPlotConfigValue(baseConfig.xMax ?? baseConfig.x_max, xScale, logModeX);
+    const configYMin = toPlotConfigValue(baseConfig.yMin ?? baseConfig.y_min, yScale, logModeY);
+    const configYMax = toPlotConfigValue(baseConfig.yMax ?? baseConfig.y_max, yScale, logModeY);
+
+    const xMin = Number.isFinite(configXMin) ? configXMin : computedXMin;
+    const xMax = Number.isFinite(configXMax) ? configXMax : computedXMax;
+    const yMin = Number.isFinite(configYMin) ? configYMin : computedYMin;
+    const yMax = Number.isFinite(configYMax) ? configYMax : computedYMax;
 
     return {
       xMin: xMin === xMax ? xMin - 1 : xMin,
@@ -90,7 +129,7 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260 }
       yMin: yMin === yMax ? yMin - 1 : yMin,
       yMax: yMin === yMax ? yMax + 1 : yMax,
     };
-  }, [parsedCurves, baseConfig]);
+  }, [parsedCurves, baseConfig, xScale, yScale, logModeX, logModeY]);
 
   const padding = { left: 52, right: 20, top: 16, bottom: 32 };
   const drawableWidth = Math.max(width - padding.left - padding.right, 1);
