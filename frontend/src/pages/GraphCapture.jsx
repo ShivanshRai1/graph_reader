@@ -127,6 +127,7 @@ const GraphCapture = () => {
     xUnitPrefix: '1',
     yUnitPrefix: '1',
   });
+  const [convertDataPoints, setConvertDataPoints] = useState(true);
 
   const selectedCurve = savedCurves.find((curve) => curve.id === selectedCurveId);
   const groupedCurves = useMemo(() => {
@@ -170,6 +171,7 @@ const GraphCapture = () => {
       xUnitPrefix: curve.config?.xUnitPrefix || curve.x_unit || '1',
       yUnitPrefix: curve.config?.yUnitPrefix || curve.y_unit || '1',
     });
+    setConvertDataPoints(true);
   };
 
   const handleEditCurveCancel = () => {
@@ -180,8 +182,44 @@ const GraphCapture = () => {
     setSavedCurves((prev) =>
       prev.map((curve) => {
         if (curve.id !== curveId) return curve;
+        
+        // Get old and new scale types
+        const oldXScaleType = (curve.config?.xScale || curve.x_scale || 'Linear');
+        const oldYScaleType = (curve.config?.yScale || curve.y_scale || 'Linear');
+        const newXScaleType = editCurveMeta.xScale;
+        const newYScaleType = editCurveMeta.yScale;
+        
+        // Get old and new unit prefixes (these are the numeric multipliers)
+        const oldXUnit = parseFloat(curve.config?.xUnitPrefix || curve.x_unit || '1');
+        const oldYUnit = parseFloat(curve.config?.yUnitPrefix || curve.y_unit || '1');
+        const newXUnit = parseFloat(editCurveMeta.xUnitPrefix);
+        const newYUnit = parseFloat(editCurveMeta.yUnitPrefix);
+        
+        // Calculate conversion factors based on unit changes
+        // Formula: new_value = old_value * (old_unit / new_unit)
+        // Example: 5 milli (1e-3) → base (1) = 5 * (1e-3 / 1) = 0.005
+        const xConversionFactor = oldXUnit / newXUnit;
+        const yConversionFactor = oldYUnit / newYUnit;
+        
+        // Convert data points if checkbox is checked
+        let newPoints = curve.points || curve.data_points || [];
+        if (convertDataPoints) {
+          // Check if scale types are changing
+          if (oldXScaleType !== newXScaleType || oldYScaleType !== newYScaleType) {
+            alert('Cannot convert data points when changing scale type (Linear ↔ Logarithmic). Only metadata will be updated.');
+          } else {
+            // Apply conversion factor to each point
+            newPoints = newPoints.map((point) => ({
+              x_value: point.x_value * xConversionFactor,
+              y_value: point.y_value * yConversionFactor,
+            }));
+          }
+        }
+        
         return {
           ...curve,
+          points: newPoints,
+          data_points: newPoints,
           config: {
             ...(curve.config || {}),
             xScale: editCurveMeta.xScale,
@@ -933,6 +971,22 @@ const GraphCapture = () => {
                                         ))}
                                       </select>
                                     </label>
+                                  </div>
+                                  <div className="mt-3">
+                                    <label className="flex items-center gap-2 text-xs text-gray-700">
+                                      <input
+                                        type="checkbox"
+                                        checked={convertDataPoints}
+                                        onChange={(e) => setConvertDataPoints(e.target.checked)}
+                                        className="w-4 h-4"
+                                      />
+                                      <span>Convert existing data points to new scale/unit</span>
+                                    </label>
+                                    <p className="text-xs text-gray-500 mt-1 ml-6">
+                                      {convertDataPoints 
+                                        ? 'Data values will be recalculated to match new scale/unit' 
+                                        : 'Only labels will change, data values remain unchanged'}
+                                    </p>
                                   </div>
                                   <div className="flex gap-2 mt-3">
                                     <button
