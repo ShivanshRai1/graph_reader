@@ -815,6 +815,10 @@ const GraphCapture = () => {
                               <div className="text-xs mb-1">
                                 Points: {curve.points?.length ?? curve.data_points?.length ?? 0}
                               </div>
+                              <div className="text-xs mb-2 text-gray-700">
+                                X unit: {curve.config?.xUnit || curve.x_unit || '-'} | Y unit: {curve.config?.yUnit || curve.y_unit || '-'}<br />
+                                X scale: {curve.config?.xScale || curve.x_scale || '-'} | Y scale: {curve.config?.yScale || curve.y_scale || '-'}
+                              </div>
                               <div className="flex gap-2 mt-2">
                                 <button
                                   className="px-3 py-1 rounded bg-blue-600 text-white text-xs"
