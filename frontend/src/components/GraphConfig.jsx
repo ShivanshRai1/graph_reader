@@ -18,10 +18,10 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
   
   // Synced values for logarithmic inputs (exponent <-> actual)
   const [logValues, setLogValues] = useState({
-    xMin: { exp: '', actual: '' },
-    xMax: { exp: '', actual: '' },
-    yMin: { exp: '', actual: '' },
-    yMax: { exp: '', actual: '' },
+    xMin: { exp: '', actual: '', actualRaw: '' },
+    xMax: { exp: '', actual: '', actualRaw: '' },
+    yMin: { exp: '', actual: '', actualRaw: '' },
+    yMax: { exp: '', actual: '', actualRaw: '' },
   });
   
   // Track which input field is being used for logarithmic values
@@ -62,10 +62,10 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
       return Number.isFinite(val) ? String(val) : '';
     };
     setLogValues({
-      xMin: { exp: String(graphConfig.xMin ?? ''), actual: toActual(graphConfig.xMin) },
-      xMax: { exp: String(graphConfig.xMax ?? ''), actual: toActual(graphConfig.xMax) },
-      yMin: { exp: String(graphConfig.yMin ?? ''), actual: toActual(graphConfig.yMin) },
-      yMax: { exp: String(graphConfig.yMax ?? ''), actual: toActual(graphConfig.yMax) },
+      xMin: { exp: String(graphConfig.xMin ?? ''), actual: toActual(graphConfig.xMin), actualRaw: '' },
+      xMax: { exp: String(graphConfig.xMax ?? ''), actual: toActual(graphConfig.xMax), actualRaw: '' },
+      yMin: { exp: String(graphConfig.yMin ?? ''), actual: toActual(graphConfig.yMin), actualRaw: '' },
+      yMax: { exp: String(graphConfig.yMax ?? ''), actual: toActual(graphConfig.yMax), actualRaw: '' },
     });
   }, [graphConfig.xMin, graphConfig.xMax, graphConfig.yMin, graphConfig.yMax]);
 
@@ -96,25 +96,43 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
     }));
   };
 
-  // Handle logarithmic input for actual value field
+  // Handle logarithmic input for actual value field - allow any input
   const handleLogActualChange = (field, value) => {
     setLogInputMode({ ...logInputMode, [field]: 'actual' });
-    const numValue = parseFloat(value);
-    // Accept scientific notation (e.g., "1e5") and positive values
-    const exp = !isNaN(numValue) && numValue > 0 ? Math.log10(numValue) : NaN;
-    // Update config with exponent (if valid); otherwise keep current
-    setGraphConfig({
-      ...graphConfig,
-      [field]: Number.isNaN(exp) ? graphConfig[field] : String(exp),
-    });
-    // Sync local pair values - keep the user's input as-is in actual field
+    // Store raw input without parsing - validation happens on blur
     setLogValues((prev) => ({
       ...prev,
-      [field]: {
-        exp: Number.isNaN(exp) ? prev[field].exp : String(exp),
-        actual: String(value),
-      },
+      [field]: { ...prev[field], actualRaw: value },
     }));
+  };
+
+  // Handle blur on actual value field - validate and convert to exponent
+  const handleLogActualBlur = (field) => {
+    setLogValues((prev) => {
+      const rawValue = prev[field].actualRaw;
+      const numValue = parseFloat(rawValue);
+      
+      // Accept scientific notation (e.g., "1e5") and positive values
+      const exp = !isNaN(numValue) && numValue > 0 ? Math.log10(numValue) : NaN;
+      
+      // Update config with exponent (if valid); otherwise keep current
+      if (!Number.isNaN(exp)) {
+        setGraphConfig({
+          ...graphConfig,
+          [field]: String(exp),
+        });
+      }
+      
+      // Update local display values
+      return {
+        ...prev,
+        [field]: {
+          exp: Number.isNaN(exp) ? prev[field].exp : String(exp),
+          actual: Number.isNaN(exp) ? prev[field].actual : String(numValue),
+          actualRaw: '', // Clear raw input after processing
+        },
+      };
+    });
   };
 
   // Handle focus on exponent field
@@ -227,8 +245,9 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
                     <input
                       type="text"
                       inputMode="decimal"
-                      value={logValues.yMin.actual}
+                      value={logValues.yMin.actualRaw || logValues.yMin.actual}
                       onChange={(e) => handleLogActualChange('yMin', e.target.value)}
+                      onBlur={() => handleLogActualBlur('yMin')}
                       onFocus={() => handleActualFocus('yMin')}
                       placeholder="e.g., 1e5"
                       className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-gray-900 bg-white"
@@ -263,8 +282,9 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
                     <input
                       type="text"
                       inputMode="decimal"
-                      value={logValues.yMax.actual}
+                      value={logValues.yMax.actualRaw || logValues.yMax.actual}
                       onChange={(e) => handleLogActualChange('yMax', e.target.value)}
+                      onBlur={() => handleLogActualBlur('yMax')}
                       onFocus={() => handleActualFocus('yMax')}
                       placeholder="e.g., 1e5"
                       className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-gray-900 bg-white"
@@ -356,8 +376,9 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
                     <input
                       type="text"
                       inputMode="decimal"
-                      value={logValues.xMin.actual}
+                      value={logValues.xMin.actualRaw || logValues.xMin.actual}
                       onChange={(e) => handleLogActualChange('xMin', e.target.value)}
+                      onBlur={() => handleLogActualBlur('xMin')}
                       onFocus={() => handleActualFocus('xMin')}
                       placeholder="e.g., 1e5"
                       className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-gray-900 bg-white"
@@ -392,8 +413,9 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
                     <input
                       type="text"
                       inputMode="decimal"
-                      value={logValues.xMax.actual}
+                      value={logValues.xMax.actualRaw || logValues.xMax.actual}
                       onChange={(e) => handleLogActualChange('xMax', e.target.value)}
+                      onBlur={() => handleLogActualBlur('xMax')}
                       onFocus={() => handleActualFocus('xMax')}
                       placeholder="e.g., 1e5"
                       className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-gray-900 bg-white"
