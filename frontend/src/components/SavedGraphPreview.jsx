@@ -290,7 +290,7 @@ const SavedGraphPreview = ({ points, config, width = 520, height = 220, animate 
             y1={padding.top}
             x2={x}
             y2={height - padding.bottom}
-            stroke="#b0b4ba"
+            stroke="#666"
             strokeWidth="1"
             strokeDasharray="4,6"
           />
