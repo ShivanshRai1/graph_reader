@@ -1,5 +1,5 @@
 import { useGraph } from '../context/GraphContext';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNameReadOnly = false, initialCurveName = '', initialGraphTitle = '' }) => {
   const { graphConfig, setGraphConfig } = useGraph();
@@ -31,6 +31,14 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
     yMin: 'exponent',
     yMax: 'exponent',
   });
+  
+  // Debounce timers for each field
+  const debounceTimers = useRef({
+    xMin: null,
+    xMax: null,
+    yMin: null,
+    yMax: null,
+  });
 
   // Validate min/max values
   useEffect(() => {
@@ -52,6 +60,15 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
     
     setLogError({ x: xErr, y: yErr });
   }, [graphConfig.xScale, graphConfig.xMin, graphConfig.xMax, graphConfig.yScale, graphConfig.yMin, graphConfig.yMax]);
+
+  // Cleanup debounce timers on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(debounceTimers.current).forEach((timer) => {
+        if (timer) clearTimeout(timer);
+      });
+    };
+  }, []);
 
   // Keep local synced values up-to-date from graphConfig
   useEffect(() => {
@@ -96,31 +113,46 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
     }));
   };
 
-  // Handle logarithmic input for actual value field - convert on every keystroke
+  // Handle logarithmic input for actual value field - with debounce
   const handleLogActualChange = (field, value) => {
     setLogInputMode({ ...logInputMode, [field]: 'actual' });
-    const numValue = parseFloat(value);
     
-    // Accept scientific notation (e.g., "1e5") and positive values
-    const exp = !isNaN(numValue) && numValue > 0 ? Math.log10(numValue) : NaN;
-    
-    // Update config with exponent immediately if valid
-    if (!Number.isNaN(exp)) {
-      setGraphConfig({
-        ...graphConfig,
-        [field]: String(exp),
-      });
-    }
-    
-    // Update local display values - store both raw input and calculated actual
+    // Update raw input immediately (allow free typing)
     setLogValues((prev) => ({
       ...prev,
-      [field]: {
-        exp: Number.isNaN(exp) ? prev[field].exp : String(exp),
-        actual: Number.isNaN(exp) ? '' : String(numValue),
-        actualRaw: value,
-      },
+      [field]: { ...prev[field], actualRaw: value },
     }));
+    
+    // Clear previous timer for this field
+    if (debounceTimers.current[field]) {
+      clearTimeout(debounceTimers.current[field]);
+    }
+    
+    // Set new debounce timer - convert after 500ms of no typing
+    debounceTimers.current[field] = setTimeout(() => {
+      const numValue = parseFloat(value);
+      
+      // Accept scientific notation (e.g., "1e5") and positive values
+      const exp = !isNaN(numValue) && numValue > 0 ? Math.log10(numValue) : NaN;
+      
+      // Update config with exponent if valid
+      if (!Number.isNaN(exp)) {
+        setGraphConfig((prevConfig) => ({
+          ...prevConfig,
+          [field]: String(exp),
+        }));
+      }
+      
+      // Update local display values
+      setLogValues((prev) => ({
+        ...prev,
+        [field]: {
+          exp: Number.isNaN(exp) ? prev[field].exp : String(exp),
+          actual: Number.isNaN(exp) ? '' : String(numValue),
+          actualRaw: value, // Keep the raw value displayed
+        },
+      }));
+    }, 500); // 500ms debounce
   };
 
   // Handle focus on exponent field
