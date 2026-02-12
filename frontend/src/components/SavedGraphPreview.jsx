@@ -5,10 +5,22 @@ const normalizeNumber = (value, fallback) => {
   return Number.isFinite(num) ? num : fallback;
 };
 
-const inferLogMode = (scale, values, configMode) => {
+const inferLogMode = (scale, values, configMode, configMin, configMax) => {
   if (scale !== 'Logarithmic') return 'linear';
   if (configMode === 'exponent' || configMode === 'actual') return configMode;
+
+  const minCfg = parseFloat(configMin);
+  const maxCfg = parseFloat(configMax);
+  const hasCfg = Number.isFinite(minCfg) && Number.isFinite(maxCfg);
+
+  if (values.length === 0) return 'exponent';
   if (values.some((value) => value <= 0)) return 'exponent';
+
+  if (hasCfg) {
+    const withinCfg = values.every((value) => value >= minCfg - 0.5 && value <= maxCfg + 0.5);
+    if (withinCfg) return 'exponent';
+  }
+
   return 'actual';
 };
 
@@ -66,12 +78,16 @@ const SavedGraphPreview = ({ points, config, width = 520, height = 220, animate 
   const logModeX = inferLogMode(
     xScale,
     parsedPoints.map((point) => point.x),
-    config?.logDataModeX
+    config?.logDataModeX,
+    config?.xMin ?? config?.x_min,
+    config?.xMax ?? config?.x_max
   );
   const logModeY = inferLogMode(
     yScale,
     parsedPoints.map((point) => point.y),
-    config?.logDataModeY
+    config?.logDataModeY,
+    config?.yMin ?? config?.y_min,
+    config?.yMax ?? config?.y_max
   );
 
   const plotData = useMemo(() => {

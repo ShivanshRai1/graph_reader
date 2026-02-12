@@ -5,10 +5,22 @@ const normalizeNumber = (value, fallback) => {
   return Number.isFinite(num) ? num : fallback;
 };
 
-const inferLogMode = (scale, values, configMode) => {
+const inferLogMode = (scale, values, configMode, configMin, configMax) => {
   if (scale !== 'Logarithmic') return 'linear';
   if (configMode === 'exponent' || configMode === 'actual') return configMode;
+
+  const minCfg = parseFloat(configMin);
+  const maxCfg = parseFloat(configMax);
+  const hasCfg = Number.isFinite(minCfg) && Number.isFinite(maxCfg);
+
+  if (values.length === 0) return 'exponent';
   if (values.some((value) => value <= 0)) return 'exponent';
+
+  if (hasCfg) {
+    const withinCfg = values.every((value) => value >= minCfg - 0.5 && value <= maxCfg + 0.5);
+    if (withinCfg) return 'exponent';
+  }
+
   return 'actual';
 };
 
@@ -66,8 +78,20 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260 }
     [safeCurves]
   );
 
-  const logModeX = inferLogMode(xScale, allXValues, baseConfig.logDataModeX);
-  const logModeY = inferLogMode(yScale, allYValues, baseConfig.logDataModeY);
+  const logModeX = inferLogMode(
+    xScale,
+    allXValues,
+    baseConfig.logDataModeX,
+    baseConfig.xMin ?? baseConfig.x_min,
+    baseConfig.xMax ?? baseConfig.x_max
+  );
+  const logModeY = inferLogMode(
+    yScale,
+    allYValues,
+    baseConfig.logDataModeY,
+    baseConfig.yMin ?? baseConfig.y_min,
+    baseConfig.yMax ?? baseConfig.y_max
+  );
 
   const parsedCurves = useMemo(() => {
     return safeCurves.map((curve, curveIndex) => {
