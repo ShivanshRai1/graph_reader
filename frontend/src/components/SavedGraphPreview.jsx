@@ -279,6 +279,40 @@ const SavedGraphPreview = ({ points, config, width = 520, height = 220, animate 
       onMouseLeave={() => setHoveredPoint(null)}
     >
       <rect x={0} y={0} width={width} height={height} fill="#ffffff" />
+      {/* Grid lines */}
+      {/* Vertical grid lines */}
+      {xTicks.map((tick) => {
+        const x = padding.left + ((tick - xMin) / Math.max(xMax - xMin, 1e-9)) * drawableWidth;
+        return (
+          <line
+            key={`grid-x-${tick}`}
+            x1={x}
+            y1={padding.top}
+            x2={x}
+            y2={height - padding.bottom}
+            stroke="#e5e7eb"
+            strokeWidth="1"
+            strokeDasharray="4,6"
+          />
+        );
+      })}
+      {/* Horizontal grid lines */}
+      {yTicks.map((tick) => {
+        const y = padding.top + (1 - (tick - yMin) / Math.max(yMax - yMin, 1e-9)) * drawableHeight;
+        return (
+          <line
+            key={`grid-y-${tick}`}
+            x1={padding.left}
+            y1={y}
+            x2={width - padding.right}
+            y2={y}
+            stroke="#e5e7eb"
+            strokeWidth="1"
+            strokeDasharray="4,6"
+          />
+        );
+      })}
+      {/* Axes */}
       <line
         x1={padding.left}
         y1={height - padding.bottom}
