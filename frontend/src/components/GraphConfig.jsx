@@ -96,43 +96,31 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
     }));
   };
 
-  // Handle logarithmic input for actual value field - allow any input
+  // Handle logarithmic input for actual value field - convert on every keystroke
   const handleLogActualChange = (field, value) => {
     setLogInputMode({ ...logInputMode, [field]: 'actual' });
-    // Store raw input without parsing - validation happens on blur
+    const numValue = parseFloat(value);
+    
+    // Accept scientific notation (e.g., "1e5") and positive values
+    const exp = !isNaN(numValue) && numValue > 0 ? Math.log10(numValue) : NaN;
+    
+    // Update config with exponent immediately if valid
+    if (!Number.isNaN(exp)) {
+      setGraphConfig({
+        ...graphConfig,
+        [field]: String(exp),
+      });
+    }
+    
+    // Update local display values - store both raw input and calculated actual
     setLogValues((prev) => ({
       ...prev,
-      [field]: { ...prev[field], actualRaw: value },
+      [field]: {
+        exp: Number.isNaN(exp) ? prev[field].exp : String(exp),
+        actual: Number.isNaN(exp) ? '' : String(numValue),
+        actualRaw: value,
+      },
     }));
-  };
-
-  // Handle blur on actual value field - validate and convert to exponent
-  const handleLogActualBlur = (field) => {
-    setLogValues((prev) => {
-      const rawValue = prev[field].actualRaw;
-      const numValue = parseFloat(rawValue);
-      
-      // Accept scientific notation (e.g., "1e5") and positive values
-      const exp = !isNaN(numValue) && numValue > 0 ? Math.log10(numValue) : NaN;
-      
-      // Update config with exponent (if valid); otherwise keep current
-      if (!Number.isNaN(exp)) {
-        setGraphConfig({
-          ...graphConfig,
-          [field]: String(exp),
-        });
-      }
-      
-      // Update local display values
-      return {
-        ...prev,
-        [field]: {
-          exp: Number.isNaN(exp) ? prev[field].exp : String(exp),
-          actual: Number.isNaN(exp) ? prev[field].actual : String(numValue),
-          actualRaw: '', // Clear raw input after processing
-        },
-      };
-    });
   };
 
   // Handle focus on exponent field
@@ -247,12 +235,11 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
                       inputMode="decimal"
                       value={logValues.yMin.actualRaw || logValues.yMin.actual}
                       onChange={(e) => handleLogActualChange('yMin', e.target.value)}
-                      onBlur={() => handleLogActualBlur('yMin')}
                       onFocus={() => handleActualFocus('yMin')}
                       placeholder="e.g., 1e5"
                       className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-gray-900 bg-white"
                       style={{ opacity: logInputMode.yMin === 'exponent' ? 0.5 : 1 }}
-                      title="Enter the actual value (e.g., 100000 or 1e5). It will be converted to exponent."
+                      title="Enter the actual value (e.g., 100000 or 1e5). It will be converted to exponent automatically."
                     />
                   </div>
                 </div>
@@ -284,12 +271,11 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
                       inputMode="decimal"
                       value={logValues.yMax.actualRaw || logValues.yMax.actual}
                       onChange={(e) => handleLogActualChange('yMax', e.target.value)}
-                      onBlur={() => handleLogActualBlur('yMax')}
                       onFocus={() => handleActualFocus('yMax')}
                       placeholder="e.g., 1e5"
                       className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-gray-900 bg-white"
                       style={{ opacity: logInputMode.yMax === 'exponent' ? 0.5 : 1 }}
-                      title="Enter the actual value (e.g., 100000 or 1e5). It will be converted to exponent."
+                      title="Enter the actual value (e.g., 100000 or 1e5). It will be converted to exponent automatically."
                     />
                   </div>
                 </div>
@@ -378,12 +364,11 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
                       inputMode="decimal"
                       value={logValues.xMin.actualRaw || logValues.xMin.actual}
                       onChange={(e) => handleLogActualChange('xMin', e.target.value)}
-                      onBlur={() => handleLogActualBlur('xMin')}
                       onFocus={() => handleActualFocus('xMin')}
                       placeholder="e.g., 1e5"
                       className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-gray-900 bg-white"
                       style={{ opacity: logInputMode.xMin === 'exponent' ? 0.5 : 1 }}
-                      title="Enter the actual value (e.g., 100000 or 1e5). It will be converted to exponent."
+                      title="Enter the actual value (e.g., 100000 or 1e5). It will be converted to exponent automatically."
                     />
                   </div>
                 </div>
@@ -415,12 +400,11 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
                       inputMode="decimal"
                       value={logValues.xMax.actualRaw || logValues.xMax.actual}
                       onChange={(e) => handleLogActualChange('xMax', e.target.value)}
-                      onBlur={() => handleLogActualBlur('xMax')}
                       onFocus={() => handleActualFocus('xMax')}
                       placeholder="e.g., 1e5"
                       className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-gray-900 bg-white"
                       style={{ opacity: logInputMode.xMax === 'exponent' ? 0.5 : 1 }}
-                      title="Enter the actual value (e.g., 100000 or 1e5). It will be converted to exponent."
+                      title="Enter the actual value (e.g., 100000 or 1e5). It will be converted to exponent automatically."
                     />
                   </div>
                 </div>
