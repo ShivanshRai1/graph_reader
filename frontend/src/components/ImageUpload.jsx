@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import { useGraph } from '../context/GraphContext';
 
 const ImageUpload = () => {
-  const { setUploadedImage, clearDataPoints, setGraphConfig } = useGraph();
+  const { setUploadedImage, clearDataPoints, setGraphConfig, setGraphArea } = useGraph();
   const fileInputRef = useRef(null);
 
   const handlePaste = (e) => {
@@ -12,6 +12,7 @@ const ImageUpload = () => {
         // Clear previous graph state for a fresh start
         setUploadedImage(null);
         clearDataPoints();
+        setGraphArea({ x: 0, y: 0, width: 0, height: 0 }); // Reset graph area
         setGraphConfig((prev) => ({
           ...prev,
           curveName: '',
@@ -36,6 +37,18 @@ const ImageUpload = () => {
   const handleFileSelect = (e) => {
     const file = e.target.files[0];
     if (file && file.type.startsWith('image/')) {
+      // Clear previous graph state for a fresh start when selecting file
+      clearDataPoints();
+      setGraphArea({ x: 0, y: 0, width: 0, height: 0 }); // Reset graph area
+      setGraphConfig((prev) => ({
+        ...prev,
+        curveName: '',
+        graphTitle: '',
+        xMin: 0,
+        xMax: 100,
+        yMin: 0,
+        yMax: 100,
+      }));
       const reader = new FileReader();
       reader.onload = (ev) => {
         setUploadedImage(ev.target.result);
