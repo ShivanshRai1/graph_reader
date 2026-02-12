@@ -304,7 +304,7 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260 }
             y1={y}
             x2={width - padding.right}
             y2={y}
-            stroke="#e5e7eb"
+            stroke="#666"
             strokeWidth="1"
             strokeDasharray="4,6"
           />
