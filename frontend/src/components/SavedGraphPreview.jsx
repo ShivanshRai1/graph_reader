@@ -166,13 +166,25 @@ const SavedGraphPreview = ({ points, config, width = 520, height = 220, animate 
 
   const yTicks = useMemo(() => {
     if (yScale === 'Logarithmic') {
-      const start = Math.floor(yMin);
-      const end = Math.ceil(yMax);
-      const ticks = [];
-      for (let i = start; i <= end; i += 1) {
-        ticks.push(i);
+      // Generate log ticks at powers of 10 within the visible range
+      const minExp = Math.ceil(yMin);
+      const maxExp = Math.floor(yMax);
+      let ticks = [];
+      for (let exp = minExp; exp <= maxExp; exp++) {
+        ticks.push(exp);
       }
-      return ticks.slice(0, 6);
+      // If the range is small, add intermediate ticks (2, 5 multiples)
+      if (maxExp - minExp <= 2) {
+        const baseTicks = [];
+        for (let exp = minExp; exp <= maxExp; exp++) {
+          baseTicks.push(exp);
+          // Add 2*10^exp and 5*10^exp if in bounds
+          if (Math.pow(10, exp) * 2 <= Math.pow(10, maxExp)) baseTicks.push(exp + Math.log10(2));
+          if (Math.pow(10, exp) * 5 <= Math.pow(10, maxExp)) baseTicks.push(exp + Math.log10(5));
+        }
+        ticks = baseTicks;
+      }
+      return ticks;
     }
     return buildTicks(yMin, yMax, 5);
   }, [yMin, yMax, yScale]);
