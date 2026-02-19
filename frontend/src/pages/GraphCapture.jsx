@@ -853,13 +853,21 @@ const GraphCapture = () => {
               )}
 
               <div className="mt-6 flex flex-row gap-4 items-center">
-                {!!urlParams.return_url ? (
+                {urlParams.graph_title === 'rth_cth' ? (
                   <button
                     onClick={handleSave}
                     className="px-4 py-2 rounded bg-blue-600 text-white font-medium disabled:opacity-50"
                     disabled={isSaving}
                   >
                     Fit, convert and export to RC ladder sim
+                  </button>
+                ) : !!urlParams.return_url ? (
+                  <button
+                    onClick={handleSave}
+                    className="px-4 py-2 rounded bg-blue-600 text-white font-medium disabled:opacity-50"
+                    disabled={isSaving}
+                  >
+                    Submit and Return
                   </button>
                 ) : (
                   <button

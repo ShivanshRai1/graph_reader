@@ -18,8 +18,8 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false }) => {
     const actual = toActualValue(value, scale);
     if (!Number.isFinite(actual)) return 'Invalid';
     return (Math.abs(actual) > 0 && Math.abs(actual) < 0.0001)
-      ? actual.toExponential(4)
-      : actual.toFixed(4);
+      ? actual.toExponential(6)
+      : actual.toFixed(6);
   };
 
   const formatExportValue = (value, scale) => {
