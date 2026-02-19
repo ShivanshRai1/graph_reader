@@ -50,6 +50,13 @@ const formatNumber = (value) => {
   return value.toExponential(2);
 };
 
+const formatTooltipValue = (value) => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 'N/A';
+  return (Math.abs(value) > 0 && Math.abs(value) < 0.0001)
+    ? value.toExponential(6)
+    : value.toFixed(6);
+};
+
 const buildTicks = (min, max, count) => {
   if (!Number.isFinite(min) || !Number.isFinite(max)) return [];
   if (min === max) return [min];
@@ -418,7 +425,7 @@ const SavedGraphPreview = ({ points, config, width = 520, height = 220, animate 
               fontWeight="600"
               fill="#111827"
             >
-                X: {Number.isFinite(hoveredPoint.x) ? hoveredPoint.x.toFixed(2) : ''}
+                X: {formatTooltipValue(hoveredPoint.x)}
             </text>
             <text
               x={Math.min(hoveredPoint.svgX + 14, width - 134)}
@@ -427,7 +434,7 @@ const SavedGraphPreview = ({ points, config, width = 520, height = 220, animate 
               fontWeight="600"
               fill="#111827"
             >
-                Y: {Number.isFinite(hoveredPoint.y) ? hoveredPoint.y.toFixed(2) : ''}
+                Y: {formatTooltipValue(hoveredPoint.y)}
             </text>
         </g>
       ) : null}
