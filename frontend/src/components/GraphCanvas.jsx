@@ -789,7 +789,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
         className="mb-2 inline-block bg-black bg-opacity-85 text-white border-2 border-green-500 px-4 py-2 rounded font-mono text-base font-bold shadow transition-opacity duration-150"
         style={{ visibility: showCoords ? 'visible' : 'hidden', opacity: showCoords ? 1 : 0.35 }}
       >
-        x={typeof mousePos.x === 'number' && !isNaN(mousePos.x) ? mousePos.x.toFixed(3) : 'N/A'} y={typeof mousePos.y === 'number' && !isNaN(mousePos.y) ? mousePos.y.toFixed(3) : 'N/A'}
+        x={formatCoord(mousePos.x)} y={formatCoord(mousePos.y)}
       </div>
       <div
         className="block mt-2 mb-4 min-h-6 text-red-600 text-xs italic transition-opacity duration-200"
@@ -870,3 +870,12 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
 };
 
 export default GraphCanvas;
+
+// Helper to format coordinates for display (exponential for small, fixed for normal)
+function formatCoord(val) {
+  if (typeof val !== 'number' || isNaN(val)) return 'N/A';
+  if (Math.abs(val) > 0 && Math.abs(val) < 0.0001) {
+    return val.toExponential(3);
+  }
+  return val.toFixed(3);
+}
