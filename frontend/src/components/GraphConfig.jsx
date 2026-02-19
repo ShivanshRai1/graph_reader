@@ -119,20 +119,24 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
   };
 
   // Track input values separately to show user's typed value while converting
-  const inputValuesRef = useRef({ yMin: '', yMax: '', xMin: '', xMax: '' });
+  const [logInputs, setLogInputs] = useState({ yMin: '', yMax: '', xMin: '', xMax: '' });
 
   // Initialize input values from graphConfig exponents on mount
   useEffect(() => {
     // Only synchronize on first mount, not on redraw
     const fields = ['yMin', 'yMax', 'xMin', 'xMax'];
     
-    fields.forEach(field => {
-      const expValue = graphConfig[field];
-      if (expValue && !isNaN(expValue) && inputValuesRef.current[field] === '') {
-        // Only populate if field is empty and graphConfig has a value
-        const actualValue = Math.pow(10, parseFloat(expValue));
-        inputValuesRef.current[field] = actualValue.toString();
-      }
+    setLogInputs((prev) => {
+      const next = { ...prev };
+      fields.forEach((field) => {
+        const expValue = graphConfig[field];
+        if (expValue && !isNaN(expValue) && next[field] === '') {
+          // Only populate if field is empty and graphConfig has a value
+          const actualValue = Math.pow(10, parseFloat(expValue));
+          next[field] = actualValue.toString();
+        }
+      });
+      return next;
     });
   }, []); // Empty dependency array - only run on mount
 
@@ -140,13 +144,17 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
   useEffect(() => {
     if (graphConfig.yScale === 'Logarithmic' || graphConfig.xScale === 'Logarithmic') {
       const fields = ['yMin', 'yMax', 'xMin', 'xMax'];
-      fields.forEach(field => {
-        const expValue = graphConfig[field];
-        // If graphConfig has a value but inputValuesRef is empty, populate it
-        if (expValue && !isNaN(expValue) && inputValuesRef.current[field] === '') {
-          const actualValue = Math.pow(10, parseFloat(expValue));
-          inputValuesRef.current[field] = actualValue.toString();
-        }
+      setLogInputs((prev) => {
+        const next = { ...prev };
+        fields.forEach((field) => {
+          const expValue = graphConfig[field];
+          // If graphConfig has a value but input is empty, populate it
+          if (expValue && !isNaN(expValue) && next[field] === '') {
+            const actualValue = Math.pow(10, parseFloat(expValue));
+            next[field] = actualValue.toString();
+          }
+        });
+        return next;
       });
     }
   }, [graphConfig.yScale, graphConfig.xScale]);
@@ -154,7 +162,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
   // Handler for logarithmic input - shows typed value, converts to exponent immediately
   const handleLogValueChange = (field, value) => {
     // Store what user is typing
-    inputValuesRef.current[field] = value;
+    setLogInputs((prev) => ({ ...prev, [field]: value }));
 
     const numValue = parseFloat(value);
     if (isNaN(numValue) || numValue <= 0) return;
@@ -172,10 +180,311 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
 
   return (
     <div className="w-full p-5 bg-white rounded-lg mt-5 shadow">
+      {/* Axis Mapping Status & Controls (Issue 5 & 7) - MOVED ABOVE */}
+      <div className="mt-0 mb-6 p-4 border-2 rounded-lg" style={{ borderColor: isAxisMappingConfirmed ? '#4caf50' : '#ffc107', backgroundColor: isAxisMappingConfirmed ? '#e8f5e9' : '#fff3e0' }}>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            {isAxisMappingConfirmed ? (
+              <>
+                <span className="text-2xl">🔒</span>
+                <span className="text-sm font-semibold text-green-700">Axis Mapping: CONFIRMED</span>
+              </>
+            ) : (
+              <>
+                <span className="text-2xl">⚠️</span>
+                <span className="text-sm font-semibold text-orange-700">Axis Mapping: PENDING</span>
+              </>
+            )}
+          </div>
+          {isAxisMappingConfirmed && (
+            <button
+              onClick={() => {
+                setLogInputs({ yMin: '', yMax: '', xMin: '', xMax: '' });
+                onRetakeAxis();
+              }}
+              className="px-3 py-1 rounded bg-orange-600 text-white text-xs font-medium hover:bg-orange-700"
+              title="Unlock axis mapping (will clear captured points)"
+            >
+              Unlock Axis Mapping
+            </button>
+          )}
+        </div>
+        {/* Always Display Current Axis Values */}
+        <div className="text-xs text-gray-700 bg-white p-2 rounded mb-3" style={{ border: '1px solid #ccc' }}>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <strong>X-Axis:</strong> [{formatAxisDisplay(graphConfig.xMin, graphConfig.xScale)}, {formatAxisDisplay(graphConfig.xMax, graphConfig.xScale)}] ({graphConfig.xScale})
+            </div>
+            <div>
+              <strong>Y-Axis:</strong> [{formatAxisDisplay(graphConfig.yMin, graphConfig.yScale)}, {formatAxisDisplay(graphConfig.yMax, graphConfig.yScale)}] ({graphConfig.yScale})
+            </div>
+          </div>
+        </div>
+        {!isAxisMappingConfirmed && (
+          <>
+            {/* Validation messaging */}
+            {(() => {
+              const missing = [];
+              if (!graphConfig.xMin && graphConfig.xMin !== 0) missing.push('X Min');
+              if (!graphConfig.xMax && graphConfig.xMax !== 0) missing.push('X Max');
+              if (!graphConfig.yMin && graphConfig.yMin !== 0) missing.push('Y Min');
+              if (!graphConfig.yMax && graphConfig.yMax !== 0) missing.push('Y Max');
+              const xMin = parseFloat(graphConfig.xMin);
+              const xMax = parseFloat(graphConfig.xMax);
+              const yMin = parseFloat(graphConfig.yMin);
+              const yMax = parseFloat(graphConfig.yMax);
+              const hasErrors = logError.x || logError.y;
+              const isDisabled = missing.length > 0 || hasErrors;
+              return (
+                <>
+                  {missing.length > 0 && (
+                    <div className="mb-2 p-2 rounded bg-red-50 border border-red-300 text-xs text-red-700">
+                      ❌ Required: Set {missing.join(', ')}
+                    </div>
+                  )}
+                  {hasErrors && (
+                    <div className="mb-2 p-2 rounded bg-red-50 border border-red-300 text-xs text-red-700">
+                      {logError.x}{logError.x && logError.y && ' | '}{logError.y}
+                    </div>
+                  )}
+                  <button
+                    onClick={() => setShowConfirmModal(true)}
+                    disabled={isDisabled}
+                    className={`w-full px-4 py-2 rounded font-medium text-sm transition ${
+                      isDisabled
+                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                        : 'bg-green-600 text-white hover:bg-green-700'
+                    }`}
+                    title={isDisabled ? 'All axis values must be set and valid' : 'Review axis configuration before locking'}
+                  >
+                    ✓ Confirm Axis Mapping
+                  </button>
+                </>
+              );
+            })()}
+          </>
+        )}
+      </div>
       <h3 className="text-gray-900 text-lg font-semibold mb-5">Graph Configuration</h3>
 
+      <div className="mb-5">
+        <label className="block mb-3 font-medium text-gray-800">
+          <span className="block mb-1 text-sm text-gray-800">Graph Title:</span>
+          <input
+            type="text"
+            name="graphTitle"
+            value={graphConfig.graphTitle || ''}
+            onChange={handleChange}
+            placeholder="Enter graph title"
+            className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white"
+            readOnly={false}
+            disabled={false}
+          />
+        </label>
+        <label className="block mb-3 font-medium text-gray-800">
+          <span className="block mb-1 text-sm text-gray-800">Curve/Line Name:</span>
+          <input
+            type="text"
+            name="curveName"
+            value={graphConfig.curveName}
+            onChange={handleChange}
+            placeholder="Enter curve name"
+            className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white"
+            readOnly={false}
+            disabled={false}
+          />
+        </label>
+        {showTctj && (
+          <label className="block mb-3 font-medium text-gray-800">
+            <span className="block mb-1 text-sm text-gray-800">TC/TJ (Temperature):</span>
+            <input
+              type="text"
+              name="temperature"
+              value={graphConfig.temperature}
+              onChange={handleChange}
+              placeholder="e.g., -40°C, 25°C"
+              className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white"
+            />
+          </label>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6" style={{ opacity: isAxisMappingConfirmed ? 0.6 : 1, pointerEvents: isAxisMappingConfirmed ? 'none' : 'auto' }}>
+        <div>
+          <h4 className="text-gray-800 font-semibold mb-3">Y-Axis {isAxisMappingConfirmed && '🔒'}</h4>
+          <label className="block mb-3">
+            <span className="block text-sm font-medium text-gray-800 mb-1">Scale:</span>
+            <select name="yScale" value={graphConfig.yScale} onChange={handleChange} disabled={isAxisMappingConfirmed} className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed">
+              <option value="Linear">Linear</option>
+              <option value="Logarithmic">Logarithmic</option>
+            </select>
+          </label>
+          {graphConfig.yScale === 'Logarithmic' && (
+            <small className="block text-xs text-blue-600 font-medium mb-3 italic">Enter actual value (e.g., 100000 or 1e5)</small>
+          )}
+          <label className="block mb-3">
+            <span className="block text-sm font-medium text-gray-800 mb-1">Unit:</span>
+            <select name="yUnitPrefix" value={graphConfig.yUnitPrefix} onChange={handleChange} disabled={isAxisMappingConfirmed} className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed">
+              <option value="">-select-</option>
+              <option value="1e-12">pico (p) = 1e-12</option>
+              <option value="1e-9">nano (n) = 1e-9</option>
+              <option value="1e-6">micro (μ) = 1e-6</option>
+              <option value="1e-3">milli (m) = 1e-3</option>
+              <option value="1">1</option>
+              <option value="1e3">Kilo (k) = 1e3</option>
+              <option value="1e6">Mega (M) = 1e6</option>
+              <option value="1e9">Giga (G) = 1e9</option>
+              <option value="1e12">Tera (T) = 1e12</option>
+            </select>
+          </label>
+          
+          {graphConfig.yScale === 'Logarithmic' ? (
+            <>
+              <label className="block mb-3">
+                <span className="block text-sm font-medium text-gray-800 mb-1">Min:</span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={logInputs.yMin}
+                  onChange={(e) => handleLogValueChange('yMin', e.target.value)}
+                  disabled={isAxisMappingConfirmed}
+                  placeholder="e.g., 100000"
+                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed"
+                  title="Enter actual value (e.g., 100000 or 1e5)"
+                />
+                {logError.y && <span className="block text-xs text-red-600 mt-1">{logError.y}</span>}
+              </label>
+              <label className="block mb-3">
+                <span className="block text-sm font-medium text-gray-800 mb-1">Max:</span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={logInputs.yMax}
+                  onChange={(e) => handleLogValueChange('yMax', e.target.value)}
+                  disabled={isAxisMappingConfirmed}
+                  placeholder="e.g., 100000"
+                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed"
+                  title="Enter actual value (e.g., 100000 or 1e5)"
+                />
+                {logError.y && <span className="block text-xs text-red-600 mt-1">{logError.y}</span>}
+              </label>
+            </>
+          ) : (
+            <>
+              <label className="block mb-3">
+                <span className="block text-sm font-medium text-gray-800 mb-1">Min:</span>
+                <input
+                  type="number"
+                  name="yMin"
+                  value={graphConfig.yMin}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white"
+                />
+              </label>
+              <label className="block mb-3">
+                <span className="block text-sm font-medium text-gray-800 mb-1">Max:</span>
+                <input
+                  type="number"
+                  name="yMax"
+                  value={graphConfig.yMax}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white"
+                />
+                {logError.y && <span className="block text-xs text-red-600 mt-1">{logError.y}</span>}
+              </label>
+            </>
+          )}
+        </div>
+
+        <div>
+          <h4 className="text-gray-800 font-semibold mb-3">X-Axis {isAxisMappingConfirmed && '🔒'}</h4>
+          <label className="block mb-3">
+            <span className="block text-sm font-medium text-gray-800 mb-1">Scale:</span>
+            <select name="xScale" value={graphConfig.xScale} onChange={handleChange} disabled={isAxisMappingConfirmed} className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed">
+              <option value="Linear">Linear</option>
+              <option value="Logarithmic">Logarithmic</option>
+            </select>
+          </label>
+          {graphConfig.xScale === 'Logarithmic' && (
+            <small className="block text-xs text-blue-600 font-medium mb-3 italic">Enter actual value (e.g., 100000 or 1e5)</small>
+          )}
+          <label className="block mb-3">
+            <span className="block text-sm font-medium text-gray-800 mb-1">Unit:</span>
+            <select name="xUnitPrefix" value={graphConfig.xUnitPrefix} onChange={handleChange} disabled={isAxisMappingConfirmed} className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed">
+              <option value="">-select-</option>
+              <option value="1e-12">pico (p) = 1e-12</option>
+              <option value="1e-9">nano (n) = 1e-9</option>
+              <option value="1e-6">micro (μ) = 1e-6</option>
+              <option value="1e-3">milli (m) = 1e-3</option>
+              <option value="1">1</option>
+              <option value="1e3">Kilo (k) = 1e3</option>
+              <option value="1e6">Mega (M) = 1e6</option>
+              <option value="1e9">Giga (G) = 1e9</option>
+              <option value="1e12">Tera (T) = 1e12</option>
+            </select>
+          </label>
+          
+          {graphConfig.xScale === 'Logarithmic' ? (
+            <>
+              <label className="block mb-3">
+                <span className="block text-sm font-medium text-gray-800 mb-1">Min:</span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={logInputs.xMin}
+                  onChange={(e) => handleLogValueChange('xMin', e.target.value)}
+                  disabled={isAxisMappingConfirmed}
+                  placeholder="e.g., 100000"
+                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed"
+                  title="Enter actual value (e.g., 100000 or 1e5)"
+                />
+                {logError.x && <span className="block text-xs text-red-600 mt-1">{logError.x}</span>}
+              </label>
+              <label className="block mb-3">
+                <span className="block text-sm font-medium text-gray-800 mb-1">Max:</span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={logInputs.xMax}
+                  onChange={(e) => handleLogValueChange('xMax', e.target.value)}
+                  disabled={isAxisMappingConfirmed}
+                  placeholder="e.g., 100000"
+                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed"
+                  title="Enter actual value (e.g., 100000 or 1e5)"
+                />
+                {logError.x && <span className="block text-xs text-red-600 mt-1">{logError.x}</span>}
+              </label>
+            </>
+          ) : (
+            <>
+              <label className="block mb-3">
+                <span className="block text-sm font-medium text-gray-800 mb-1">Min:</span>
+                <input
+                  type="number"
+                  name="xMin"
+                  value={graphConfig.xMin}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white"
+                />
+              </label>
+              <label className="block mb-3">
+                <span className="block text-sm font-medium text-gray-800 mb-1">Max:</span>
+                <input
+                  type="number"
+                  name="xMax"
+                  value={graphConfig.xMax}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white"
+                />
+                {logError.x && <span className="block text-xs text-red-600 mt-1">{logError.x}</span>}
+              </label>
+            </>
+          )}
+        </div>
+      </div>
+
       {/* Axis Mapping Status & Controls (Issue 5 & 7) */}
-      <div className="mb-6 p-4 border-2 rounded-lg" style={{ borderColor: isAxisMappingConfirmed ? '#4caf50' : '#ffc107', backgroundColor: isAxisMappingConfirmed ? '#e8f5e9' : '#fff3e0' }}>
+      <div className="mt-6 p-4 border-2 rounded-lg" style={{ borderColor: isAxisMappingConfirmed ? '#4caf50' : '#ffc107', backgroundColor: isAxisMappingConfirmed ? '#e8f5e9' : '#fff3e0' }}>
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             {isAxisMappingConfirmed ? (
@@ -194,7 +503,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             <button
               onClick={() => {
                 // Clear input tracking refs when redrawn
-                inputValuesRef.current = { yMin: '', yMax: '', xMin: '', xMax: '' };
+                setLogInputs({ yMin: '', yMax: '', xMin: '', xMax: '' });
                 onRetakeAxis();
               }}
               className="px-3 py-1 rounded bg-orange-600 text-white text-xs font-medium hover:bg-orange-700"
@@ -325,222 +634,6 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
           </div>
         </div>
       )}
-
-      <div className="mb-5">
-        <label className="block mb-3 font-medium text-gray-800">
-          <span className="block mb-1 text-sm text-gray-800">Graph Title:</span>
-          <input
-            type="text"
-            name="graphTitle"
-            value={graphConfig.graphTitle || ''}
-            onChange={handleChange}
-            placeholder="Enter graph title"
-            className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white"
-            readOnly={false}
-            disabled={false}
-          />
-        </label>
-        <label className="block mb-3 font-medium text-gray-800">
-          <span className="block mb-1 text-sm text-gray-800">Curve/Line Name:</span>
-          <input
-            type="text"
-            name="curveName"
-            value={graphConfig.curveName}
-            onChange={handleChange}
-            placeholder="Enter curve name"
-            className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white"
-            readOnly={false}
-            disabled={false}
-          />
-        </label>
-        {showTctj && (
-          <label className="block mb-3 font-medium text-gray-800">
-            <span className="block mb-1 text-sm text-gray-800">TC/TJ (Temperature):</span>
-            <input
-              type="text"
-              name="temperature"
-              value={graphConfig.temperature}
-              onChange={handleChange}
-              placeholder="e.g., -40°C, 25°C"
-              className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white"
-            />
-          </label>
-        )}
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6" style={{ opacity: isAxisMappingConfirmed ? 0.6 : 1, pointerEvents: isAxisMappingConfirmed ? 'none' : 'auto' }}>
-        <div>
-          <h4 className="text-gray-800 font-semibold mb-3">Y-Axis {isAxisMappingConfirmed && '🔒'}</h4>
-          <label className="block mb-3">
-            <span className="block text-sm font-medium text-gray-800 mb-1">Scale:</span>
-            <select name="yScale" value={graphConfig.yScale} onChange={handleChange} disabled={isAxisMappingConfirmed} className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed">
-              <option value="Linear">Linear</option>
-              <option value="Logarithmic">Logarithmic</option>
-            </select>
-          </label>
-          {graphConfig.yScale === 'Logarithmic' && (
-            <small className="block text-xs text-blue-600 font-medium mb-3 italic">Enter actual value (e.g., 100000 or 1e5)</small>
-          )}
-          <label className="block mb-3">
-            <span className="block text-sm font-medium text-gray-800 mb-1">Unit:</span>
-            <select name="yUnitPrefix" value={graphConfig.yUnitPrefix} onChange={handleChange} disabled={isAxisMappingConfirmed} className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed">
-              <option value="">-select-</option>
-              <option value="1e-12">pico (p) = 1e-12</option>
-              <option value="1e-9">nano (n) = 1e-9</option>
-              <option value="1e-6">micro (μ) = 1e-6</option>
-              <option value="1e-3">milli (m) = 1e-3</option>
-              <option value="1">1</option>
-              <option value="1e3">Kilo (k) = 1e3</option>
-              <option value="1e6">Mega (M) = 1e6</option>
-              <option value="1e9">Giga (G) = 1e9</option>
-              <option value="1e12">Tera (T) = 1e12</option>
-            </select>
-          </label>
-          
-          {graphConfig.yScale === 'Logarithmic' ? (
-            <>
-              <label className="block mb-3">
-                <span className="block text-sm font-medium text-gray-800 mb-1">Min:</span>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={inputValuesRef.current.yMin}
-                  onChange={(e) => handleLogValueChange('yMin', e.target.value)}
-                  disabled={isAxisMappingConfirmed}
-                  placeholder="e.g., 100000"
-                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed"
-                  title="Enter actual value (e.g., 100000 or 1e5)"
-                />
-                {logError.y && <span className="block text-xs text-red-600 mt-1">{logError.y}</span>}
-              </label>
-              <label className="block mb-3">
-                <span className="block text-sm font-medium text-gray-800 mb-1">Max:</span>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={inputValuesRef.current.yMax}
-                  onChange={(e) => handleLogValueChange('yMax', e.target.value)}
-                  disabled={isAxisMappingConfirmed}
-                  placeholder="e.g., 100000"
-                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed"
-                  title="Enter actual value (e.g., 100000 or 1e5)"
-                />
-                {logError.y && <span className="block text-xs text-red-600 mt-1">{logError.y}</span>}
-              </label>
-            </>
-          ) : (
-            <>
-              <label className="block mb-3">
-                <span className="block text-sm font-medium text-gray-800 mb-1">Min:</span>
-                <input
-                  type="number"
-                  name="yMin"
-                  value={graphConfig.yMin}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white"
-                />
-              </label>
-              <label className="block mb-3">
-                <span className="block text-sm font-medium text-gray-800 mb-1">Max:</span>
-                <input
-                  type="number"
-                  name="yMax"
-                  value={graphConfig.yMax}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white"
-                />
-                {logError.y && <span className="block text-xs text-red-600 mt-1">{logError.y}</span>}
-              </label>
-            </>
-          )}
-        </div>
-
-        <div>
-          <h4 className="text-gray-800 font-semibold mb-3">X-Axis {isAxisMappingConfirmed && '🔒'}</h4>
-          <label className="block mb-3">
-            <span className="block text-sm font-medium text-gray-800 mb-1">Scale:</span>
-            <select name="xScale" value={graphConfig.xScale} onChange={handleChange} disabled={isAxisMappingConfirmed} className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed">
-              <option value="Linear">Linear</option>
-              <option value="Logarithmic">Logarithmic</option>
-            </select>
-          </label>
-          {graphConfig.xScale === 'Logarithmic' && (
-            <small className="block text-xs text-blue-600 font-medium mb-3 italic">Enter actual value (e.g., 100000 or 1e5)</small>
-          )}
-          <label className="block mb-3">
-            <span className="block text-sm font-medium text-gray-800 mb-1">Unit:</span>
-            <select name="xUnitPrefix" value={graphConfig.xUnitPrefix} onChange={handleChange} disabled={isAxisMappingConfirmed} className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed">
-              <option value="">-select-</option>
-              <option value="1e-12">pico (p) = 1e-12</option>
-              <option value="1e-9">nano (n) = 1e-9</option>
-              <option value="1e-6">micro (μ) = 1e-6</option>
-              <option value="1e-3">milli (m) = 1e-3</option>
-              <option value="1">1</option>
-              <option value="1e3">Kilo (k) = 1e3</option>
-              <option value="1e6">Mega (M) = 1e6</option>
-              <option value="1e9">Giga (G) = 1e9</option>
-              <option value="1e12">Tera (T) = 1e12</option>
-            </select>
-          </label>
-          
-          {graphConfig.xScale === 'Logarithmic' ? (
-            <>
-              <label className="block mb-3">
-                <span className="block text-sm font-medium text-gray-800 mb-1">Min:</span>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={inputValuesRef.current.xMin}
-                  onChange={(e) => handleLogValueChange('xMin', e.target.value)}
-                  disabled={isAxisMappingConfirmed}
-                  placeholder="e.g., 100000"
-                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed"
-                  title="Enter actual value (e.g., 100000 or 1e5)"
-                />
-                {logError.x && <span className="block text-xs text-red-600 mt-1">{logError.x}</span>}
-              </label>
-              <label className="block mb-3">
-                <span className="block text-sm font-medium text-gray-800 mb-1">Max:</span>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={inputValuesRef.current.xMax}
-                  onChange={(e) => handleLogValueChange('xMax', e.target.value)}
-                  disabled={isAxisMappingConfirmed}
-                  placeholder="e.g., 100000"
-                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed"
-                  title="Enter actual value (e.g., 100000 or 1e5)"
-                />
-                {logError.x && <span className="block text-xs text-red-600 mt-1">{logError.x}</span>}
-              </label>
-            </>
-          ) : (
-            <>
-              <label className="block mb-3">
-                <span className="block text-sm font-medium text-gray-800 mb-1">Min:</span>
-                <input
-                  type="number"
-                  name="xMin"
-                  value={graphConfig.xMin}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white"
-                />
-              </label>
-              <label className="block mb-3">
-                <span className="block text-sm font-medium text-gray-800 mb-1">Max:</span>
-                <input
-                  type="number"
-                  name="xMax"
-                  value={graphConfig.xMax}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white"
-                />
-                {logError.x && <span className="block text-xs text-red-600 mt-1">{logError.x}</span>}
-              </label>
-            </>
-          )}
-        </div>
-      </div>
     </div>
   );
 };
