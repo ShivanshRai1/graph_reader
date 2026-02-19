@@ -127,6 +127,9 @@ const GraphCapture = () => {
     xUnitPrefix: '1',
     yUnitPrefix: '1',
   });
+  // State for axis confirmation and freezing (Issue 5 & 7)
+  const [isAxisMappingConfirmed, setIsAxisMappingConfirmed] = useState(false);
+  const [frozenGraphConfig, setFrozenGraphConfig] = useState(null);
 
   const selectedCurve = savedCurves.find((curve) => curve.id === selectedCurveId);
   const groupedCurves = useMemo(() => {
@@ -784,11 +787,27 @@ const GraphCapture = () => {
         {uploadedImage && (
           <div className="flex flex-col lg:flex-row gap-8">
             <div className="w-full lg:w-2/5 flex flex-col gap-4">
-              <GraphCanvas isReadOnly={isReadOnly} partNumber={urlParams.partno} manufacturer={urlParams.manufacturer} />
-              <CapturedPointsList isReadOnly={isReadOnly} />
+              <GraphCanvas isReadOnly={isReadOnly} partNumber={urlParams.partno} manufacturer={urlParams.manufacturer} isAxisMappingConfirmed={isAxisMappingConfirmed} hasReturnUrl={!!urlParams.return_url} />
+              <CapturedPointsList isReadOnly={isReadOnly} hasReturnUrl={!!urlParams.return_url} />
             </div>
             <div className="w-full lg:w-3/5">
-              <GraphConfig showTctj={urlParams.tctj !== '0'} isGraphTitleReadOnly={false} isCurveNameReadOnly={false} initialCurveName={urlParams.curve_title} initialGraphTitle={urlParams.graph_title} />
+              <GraphConfig 
+                showTctj={urlParams.tctj !== '0'} 
+                isGraphTitleReadOnly={false} 
+                isCurveNameReadOnly={false} 
+                initialCurveName={urlParams.curve_title} 
+                initialGraphTitle={urlParams.graph_title}
+                isAxisMappingConfirmed={isAxisMappingConfirmed}
+                onConfirmAxisMapping={() => {
+                  setIsAxisMappingConfirmed(true);
+                  setFrozenGraphConfig({ ...graphConfig });
+                }}
+                onRetakeAxis={() => {
+                  setIsAxisMappingConfirmed(false);
+                  setFrozenGraphConfig(null);
+                  clearDataPoints();
+                }}
+              />
 
               {/* Dynamic Symbol Input Boxes - Only show if other_symb exists in URL */}
               {symbolNames && symbolNames.length > 0 && (
@@ -819,20 +838,23 @@ const GraphCapture = () => {
               )}
 
               <div className="mt-6 flex flex-row gap-4 items-center">
-                <button
-                  onClick={handleSave}
-                  className="px-4 py-2 rounded bg-blue-600 text-white font-medium disabled:opacity-50"
-                  disabled={isSaving}
-                >
-                  Fit, convert and export to RC ladder sim
-                </button>
-                <button
-                  onClick={handleSaveDataPoints}
-                  className="px-4 py-2 rounded bg-green-600 text-white font-medium disabled:opacity-50"
-                  disabled={isSaving}
-                >
-                  Save Data Points
-                </button>
+                {!!urlParams.return_url ? (
+                  <button
+                    onClick={handleSave}
+                    className="px-4 py-2 rounded bg-blue-600 text-white font-medium disabled:opacity-50"
+                    disabled={isSaving}
+                  >
+                    Fit, convert and export to RC ladder sim
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleSaveDataPoints}
+                    className="px-4 py-2 rounded bg-green-600 text-white font-medium disabled:opacity-50"
+                    disabled={isSaving}
+                  >
+                    Save Data Points
+                  </button>
+                )}
                 {isSaving ? (
                   <span className="text-sm" style={{ color: '#6b7280' }}>
                     Processing...

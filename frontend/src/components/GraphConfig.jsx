@@ -1,9 +1,10 @@
 import { useGraph } from '../context/GraphContext';
 import { useState, useEffect, useRef } from 'react';
 
-const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNameReadOnly = false, initialCurveName = '', initialGraphTitle = '' }) => {
+const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNameReadOnly = false, initialCurveName = '', initialGraphTitle = '', isAxisMappingConfirmed = false, onConfirmAxisMapping = () => {}, onRetakeAxis = () => {} }) => {
   const { graphConfig, setGraphConfig } = useGraph();
   const [logError, setLogError] = useState({ x: '', y: '' });
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
   
   // Apply initial values from props when component mounts
   useEffect(() => {
@@ -16,21 +17,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
     }
   }, [initialCurveName, initialGraphTitle, setGraphConfig]);
   
-  // Synced values for logarithmic inputs (exponent <-> actual)
-  const [logValues, setLogValues] = useState({
-    xMin: { exp: '', actual: '', actualRaw: '' },
-    xMax: { exp: '', actual: '', actualRaw: '' },
-    yMin: { exp: '', actual: '', actualRaw: '' },
-    yMax: { exp: '', actual: '', actualRaw: '' },
-  });
-  
-  // Track which input field is being used for logarithmic values
-  const [logInputMode, setLogInputMode] = useState({
-    xMin: 'exponent', // 'exponent' or 'actual'
-    xMax: 'exponent',
-    yMin: 'exponent',
-    yMax: 'exponent',
-  });
+
   
   // Debounce timers for each field
   const debounceTimers = useRef({
@@ -70,21 +57,56 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
     };
   }, []);
 
-  // Keep local synced values up-to-date from graphConfig
-  useEffect(() => {
-    const toActual = (expStr) => {
-      const exp = parseFloat(expStr);
-      if (isNaN(exp)) return '';
-      const val = Math.pow(10, exp);
-      return Number.isFinite(val) ? String(val) : '';
+  // Helper function to round exponent to reasonable precision (avoid floating-point errors like 4.999999999)
+  const roundExponent = (exp, decimals = 10) => {
+    if (!Number.isFinite(exp)) return exp;
+    // Round to N decimals to avoid floating-point precision artifacts
+    return Math.round(exp * Math.pow(10, decimals)) / Math.pow(10, decimals);
+  };
+
+  const getUnitLabel = (value) => {
+    const unitLabels = {
+      '1e-12': 'pico (1e-12)',
+      '1e-9': 'nano (1e-9)',
+      '1e-6': 'micro (1e-6)',
+      '1e-3': 'milli (1e-3)',
+      '1': '1',
+      '1e3': 'kilo (1e3)',
+      '1e6': 'mega (1e6)',
+      '1e9': 'giga (1e9)',
+      '1e12': 'tera (1e12)',
     };
-    setLogValues({
-      xMin: { exp: String(graphConfig.xMin ?? ''), actual: toActual(graphConfig.xMin), actualRaw: '' },
-      xMax: { exp: String(graphConfig.xMax ?? ''), actual: toActual(graphConfig.xMax), actualRaw: '' },
-      yMin: { exp: String(graphConfig.yMin ?? ''), actual: toActual(graphConfig.yMin), actualRaw: '' },
-      yMax: { exp: String(graphConfig.yMax ?? ''), actual: toActual(graphConfig.yMax), actualRaw: '' },
-    });
-  }, [graphConfig.xMin, graphConfig.xMax, graphConfig.yMin, graphConfig.yMax]);
+    return unitLabels[value] || value || '-';
+  };
+
+  // Helper function to format actual values (avoid unnecessary trailing zeros)
+  const formatActual = (val) => {
+    if (!Number.isFinite(val)) return '';
+    // For very large/small numbers, use exponential notation
+    if (Math.abs(val) >= 1e10 || (Math.abs(val) < 1e-4 && val !== 0)) {
+      return val.toExponential(6);
+    }
+    // Otherwise use fixed format, removing trailing zeros
+    return String(val);
+  };
+
+  const formatAxisDisplay = (value, scale) => {
+    const num = parseFloat(value);
+    if (!Number.isFinite(num)) return '?';
+    if (scale !== 'Logarithmic') return String(num);
+    const actual = Math.pow(10, num);
+    if (!Number.isFinite(actual)) return '?';
+    return formatActual(actual);
+  };
+
+  // Helper to get conversion display text
+  const getConversionText = (expStr) => {
+    const exp = parseFloat(expStr);
+    if (isNaN(exp)) return '';
+    const actual = Math.pow(10, exp);
+    if (!Number.isFinite(actual)) return '';
+    return `(10^${roundExponent(exp, 2)} ≈ ${formatActual(actual)})`;
+  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -96,78 +118,214 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
     });
   };
 
-  // Handle logarithmic input for exponent field
-  const handleLogExponentChange = (field, value) => {
-    setLogInputMode({ ...logInputMode, [field]: 'exponent' });
-    // Update config with exponent
-    setGraphConfig({
-      ...graphConfig,
-      [field]: value,
-    });
-    // Sync actual value locally
-    const exp = parseFloat(value);
-    const actual = !isNaN(exp) ? Math.pow(10, exp) : '';
-    setLogValues((prev) => ({
-      ...prev,
-      [field]: { exp: String(value), actual: actual !== '' ? String(actual) : '' },
-    }));
-  };
+  // Track input values separately to show user's typed value while converting
+  const inputValuesRef = useRef({ yMin: '', yMax: '', xMin: '', xMax: '' });
 
-  // Handle logarithmic input for actual value field - with debounce
-  const handleLogActualChange = (field, value) => {
-    setLogInputMode({ ...logInputMode, [field]: 'actual' });
+  // Initialize input values from graphConfig exponents on mount
+  useEffect(() => {
+    // Only synchronize on first mount, not on redraw
+    const fields = ['yMin', 'yMax', 'xMin', 'xMax'];
     
-    // Update raw input immediately (allow free typing)
-    setLogValues((prev) => ({
-      ...prev,
-      [field]: { ...prev[field], actualRaw: value },
-    }));
-    
-    // Clear previous timer for this field
-    if (debounceTimers.current[field]) {
-      clearTimeout(debounceTimers.current[field]);
-    }
-    
-    // Set new debounce timer - convert after 500ms of no typing
-    debounceTimers.current[field] = setTimeout(() => {
-      const numValue = parseFloat(value);
-      
-      // Accept scientific notation (e.g., "1e5") and positive values
-      const exp = !isNaN(numValue) && numValue > 0 ? Math.log10(numValue) : NaN;
-      
-      // Update config with exponent if valid
-      if (!Number.isNaN(exp)) {
-        setGraphConfig((prevConfig) => ({
-          ...prevConfig,
-          [field]: String(exp),
-        }));
+    fields.forEach(field => {
+      const expValue = graphConfig[field];
+      if (expValue && !isNaN(expValue) && inputValuesRef.current[field] === '') {
+        // Only populate if field is empty and graphConfig has a value
+        const actualValue = Math.pow(10, parseFloat(expValue));
+        inputValuesRef.current[field] = actualValue.toString();
       }
-      
-      // Update local display values
-      setLogValues((prev) => ({
-        ...prev,
-        [field]: {
-          exp: Number.isNaN(exp) ? prev[field].exp : String(exp),
-          actual: Number.isNaN(exp) ? '' : String(numValue),
-          actualRaw: value, // Keep the raw value displayed
-        },
-      }));
-    }, 500); // 500ms debounce
-  };
+    });
+  }, []); // Empty dependency array - only run on mount
 
-  // Handle focus on exponent field
-  const handleExponentFocus = (field) => {
-    setLogInputMode({ ...logInputMode, [field]: 'exponent' });
-  };
+  // When switching to logarithmic scale, ensure inputValuesRef is populated from graphConfig
+  useEffect(() => {
+    if (graphConfig.yScale === 'Logarithmic' || graphConfig.xScale === 'Logarithmic') {
+      const fields = ['yMin', 'yMax', 'xMin', 'xMax'];
+      fields.forEach(field => {
+        const expValue = graphConfig[field];
+        // If graphConfig has a value but inputValuesRef is empty, populate it
+        if (expValue && !isNaN(expValue) && inputValuesRef.current[field] === '') {
+          const actualValue = Math.pow(10, parseFloat(expValue));
+          inputValuesRef.current[field] = actualValue.toString();
+        }
+      });
+    }
+  }, [graphConfig.yScale, graphConfig.xScale]);
 
-  // Handle focus on actual value field
-  const handleActualFocus = (field) => {
-    setLogInputMode({ ...logInputMode, [field]: 'actual' });
+  // Handler for logarithmic input - shows typed value, converts to exponent immediately
+  const handleLogValueChange = (field, value) => {
+    // Store what user is typing
+    inputValuesRef.current[field] = value;
+
+    const numValue = parseFloat(value);
+    if (isNaN(numValue) || numValue <= 0) return;
+
+    // Convert actual value to exponent immediately
+    const exp = Math.log10(numValue);
+    const roundedExp = roundExponent(exp, 10);
+
+    // Update config with the exponent
+    setGraphConfig((prevConfig) => ({
+      ...prevConfig,
+      [field]: String(roundedExp),
+    }));
   };
 
   return (
     <div className="w-full p-5 bg-white rounded-lg mt-5 shadow">
       <h3 className="text-gray-900 text-lg font-semibold mb-5">Graph Configuration</h3>
+
+      {/* Axis Mapping Status & Controls (Issue 5 & 7) */}
+      <div className="mb-6 p-4 border-2 rounded-lg" style={{ borderColor: isAxisMappingConfirmed ? '#4caf50' : '#ffc107', backgroundColor: isAxisMappingConfirmed ? '#e8f5e9' : '#fff3e0' }}>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            {isAxisMappingConfirmed ? (
+              <>
+                <span className="text-2xl">🔒</span>
+                <span className="text-sm font-semibold text-green-700">Axis Mapping: CONFIRMED</span>
+              </>
+            ) : (
+              <>
+                <span className="text-2xl">⚠️</span>
+                <span className="text-sm font-semibold text-orange-700">Axis Mapping: PENDING</span>
+              </>
+            )}
+          </div>
+          {isAxisMappingConfirmed && (
+            <button
+              onClick={() => {
+                // Clear input tracking refs when redrawn
+                inputValuesRef.current = { yMin: '', yMax: '', xMin: '', xMax: '' };
+                onRetakeAxis();
+              }}
+              className="px-3 py-1 rounded bg-orange-600 text-white text-xs font-medium hover:bg-orange-700"
+              title="Unlock axis mapping (will clear captured points)"
+            >
+              Unlock Axis Mapping
+            </button>
+          )}
+        </div>
+        
+        {/* Always Display Current Axis Values */}
+        <div className="text-xs text-gray-700 bg-white p-2 rounded mb-3" style={{ border: '1px solid #ccc' }}>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <strong>X-Axis:</strong> [{formatAxisDisplay(graphConfig.xMin, graphConfig.xScale)}, {formatAxisDisplay(graphConfig.xMax, graphConfig.xScale)}] ({graphConfig.xScale})
+            </div>
+            <div>
+              <strong>Y-Axis:</strong> [{formatAxisDisplay(graphConfig.yMin, graphConfig.yScale)}, {formatAxisDisplay(graphConfig.yMax, graphConfig.yScale)}] ({graphConfig.yScale})
+            </div>
+          </div>
+        </div>
+        
+        {!isAxisMappingConfirmed && (
+          <>
+            {/* Validation messaging */}
+            {(() => {
+              const missing = [];
+              if (!graphConfig.xMin && graphConfig.xMin !== 0) missing.push('X Min');
+              if (!graphConfig.xMax && graphConfig.xMax !== 0) missing.push('X Max');
+              if (!graphConfig.yMin && graphConfig.yMin !== 0) missing.push('Y Min');
+              if (!graphConfig.yMax && graphConfig.yMax !== 0) missing.push('Y Max');
+              
+              const xMin = parseFloat(graphConfig.xMin);
+              const xMax = parseFloat(graphConfig.xMax);
+              const yMin = parseFloat(graphConfig.yMin);
+              const yMax = parseFloat(graphConfig.yMax);
+              
+              const hasErrors = logError.x || logError.y;
+              const isDisabled = missing.length > 0 || hasErrors;
+              
+              return (
+                <>
+                  {missing.length > 0 && (
+                    <div className="mb-2 p-2 rounded bg-red-50 border border-red-300 text-xs text-red-700">
+                      ❌ Required: Set {missing.join(', ')}
+                    </div>
+                  )}
+                  {hasErrors && (
+                    <div className="mb-2 p-2 rounded bg-red-50 border border-red-300 text-xs text-red-700">
+                      {logError.x}{logError.x && logError.y && ' | '}{logError.y}
+                    </div>
+                  )}
+                  <button
+                    onClick={() => setShowConfirmModal(true)}
+                    disabled={isDisabled}
+                    className={`w-full px-4 py-2 rounded font-medium text-sm transition ${
+                      isDisabled
+                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                        : 'bg-green-600 text-white hover:bg-green-700'
+                    }`}
+                    title={isDisabled ? 'All axis values must be set and valid' : 'Review axis configuration before locking'}
+                  >
+                    ✓ Confirm Axis Mapping
+                  </button>
+                </>
+              );
+            })()}
+          </>
+        )}
+      </div>
+
+      {showConfirmModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.35)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 2000,
+          }}
+        >
+          <div
+            style={{
+              background: '#ffffff',
+              color: '#213547',
+              borderRadius: 10,
+              width: 'min(520px, 90vw)',
+              boxShadow: '0 12px 32px rgba(0,0,0,0.2)',
+              padding: 20,
+            }}
+          >
+            <div className="text-base font-semibold mb-3">Proceed with this axis configuration?</div>
+            <div className="text-sm mb-4" style={{ color: '#4b5563' }}>
+              Confirm the values below. If you continue, axis mapping is locked and point capture begins.
+            </div>
+            <div className="text-sm" style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: 12 }}>
+              <div className="mb-2"><strong>X Min:</strong> {formatAxisDisplay(graphConfig.xMin, graphConfig.xScale)}</div>
+              <div className="mb-2"><strong>X Max:</strong> {formatAxisDisplay(graphConfig.xMax, graphConfig.xScale)}</div>
+              <div className="mb-2"><strong>X Scale:</strong> {graphConfig.xScale || '-'}</div>
+              <div className="mb-3"><strong>X Unit:</strong> {getUnitLabel(graphConfig.xUnitPrefix)}</div>
+              <div className="mb-2"><strong>Y Min:</strong> {formatAxisDisplay(graphConfig.yMin, graphConfig.yScale)}</div>
+              <div className="mb-2"><strong>Y Max:</strong> {formatAxisDisplay(graphConfig.yMax, graphConfig.yScale)}</div>
+              <div className="mb-2"><strong>Y Scale:</strong> {graphConfig.yScale || '-'}</div>
+              <div><strong>Y Unit:</strong> {getUnitLabel(graphConfig.yUnitPrefix)}</div>
+            </div>
+            <div className="text-xs mt-3" style={{ color: '#6b7280' }}>
+              Need to change values? Click “Unlock Axis Mapping” to edit the configuration.
+            </div>
+            <div className="mt-5 flex gap-3 justify-end">
+              <button
+                className="px-4 py-2 rounded bg-gray-800 text-white font-medium"
+                onClick={() => setShowConfirmModal(false)}
+              >
+                No, go back
+              </button>
+              <button
+                className="px-4 py-2 rounded bg-green-600 text-white font-medium"
+                onClick={() => {
+                  setShowConfirmModal(false);
+                  onConfirmAxisMapping();
+                }}
+              >
+                Yes, proceed
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="mb-5">
         <label className="block mb-3 font-medium text-gray-800">
           <span className="block mb-1 text-sm text-gray-800">Graph Title:</span>
@@ -210,22 +368,22 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6" style={{ opacity: isAxisMappingConfirmed ? 0.6 : 1, pointerEvents: isAxisMappingConfirmed ? 'none' : 'auto' }}>
         <div>
-          <h4 className="text-gray-800 font-semibold mb-3">Y-Axis</h4>
+          <h4 className="text-gray-800 font-semibold mb-3">Y-Axis {isAxisMappingConfirmed && '🔒'}</h4>
           <label className="block mb-3">
             <span className="block text-sm font-medium text-gray-800 mb-1">Scale:</span>
-            <select name="yScale" value={graphConfig.yScale} onChange={handleChange} className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white">
+            <select name="yScale" value={graphConfig.yScale} onChange={handleChange} disabled={isAxisMappingConfirmed} className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed">
               <option value="Linear">Linear</option>
               <option value="Logarithmic">Logarithmic</option>
             </select>
           </label>
           {graphConfig.yScale === 'Logarithmic' && (
-            <small className="block text-xs text-blue-600 font-medium mb-3 italic">For Logarithmic values Enter EITHER the exponent OR the actual value (not both)</small>
+            <small className="block text-xs text-blue-600 font-medium mb-3 italic">Enter actual value (e.g., 100000 or 1e5)</small>
           )}
           <label className="block mb-3">
             <span className="block text-sm font-medium text-gray-800 mb-1">Unit:</span>
-            <select name="yUnitPrefix" value={graphConfig.yUnitPrefix} onChange={handleChange} className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white">
+            <select name="yUnitPrefix" value={graphConfig.yUnitPrefix} onChange={handleChange} disabled={isAxisMappingConfirmed} className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed">
               <option value="">-select-</option>
               <option value="1e-12">pico (p) = 1e-12</option>
               <option value="1e-9">nano (n) = 1e-9</option>
@@ -242,75 +400,32 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
           {graphConfig.yScale === 'Logarithmic' ? (
             <>
               <label className="block mb-3">
-                <span className="block text-sm font-medium text-gray-800 mb-1">Min (10^x):</span>
-                <div className="grid grid-cols-2 gap-2 mb-1">
-                  <span className="text-xs text-blue-600 font-medium text-center">Log Exponent</span>
-                  <span className="text-xs text-blue-600 font-medium text-center">Graph Scale Value</span>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      value={logValues.yMin.exp}
-                      onChange={(e) => handleLogExponentChange('yMin', e.target.value)}
-                      onFocus={() => handleExponentFocus('yMin')}
-                      placeholder="e.g., 5"
-                      className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-gray-900 bg-white"
-                      style={{ opacity: logInputMode.yMin === 'actual' ? 0.5 : 1 }}
-                      title="Enter the exponent (e.g., 5 for 10^5 = 100000)"
-                    />
-                  </div>
-                  <div>
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      value={logValues.yMin.actualRaw || logValues.yMin.actual}
-                      onChange={(e) => handleLogActualChange('yMin', e.target.value)}
-                      onFocus={() => handleActualFocus('yMin')}
-                      placeholder="e.g., 1e5"
-                      className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-gray-900 bg-white"
-                      style={{ opacity: logInputMode.yMin === 'exponent' ? 0.5 : 1 }}
-                      title="Enter the actual value (e.g., 100000 or 1e5). It will be converted to exponent automatically."
-                    />
-                  </div>
-                </div>
+                <span className="block text-sm font-medium text-gray-800 mb-1">Min:</span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={inputValuesRef.current.yMin}
+                  onChange={(e) => handleLogValueChange('yMin', e.target.value)}
+                  disabled={isAxisMappingConfirmed}
+                  placeholder="e.g., 100000"
+                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed"
+                  title="Enter actual value (e.g., 100000 or 1e5)"
+                />
                 {logError.y && <span className="block text-xs text-red-600 mt-1">{logError.y}</span>}
               </label>
               <label className="block mb-3">
-                <span className="block text-sm font-medium text-gray-800 mb-1">Max (10^x):</span>
-                <div className="grid grid-cols-2 gap-2 mb-1">
-                  <span className="text-xs text-blue-600 font-medium text-center">Log Exponent</span>
-                  <span className="text-xs text-blue-600 font-medium text-center">Graph Scale Value</span>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      value={logValues.yMax.exp}
-                      onChange={(e) => handleLogExponentChange('yMax', e.target.value)}
-                      onFocus={() => handleExponentFocus('yMax')}
-                      placeholder="e.g., 5"
-                      className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-gray-900 bg-white"
-                      style={{ opacity: logInputMode.yMax === 'actual' ? 0.5 : 1 }}
-                      title="Enter the exponent (e.g., 5 for 10^5 = 100000)"
-                    />
-                  </div>
-                  <div>
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      value={logValues.yMax.actualRaw || logValues.yMax.actual}
-                      onChange={(e) => handleLogActualChange('yMax', e.target.value)}
-                      onFocus={() => handleActualFocus('yMax')}
-                      placeholder="e.g., 1e5"
-                      className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-gray-900 bg-white"
-                      style={{ opacity: logInputMode.yMax === 'exponent' ? 0.5 : 1 }}
-                      title="Enter the actual value (e.g., 100000 or 1e5). It will be converted to exponent automatically."
-                    />
-                  </div>
-                </div>
+                <span className="block text-sm font-medium text-gray-800 mb-1">Max:</span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={inputValuesRef.current.yMax}
+                  onChange={(e) => handleLogValueChange('yMax', e.target.value)}
+                  disabled={isAxisMappingConfirmed}
+                  placeholder="e.g., 100000"
+                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed"
+                  title="Enter actual value (e.g., 100000 or 1e5)"
+                />
+                {logError.y && <span className="block text-xs text-red-600 mt-1">{logError.y}</span>}
               </label>
             </>
           ) : (
@@ -341,20 +456,20 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
         </div>
 
         <div>
-          <h4 className="text-gray-800 font-semibold mb-3">X-Axis</h4>
+          <h4 className="text-gray-800 font-semibold mb-3">X-Axis {isAxisMappingConfirmed && '🔒'}</h4>
           <label className="block mb-3">
             <span className="block text-sm font-medium text-gray-800 mb-1">Scale:</span>
-            <select name="xScale" value={graphConfig.xScale} onChange={handleChange} className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white">
+            <select name="xScale" value={graphConfig.xScale} onChange={handleChange} disabled={isAxisMappingConfirmed} className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed">
               <option value="Linear">Linear</option>
               <option value="Logarithmic">Logarithmic</option>
             </select>
           </label>
           {graphConfig.xScale === 'Logarithmic' && (
-            <small className="block text-xs text-blue-600 font-medium mb-3 italic">For Logarithmic values Enter EITHER the exponent OR the actual value (not both)</small>
+            <small className="block text-xs text-blue-600 font-medium mb-3 italic">Enter actual value (e.g., 100000 or 1e5)</small>
           )}
           <label className="block mb-3">
             <span className="block text-sm font-medium text-gray-800 mb-1">Unit:</span>
-            <select name="xUnitPrefix" value={graphConfig.xUnitPrefix} onChange={handleChange} className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white">
+            <select name="xUnitPrefix" value={graphConfig.xUnitPrefix} onChange={handleChange} disabled={isAxisMappingConfirmed} className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed">
               <option value="">-select-</option>
               <option value="1e-12">pico (p) = 1e-12</option>
               <option value="1e-9">nano (n) = 1e-9</option>
@@ -371,75 +486,32 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
           {graphConfig.xScale === 'Logarithmic' ? (
             <>
               <label className="block mb-3">
-                <span className="block text-sm font-medium text-gray-800 mb-1">Min (10^x):</span>
-                <div className="grid grid-cols-2 gap-2 mb-1">
-                  <span className="text-xs text-blue-600 font-medium text-center">Log Exponent</span>
-                  <span className="text-xs text-blue-600 font-medium text-center">Graph Scale Value</span>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      value={logValues.xMin.exp}
-                      onChange={(e) => handleLogExponentChange('xMin', e.target.value)}
-                      onFocus={() => handleExponentFocus('xMin')}
-                      placeholder="e.g., 5"
-                      className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-gray-900 bg-white"
-                      style={{ opacity: logInputMode.xMin === 'actual' ? 0.5 : 1 }}
-                      title="Enter the exponent (e.g., 5 for 10^5 = 100000)"
-                    />
-                  </div>
-                  <div>
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      value={logValues.xMin.actualRaw || logValues.xMin.actual}
-                      onChange={(e) => handleLogActualChange('xMin', e.target.value)}
-                      onFocus={() => handleActualFocus('xMin')}
-                      placeholder="e.g., 1e5"
-                      className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-gray-900 bg-white"
-                      style={{ opacity: logInputMode.xMin === 'exponent' ? 0.5 : 1 }}
-                      title="Enter the actual value (e.g., 100000 or 1e5). It will be converted to exponent automatically."
-                    />
-                  </div>
-                </div>
+                <span className="block text-sm font-medium text-gray-800 mb-1">Min:</span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={inputValuesRef.current.xMin}
+                  onChange={(e) => handleLogValueChange('xMin', e.target.value)}
+                  disabled={isAxisMappingConfirmed}
+                  placeholder="e.g., 100000"
+                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed"
+                  title="Enter actual value (e.g., 100000 or 1e5)"
+                />
                 {logError.x && <span className="block text-xs text-red-600 mt-1">{logError.x}</span>}
               </label>
               <label className="block mb-3">
-                <span className="block text-sm font-medium text-gray-800 mb-1">Max (10^x):</span>
-                <div className="grid grid-cols-2 gap-2 mb-1">
-                  <span className="text-xs text-blue-600 font-medium text-center">Log Exponent</span>
-                  <span className="text-xs text-blue-600 font-medium text-center">Graph Scale Value</span>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      value={logValues.xMax.exp}
-                      onChange={(e) => handleLogExponentChange('xMax', e.target.value)}
-                      onFocus={() => handleExponentFocus('xMax')}
-                      placeholder="e.g., 5"
-                      className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-gray-900 bg-white"
-                      style={{ opacity: logInputMode.xMax === 'actual' ? 0.5 : 1 }}
-                      title="Enter the exponent (e.g., 5 for 10^5 = 100000)"
-                    />
-                  </div>
-                  <div>
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      value={logValues.xMax.actualRaw || logValues.xMax.actual}
-                      onChange={(e) => handleLogActualChange('xMax', e.target.value)}
-                      onFocus={() => handleActualFocus('xMax')}
-                      placeholder="e.g., 1e5"
-                      className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-gray-900 bg-white"
-                      style={{ opacity: logInputMode.xMax === 'exponent' ? 0.5 : 1 }}
-                      title="Enter the actual value (e.g., 100000 or 1e5). It will be converted to exponent automatically."
-                    />
-                  </div>
-                </div>
+                <span className="block text-sm font-medium text-gray-800 mb-1">Max:</span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={inputValuesRef.current.xMax}
+                  onChange={(e) => handleLogValueChange('xMax', e.target.value)}
+                  disabled={isAxisMappingConfirmed}
+                  placeholder="e.g., 100000"
+                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed"
+                  title="Enter actual value (e.g., 100000 or 1e5)"
+                />
+                {logError.x && <span className="block text-xs text-red-600 mt-1">{logError.x}</span>}
               </label>
             </>
           ) : (

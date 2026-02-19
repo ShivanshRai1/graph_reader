@@ -15,6 +15,21 @@ const buildCurveConfig = (curve) => ({
   graphTitle: curve.graph_title,
 });
 
+const toActualValue = (value, scale) => {
+  if (scale !== 'Logarithmic') return value;
+  return Math.pow(10, value);
+};
+
+const formatDisplayValue = (value, scale) => {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return '';
+  const actual = toActualValue(num, scale);
+  if (!Number.isFinite(actual)) return '';
+  return (Math.abs(actual) > 0 && Math.abs(actual) < 0.0001)
+    ? actual.toExponential(4)
+    : actual.toFixed(4);
+};
+
 const SavedGraphView = ({ curveId }) => {
   const [curve, setCurve] = useState(null);
   const [error, setError] = useState('');
@@ -98,14 +113,14 @@ const SavedGraphView = ({ curveId }) => {
           <div>
             <div className="text-sm font-semibold mb-1">X-Axis</div>
             <div className="text-xs">Scale: {curve.x_scale || 'Linear'}</div>
-            <div className="text-xs">Min: {curve.x_min}</div>
-            <div className="text-xs">Max: {curve.x_max}</div>
+            <div className="text-xs">Min: {formatDisplayValue(curve.x_min, curve.x_scale || 'Linear')}</div>
+            <div className="text-xs">Max: {formatDisplayValue(curve.x_max, curve.x_scale || 'Linear')}</div>
           </div>
           <div>
             <div className="text-sm font-semibold mb-1">Y-Axis</div>
             <div className="text-xs">Scale: {curve.y_scale || 'Linear'}</div>
-            <div className="text-xs">Min: {curve.y_min}</div>
-            <div className="text-xs">Max: {curve.y_max}</div>
+            <div className="text-xs">Min: {formatDisplayValue(curve.y_min, curve.y_scale || 'Linear')}</div>
+            <div className="text-xs">Max: {formatDisplayValue(curve.y_max, curve.y_scale || 'Linear')}</div>
           </div>
         </div>
 
@@ -126,10 +141,10 @@ const SavedGraphView = ({ curveId }) => {
               {points.map((pt, idx) => (
                 <tr key={idx}>
                   <td className="px-2 py-1 border" style={{ borderColor: 'var(--color-border)', color: '#213547', background: '#fff' }}>
-                    {pt.x_value}
+                    {formatDisplayValue(pt.x_value ?? pt.x, curve.x_scale || 'Linear')}
                   </td>
                   <td className="px-2 py-1 border" style={{ borderColor: 'var(--color-border)', color: '#213547', background: '#fff' }}>
-                    {pt.y_value}
+                    {formatDisplayValue(pt.y_value ?? pt.y, curve.y_scale || 'Linear')}
                   </td>
                 </tr>
               ))}

@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect } from 'react';
 import { useGraph } from '../context/GraphContext';
 
-const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '' }) => {
+const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', isAxisMappingConfirmed = false, hasReturnUrl = false }) => {
   const { uploadedImage, graphArea, setGraphArea, dataPoints, addDataPoint, clearDataPoints, graphConfig, deleteDataPoint } = useGraph();
   const [showRedrawMsg, setShowRedrawMsg] = useState(false);
   const canvasRef = useRef(null);
@@ -467,6 +467,11 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '' })
     const withinYBounds = canvasY >= area.y - borderWidth && canvasY <= area.y + area.height + borderWidth;
     
     if (withinXBounds && withinYBounds) {
+      // Gate point capture until axis mapping is confirmed (Issue 5 & 7)
+      if (!isAxisMappingConfirmed) {
+        alert('⚠️ Please confirm the axis mapping first before capturing data points.');
+        return;
+      }
       addDataPoint({ canvasX, canvasY });
       // Make box transparent after first point is captured (entering capture mode)
       setBoxTransparent(true);
@@ -768,11 +773,13 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '' })
         <p className="text-blue-700 font-medium mb-2"><strong>Instructions:</strong></p>
         <ul className="list-disc pl-5 text-gray-700">
           <li>Drag to select the graph area (blue box)</li>
+          <li>In Graph Configuration, set axis min/max, scale, and unit, then confirm axis mapping</li>
           <li>Click inside the blue box to add data points</li>
-          <li>Use the buttons below to manage your data points</li>
-          <li>Hover over the graph to see a magnified view</li>
+          <li>Use the buttons below to adjust the box or clear points; hover to see the magnifier</li>
         </ul>
       </div>
+      
+
       {(partNumber || manufacturer) ? (
         <div className="mb-4 p-3 bg-gray-100 rounded font-semibold text-gray-800 max-w-xs">
           Part Number: {partNumber && manufacturer ? `${partNumber}(${manufacturer})` : partNumber || ''}
@@ -815,7 +822,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '' })
           className="px-4 py-2 rounded bg-blue-600 text-white font-medium"
           onClick={() => setShowFixPoints((prev) => !prev)}
         >
-          {showFixPoints ? 'Hide fix-points' : 'Draw fix-points'}
+          {showFixPoints ? 'Hide points' : 'Connect points'}
         </button>
         <button
           className="px-4 py-2 rounded bg-gray-700 text-white font-medium"
@@ -835,18 +842,20 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '' })
             setBoxTransparent(false);
             setShowRedrawMsg(false);
           }}
+          title="Redraw/retake the bounding box for the axis (clears only the box, not captured points)"
         >
-          Redraw Box
+          Redraw Axis Box
         </button>
         <button
           className="px-4 py-2 rounded bg-red-700 text-white font-medium"
           onClick={handleClearPoints}
+          title="Clear all captured data points (keeps axis mapping)"
         >
-          Clear All
+          Retake Points
         </button>
         {showRedrawMsg && (
           <div className="text-red-600 font-bold mt-2">
-            Please redraw the box
+            Please redraw the axis box
           </div>
         )}
       </div>
