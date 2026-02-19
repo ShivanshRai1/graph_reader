@@ -216,6 +216,21 @@ const GraphCapture = () => {
     graphTitle: curve?.config?.graphTitle ?? curve?.graph_title ?? curve?.name,
   });
 
+  const toActualValue = (value, scale) => {
+    if (scale !== 'Logarithmic') return value;
+    return Math.pow(10, value);
+  };
+
+  const formatDisplayValue = (value, scale) => {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return '';
+    const actual = toActualValue(num, scale);
+    if (!Number.isFinite(actual)) return '';
+    return (Math.abs(actual) > 0 && Math.abs(actual) < 0.0001)
+      ? actual.toExponential(4)
+      : actual.toFixed(4);
+  };
+
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
     const otherSymbols = searchParams.get('other_symbols') || searchParams.get('other_symb') || '';
@@ -1149,10 +1164,10 @@ const GraphCapture = () => {
                 {selectedCurvePoints.map((pt, idx) => (
                   <tr key={idx}>
                     <td className="px-2 py-1 border" style={{ borderColor: 'var(--color-border)', color: '#213547', background: '#fff' }}>
-                      {pt.x_value}
+                      {formatDisplayValue(pt.x_value ?? pt.x, selectedCurve?.config?.xScale ?? selectedCurve?.x_scale ?? 'Linear')}
                     </td>
                     <td className="px-2 py-1 border" style={{ borderColor: 'var(--color-border)', color: '#213547', background: '#fff' }}>
-                      {pt.y_value}
+                      {formatDisplayValue(pt.y_value ?? pt.y, selectedCurve?.config?.yScale ?? selectedCurve?.y_scale ?? 'Linear')}
                     </td>
                   </tr>
                 ))}
