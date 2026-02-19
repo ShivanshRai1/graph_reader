@@ -791,17 +791,6 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       >
         x={formatCoord(mousePos.x)} y={formatCoord(mousePos.y)}
       </div>
-      <div
-        className="block mt-2 mb-4 min-h-6 text-red-600 text-xs italic transition-opacity duration-200"
-        style={{
-          visibility: (zeroWarnActive || stuckWarnActive) ? 'visible' : 'hidden',
-          opacity: (zeroWarnActive || stuckWarnActive) ? 1 : 0,
-        }}
-      >
-        {zeroWarnActive ? '⚠️ Coordinates are constant. Check that the axis scale (Linear/Logarithmic) and min/max values match the graph.' : null}
-        {zeroWarnActive && stuckWarnActive ? ' ' : null}
-        {stuckWarnActive ? '⚠️ Coordinates are barely changing while you move. Verify scale, min/max, and units match the graph.' : null}
-      </div>
       <div className="border border-gray-200 rounded mb-4 overflow-auto">
         <canvas
           ref={canvasRef}
