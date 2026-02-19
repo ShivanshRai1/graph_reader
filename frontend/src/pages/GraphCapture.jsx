@@ -394,7 +394,9 @@ const GraphCapture = () => {
       console.log('Graph ID from backend:', result.id);
 
       // Show only one success message after saving
-      alert('Data saved successfully!');
+      if (!urlParams.return_url) {
+        alert('Data saved successfully!');
+      }
 
       const graphGroupId = buildGraphGroupId(uploadedImage || '');
       const graphImageUrl = uploadedImage || '';
