@@ -689,8 +689,11 @@ const GraphCapture = () => {
     });
 
     // Add all symbol values with their return parameter names (dynamic)
+    // Only add if the value is not just the friendly label
     Object.entries(symbolValues).forEach(([paramName, value]) => {
-      if (value) {
+      const friendlyLabel = symbolLabels[paramName];
+      // Only add if value exists and is not the friendly label itself
+      if (value && value !== friendlyLabel) {
         console.log(`Adding return_${paramName} = ${value}`);
         url.searchParams.append(`return_${paramName}`, value);
       }
