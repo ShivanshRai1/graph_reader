@@ -222,6 +222,28 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             />
           </label>
         )}
+        <label className="block mb-3 font-medium text-gray-800">
+          <span className="block mb-1 text-sm text-gray-800">No. of branches or Order (n):</span>
+          <input
+            type="number"
+            name="branchesOrder"
+            value={graphConfig.branchesOrder || ''}
+            onChange={handleChange}
+            placeholder="e.g., 4"
+            className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white"
+          />
+        </label>
+        <label className="block mb-3 font-medium text-gray-800">
+          <span className="block mb-1 text-sm text-gray-800">Minimum time constant (optional):</span>
+          <input
+            type="text"
+            name="minTimeConstant"
+            value={graphConfig.minTimeConstant || ''}
+            onChange={handleChange}
+            placeholder="Enter minimum time constant"
+            className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white"
+          />
+        </label>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6" style={{ opacity: isAxisMappingConfirmed ? 0.6 : 1, pointerEvents: isAxisMappingConfirmed ? 'none' : 'auto' }}>
