@@ -775,6 +775,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
           <li>Drag to select the graph area (blue box)</li>
           <li>In Graph Configuration, set axis min/max, scale, and unit, then confirm axis mapping</li>
           <li>Click inside the blue box to add data points</li>
+          <li>Right-click on a captured point to remove it</li>
           <li>Use the buttons below to adjust the box or clear points; hover to see the magnifier</li>
         </ul>
       </div>
