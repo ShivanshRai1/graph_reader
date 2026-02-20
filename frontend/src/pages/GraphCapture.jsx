@@ -121,6 +121,9 @@ const GraphCapture = () => {
   const [returnParams, setReturnParams] = useState({});
   const [returnGraphId, setReturnGraphId] = useState('');
   const [editingCurveId, setEditingCurveId] = useState('');
+  const [branchesOrder, setBranchesOrder] = useState('');
+  const [minTimeConstant, setMinTimeConstant] = useState('');
+  const [showBranchesAndTimeConstant, setShowBranchesAndTimeConstant] = useState(false);
   const [editCurveMeta, setEditCurveMeta] = useState({
     xScale: 'Linear',
     yScale: 'Linear',
@@ -235,6 +238,10 @@ const GraphCapture = () => {
     const searchParams = new URLSearchParams(window.location.search);
     const otherSymbols = searchParams.get('other_symbols') || searchParams.get('other_symb') || '';
     const symbolArray = otherSymbols ? otherSymbols.split(',').map((s) => s.trim()) : [];
+
+    // Check if branchesOrder and minTimeConstant should be shown
+    const shouldShow = symbolArray.includes('branchesOrder') || symbolArray.includes('minTimeConstant');
+    setShowBranchesAndTimeConstant(shouldShow);
 
     setSymbolNames(symbolArray);
     const initialSymbolValues = {};
@@ -648,6 +655,16 @@ const GraphCapture = () => {
       url.searchParams.append(key, value);
     });
 
+    // Add branches and time constant if they exist
+    if (branchesOrder) {
+      console.log(`Adding return_branchesOrder = ${branchesOrder}`);
+      url.searchParams.append('return_branchesOrder', branchesOrder);
+    }
+    if (minTimeConstant) {
+      console.log(`Adding return_minTimeConstant = ${minTimeConstant}`);
+      url.searchParams.append('return_minTimeConstant', minTimeConstant);
+    }
+
     // Add return_graph_id
     if (graphId) {
       console.log(`Adding return_graph_id = ${graphId}`);
@@ -826,6 +843,32 @@ const GraphCapture = () => {
                 }}
               />
 
+              {/* Show branches/time constant fields in Graph Config section if return_url is absent */}
+              {showBranchesAndTimeConstant && !urlParams.return_url && (
+                <div className="mt-4 p-4 border rounded" style={{ backgroundColor: '#ffffff', borderColor: 'var(--color-border)' }}>
+                  <label className="block mb-3 font-medium text-gray-800">
+                    <span className="block mb-1 text-sm text-gray-800">No. of branches or Order (n):</span>
+                    <input
+                      type="number"
+                      value={branchesOrder}
+                      onChange={(e) => setBranchesOrder(e.target.value)}
+                      placeholder="e.g., 4"
+                      className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white"
+                    />
+                  </label>
+                  <label className="block mb-3 font-medium text-gray-800">
+                    <span className="block mb-1 text-sm text-gray-800">Minimum time constant (optional):</span>
+                    <input
+                      type="text"
+                      value={minTimeConstant}
+                      onChange={(e) => setMinTimeConstant(e.target.value)}
+                      placeholder="Enter minimum time constant"
+                      className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white"
+                    />
+                  </label>
+                </div>
+              )}
+
               {/* Dynamic Symbol Input Boxes - Only show if other_symb exists in URL */}
               {symbolNames && symbolNames.length > 0 && (
                 <div className="mt-4 p-4 border rounded" style={{ backgroundColor: '#ffffff', borderColor: 'var(--color-border)' }}>
@@ -851,6 +894,32 @@ const GraphCapture = () => {
                       />
                     </div>
                   ))}
+                </div>
+              )}
+
+              {/* Show branches/time constant fields above button if return_url is present */}
+              {showBranchesAndTimeConstant && !!urlParams.return_url && (
+                <div className="mt-6 p-4 border rounded" style={{ backgroundColor: '#ffffff', borderColor: 'var(--color-border)' }}>
+                  <label className="block mb-3 font-medium text-gray-800">
+                    <span className="block mb-1 text-sm text-gray-800">No. of branches or Order (n):</span>
+                    <input
+                      type="number"
+                      value={branchesOrder}
+                      onChange={(e) => setBranchesOrder(e.target.value)}
+                      placeholder="e.g., 4"
+                      className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white"
+                    />
+                  </label>
+                  <label className="block mb-3 font-medium text-gray-800">
+                    <span className="block mb-1 text-sm text-gray-800">Minimum time constant (optional):</span>
+                    <input
+                      type="text"
+                      value={minTimeConstant}
+                      onChange={(e) => setMinTimeConstant(e.target.value)}
+                      placeholder="Enter minimum time constant"
+                      className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white"
+                    />
+                  </label>
                 </div>
               )}
 
