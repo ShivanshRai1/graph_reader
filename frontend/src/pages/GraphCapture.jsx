@@ -236,11 +236,21 @@ const GraphCapture = () => {
     const otherSymbols = searchParams.get('other_symbols') || searchParams.get('other_symb') || '';
     const symbolArray = otherSymbols ? otherSymbols.split(',').map((s) => s.trim()) : [];
 
-    setSymbolNames(symbolArray);
+    // Extract symbol names and pre-fill values from URL parameters (e.g., branchesOrder=5)
+    const symbolNames = [];
     const initialSymbolValues = {};
-    symbolArray.forEach((symbol) => {
-      initialSymbolValues[symbol] = '';
+    symbolArray.forEach((symbolWithPotentialValue) => {
+      if (symbolWithPotentialValue.includes('=')) {
+        const [symbolName, symbolValue] = symbolWithPotentialValue.split('=').map((s) => s.trim());
+        symbolNames.push(symbolName);
+        initialSymbolValues[symbolName] = symbolValue;
+      } else {
+        symbolNames.push(symbolWithPotentialValue);
+        initialSymbolValues[symbolWithPotentialValue] = '';
+      }
     });
+
+    setSymbolNames(symbolNames);
     setSymbolValues(initialSymbolValues);
 
     // Extract return parameters (format: return_paramName=value, excluding return_url)
