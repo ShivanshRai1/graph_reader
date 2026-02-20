@@ -120,7 +120,28 @@ const GraphCapture = () => {
   const [symbolNames, setSymbolNames] = useState([]);
   const [returnParams, setReturnParams] = useState({});
   const [returnGraphId, setReturnGraphId] = useState('');
-  const [editingCurveId, setEditingCurveId] = useState('');
+  // Helper function to convert friendly label to return parameter name
+  const convertLabelToReturnParam = (label) => {
+    // Remove content in parentheses: "No. of branches or Order (n)" → "No. of branches or Order"
+    const cleaned = label.replace(/\s*\([^)]*\)\s*/g, '').trim();
+    
+    // Split by spaces, dots, commas, hyphens
+    const words = cleaned.split(/[\s\.,\-]+/).filter((w) => w.length > 0);
+    
+    if (words.length === 0) return '';
+    
+    // Take first 3 words for the parameter name
+    const selectedWords = words.slice(0, 3);
+    
+    // Convert to PascalCase: capitalize first letter of each word
+    const paramName = selectedWords
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join('');
+    
+    return paramName;
+  };
+
+  const [symbolLabels, setSymbolLabels] = useState({});
   const [editCurveMeta, setEditCurveMeta] = useState({
     xScale: 'Linear',
     yScale: 'Linear',
@@ -236,22 +257,31 @@ const GraphCapture = () => {
     const otherSymbols = searchParams.get('other_symbols') || searchParams.get('other_symb') || '';
     const symbolArray = otherSymbols ? otherSymbols.split(',').map((s) => s.trim()) : [];
 
-    // Extract symbol names and pre-fill values from URL parameters (e.g., branchesOrder=5)
+    // Extract friendly labels and pre-fill values from URL parameters
+    // Format: "Friendly Label=value" or just "Friendly Label"
     const symbolNames = [];
     const initialSymbolValues = {};
+    const labelMap = {}; // Map from symbol name to friendly label
+    
     symbolArray.forEach((symbolWithPotentialValue) => {
       if (symbolWithPotentialValue.includes('=')) {
-        const [symbolName, symbolValue] = symbolWithPotentialValue.split('=').map((s) => s.trim());
-        symbolNames.push(symbolName);
-        initialSymbolValues[symbolName] = symbolValue;
+        const [label, symbolValue] = symbolWithPotentialValue.split('=').map((s) => s.trim());
+        const paramName = convertLabelToReturnParam(label);
+        
+        symbolNames.push(paramName);
+        initialSymbolValues[paramName] = symbolValue;
+        labelMap[paramName] = label; // Store the friendly label for display
       } else {
-        symbolNames.push(symbolWithPotentialValue);
-        initialSymbolValues[symbolWithPotentialValue] = '';
+        const paramName = convertLabelToReturnParam(symbolWithPotentialValue);
+        symbolNames.push(paramName);
+        initialSymbolValues[paramName] = '';
+        labelMap[paramName] = symbolWithPotentialValue;
       }
     });
 
     setSymbolNames(symbolNames);
     setSymbolValues(initialSymbolValues);
+    setSymbolLabels(labelMap);
 
     // Extract return parameters (format: return_paramName=value, excluding return_url)
     const returnParamsObj = {};
@@ -658,20 +688,17 @@ const GraphCapture = () => {
       url.searchParams.append(key, value);
     });
 
-    // Add branches and time constant if they exist in symbolValues
-    if (symbolValues['branchesOrder']) {
-      console.log(`Adding return_branchesOrder = ${symbolValues['branchesOrder']}`);
-      url.searchParams.append('return_branchesOrder', symbolValues['branchesOrder']);
-    }
-    if (symbolValues['minTimeConstant']) {
-      console.log(`Adding return_minTimeConstant = ${symbolValues['minTimeConstant']}`);
-      url.searchParams.append('return_minTimeConstant', symbolValues['minTimeConstant']);
-    }
+    // Add all symbol values with their return parameter names (dynamic)
+    Object.entries(symbolValues).forEach(([paramName, value]) => {
+      if (value) {
+        console.log(`Adding return_${paramName} = ${value}`);
+        url.searchParams.append(`return_${paramName}`, value);
+      }
+    });
 
     // Add return_graph_id
     if (graphId) {
       console.log(`Adding return_graph_id = ${graphId}`);
-
       url.searchParams.append('return_graph_id', graphId);
     }
 
@@ -853,21 +880,18 @@ const GraphCapture = () => {
                     Symbol Values
                   </h3>
                   {symbolNames.map((symbol) => {
-                    // Use friendly names for special fields
-                    const displayLabel = 
-                      symbol === 'branchesOrder' ? 'No. of branches or Order (n):' :
-                      symbol === 'minTimeConstant' ? 'Minimum time constant (optional):' :
-                      symbol;
+                    // Use the friendly label stored in symbolLabels map
+                    const displayLabel = symbolLabels[symbol] || symbol;
                     return (
                     <div key={symbol} className="mb-3">
                       <label className="block mb-1 text-sm font-medium" style={{ color: '#213547' }}>
                         {displayLabel}
                       </label>
                       <input
-                        type={symbol === 'branchesOrder' ? 'number' : 'text'}
+                        type="text"
                         value={symbolValues[symbol] || ''}
                         onChange={(e) => setSymbolValues({ ...symbolValues, [symbol]: e.target.value })}
-                        placeholder={symbol === 'branchesOrder' ? 'e.g., 4' : `Enter value for ${symbol}`}
+                        placeholder={`Enter value for ${displayLabel}`}
                         className="w-full px-3 py-2 border rounded text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-200"
                         style={{
                           color: '#213547',
