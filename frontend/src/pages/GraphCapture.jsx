@@ -876,9 +876,6 @@ const GraphCapture = () => {
               {/* Dynamic Symbol Input Boxes - Only show if other_symb exists in URL */}
               {symbolNames && symbolNames.length > 0 && (
                 <div className="mt-4 p-4 border rounded" style={{ backgroundColor: '#ffffff', borderColor: 'var(--color-border)' }}>
-                  <h3 className="mb-3 text-sm font-semibold" style={{ color: '#213547' }}>
-                    Symbol Values
-                  </h3>
                   {symbolNames.map((symbol) => {
                     // Use the friendly label stored in symbolLabels map
                     const displayLabel = symbolLabels[symbol] || symbol;
