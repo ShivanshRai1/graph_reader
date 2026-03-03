@@ -120,6 +120,7 @@ const GraphCapture = () => {
   const [symbolNames, setSymbolNames] = useState([]);
   const [returnParams, setReturnParams] = useState({});
   const [returnGraphId, setReturnGraphId] = useState('');
+  const [editingCurveId, setEditingCurveId] = useState('');
   // Helper function to convert friendly label to return parameter name
   const convertLabelToReturnParam = (label) => {
     // Remove content in parentheses: "No. of branches or Order (n)" → "No. of branches or Order"
