@@ -151,6 +151,8 @@ const GraphCapture = () => {
   // State for axis confirmation and freezing (Issue 5 & 7)
   const [isAxisMappingConfirmed, setIsAxisMappingConfirmed] = useState(false);
   const [frozenGraphConfig, setFrozenGraphConfig] = useState(null);
+  const [showReturnDecisionModal, setShowReturnDecisionModal] = useState(false);
+  const [pendingReturnUrl, setPendingReturnUrl] = useState('');
 
   const selectedCurve = savedCurves.find((curve) => curve.id === selectedCurveId);
   const groupedCurves = useMemo(() => {
@@ -493,6 +495,19 @@ const GraphCapture = () => {
     await saveCurveToBackend({ allowRedirect: false });
   };
 
+  const handleCaptureAnotherCurve = () => {
+    setShowReturnDecisionModal(false);
+    setPendingReturnUrl('');
+  };
+
+  const handleReturnNow = () => {
+    if (pendingReturnUrl) {
+      window.location.href = pendingReturnUrl;
+      return;
+    }
+    setShowReturnDecisionModal(false);
+  };
+
   const sendToCompanyDatabase = async (graphImageUrl, graphId, allowRedirect) => {
     // ============================================================
     // TESTING MODE: Set to false to skip actual API call
@@ -584,8 +599,9 @@ const GraphCapture = () => {
         // Simulate successful response for testing redirect
         if (allowRedirect && urlParams.return_url) {
           const returnUrl = constructReturnUrl(urlParams.return_url, graphId);
-          console.log('Redirecting to:', returnUrl);
-          window.location.href = returnUrl;
+          console.log('Return URL found. Showing decision modal:', returnUrl);
+          setPendingReturnUrl(returnUrl);
+          setShowReturnDecisionModal(true);
         } else {
           alert('Data saved to local backend successfully! (API call skipped for testing)');
         }
@@ -645,8 +661,9 @@ const GraphCapture = () => {
         console.log('Return URL found, constructing redirect...');
         const returnUrl = constructReturnUrl(urlParams.return_url, companyGraphId);
         console.log('Final redirect URL:', returnUrl);
-        console.log('Redirecting now...');
-        window.location.href = returnUrl;
+        console.log('Showing decision modal for capture another vs return.');
+        setPendingReturnUrl(returnUrl);
+        setShowReturnDecisionModal(true);
       } else if (allowRedirect && urlParams.return_url && !companyGraphId) {
         alert('Company graph ID missing. Saved locally, but cannot redirect without a company graph ID.');
       } else {
@@ -1141,6 +1158,58 @@ const GraphCapture = () => {
           </div>
         )}
       </div>
+
+      {showReturnDecisionModal && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            background: 'rgba(0,0,0,0.35)',
+            zIndex: 1100,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+          onClick={handleCaptureAnotherCurve}
+        >
+          <div
+            style={{
+              background: '#fff',
+              color: '#213547',
+              borderRadius: 8,
+              minWidth: 420,
+              maxWidth: 520,
+              boxShadow: '0 4px 32px rgba(0,0,0,0.18)',
+              padding: 20,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="font-semibold mb-2" style={{ color: '#213547', fontSize: 18 }}>
+              Curve saved successfully
+            </div>
+            <div className="text-sm mb-4" style={{ color: '#4b5563' }}>
+              Do you want to capture another curve?
+            </div>
+            <div className="flex gap-3 justify-end">
+              <button
+                className="px-4 py-2 rounded bg-blue-600 text-white font-medium"
+                onClick={handleCaptureAnotherCurve}
+              >
+                Yes, capture another
+              </button>
+              <button
+                className="px-4 py-2 rounded bg-gray-800 text-white font-medium"
+                onClick={handleReturnNow}
+              >
+                No, return now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {selectedCurve && (
         <div
