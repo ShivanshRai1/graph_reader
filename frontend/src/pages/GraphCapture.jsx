@@ -498,7 +498,6 @@ const GraphCapture = () => {
 
   const handleCaptureAnotherCurve = () => {
     setShowReturnDecisionModal(false);
-    setPendingReturnUrl('');
   };
 
   const handleReturnNow = () => {
@@ -949,6 +948,15 @@ const GraphCapture = () => {
                     Save Data Points
                   </button>
                 )}
+                {!!urlParams.return_url && !!pendingReturnUrl ? (
+                  <button
+                    onClick={handleReturnNow}
+                    className="px-4 py-2 rounded bg-gray-800 text-white font-medium disabled:opacity-50"
+                    disabled={isSaving}
+                  >
+                    Return to Original Page
+                  </button>
+                ) : null}
                 {isSaving ? (
                   <span className="text-sm" style={{ color: '#6b7280' }}>
                     Processing...
