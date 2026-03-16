@@ -851,11 +851,17 @@ const GraphCapture = () => {
         curve_title: urlParams.curve_title || graphConfig.curveName || '',
         xy: xyPoints.map((point) => `{x:${point.x},y:${point.y}}`).join(','),
         tctj: tctjValue,
+        df_tj: tctjValue,
         xscale: graphConfig.xScale || '1',
         yscale: graphConfig.yScale || '1',
         xunit: graphConfig.xUnitPrefix || '1',
         yunit: graphConfig.yUnitPrefix || '1',
       };
+
+      const tctjTitle =
+        symbolLabels.graph_tctj ||
+        symbolLabels.tctj ||
+        (symbolNames.length > 0 ? symbolNames[0] : '');
 
       // Build the JSON payload for company's API
       // Always use a unique identifier for each save to ensure a new graph is created
@@ -869,6 +875,7 @@ const GraphCapture = () => {
           graph_title: urlParams.graph_title || '',
           x_title: urlParams.x_label || '',
           y_title: urlParams.y_label || '',
+          tctj_title: tctjTitle,
           graph_img: graphImageUrl || '',
           mark_review: '1',
           testuser_id: urlParams.testuser_id || '',
