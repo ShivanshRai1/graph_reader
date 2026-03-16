@@ -115,6 +115,7 @@ const GraphCapture = () => {
     testuser_id: '',
     tctj: '',
     return_url: '',
+    graph_id: '',
   });
   const [symbolValues, setSymbolValues] = useState({});
   const [symbolNames, setSymbolNames] = useState([]);
@@ -317,6 +318,7 @@ const GraphCapture = () => {
       testuser_id: searchParams.get('testuser_id') || '',
       tctj: tctjValue,
       return_url: searchParams.get('return_url') || '',
+      graph_id: searchParams.get('graph_id') || '',
     });
 
     // Auto-populate graphConfig with URL parameters
@@ -328,6 +330,63 @@ const GraphCapture = () => {
       temperature: tctjValue && tctjValue !== '0' ? tctjValue : prevConfig.temperature,
     }));
   }, []);
+
+  const parseXyString = (xy) => {
+    if (!xy) return [];
+    const points = [];
+    const matches = [...xy.matchAll(/\{x:([^,}]+),y:([^}]+)\}/g)];
+    matches.forEach((match) => {
+      const x = parseFloat(match[1]);
+      const y = parseFloat(match[2]);
+      if (Number.isFinite(x) && Number.isFinite(y)) {
+        points.push({ x_value: x, y_value: y });
+      }
+    });
+    return points;
+  };
+
+  useEffect(() => {
+    if (!urlParams.graph_id) return;
+    const fetchGraphById = async () => {
+      try {
+        const response = await fetch(
+          `https://www.discoveree.io/graph_capture_api.php?graph_id=${encodeURIComponent(urlParams.graph_id)}`
+        );
+        if (!response.ok) return;
+        const result = await response.json();
+        if (result.status !== 'success' || !Array.isArray(result.graphs) || result.graphs.length === 0) return;
+        const fetched = result.graphs.flatMap((graph) => {
+          const details = Array.isArray(graph.details) ? graph.details : [];
+          const graphImageUrl = graph.graph_img || '';
+          const graphGroupId = buildGraphGroupId(graphImageUrl || String(graph.graph_id));
+          return details.map((detail, i) => ({
+            id: `${graph.graph_id}_${i}`,
+            discoveree_cat_id: graph.graph_id,
+            name: detail.curve_title || graph.graph_title || `Curve ${i + 1}`,
+            points: parseXyString(detail.xy),
+            config: {
+              graphTitle: graph.graph_title || '',
+              curveName: detail.curve_title || '',
+              xScale: detail.xscale || 'Linear',
+              yScale: detail.yscale || 'Linear',
+              xUnitPrefix: detail.xunit || '1',
+              yUnitPrefix: detail.yunit || '1',
+              xMin: '', xMax: '', yMin: '', yMax: '',
+              temperature: detail.tctj || '',
+            },
+            graphGroupId,
+            graphImageUrl,
+          }));
+        });
+        if (fetched.length > 0) {
+          setSavedCurves(fetched);
+        }
+      } catch {
+        // silently fail — tool remains usable
+      }
+    };
+    fetchGraphById();
+  }, [urlParams.graph_id]);
 
   const saveCurveToBackend = async ({ allowRedirect }) => {
     console.log('=== SAVE CURVE STARTED ===');
@@ -466,6 +525,10 @@ const GraphCapture = () => {
       ]);
 
       clearDataPoints();
+      setGraphConfig((prevConfig) => ({
+        ...prevConfig,
+        curveName: '',
+      }));
       setIsReadOnly(false);
       setIsSaving(false);
       return result.id;
@@ -501,8 +564,9 @@ const GraphCapture = () => {
   };
 
   const handleReturnNow = () => {
-    if (pendingReturnUrl) {
-      window.location.href = pendingReturnUrl;
+    const target = pendingReturnUrl || urlParams.return_url;
+    if (target) {
+      window.location.href = target;
       return;
     }
     setShowReturnDecisionModal(false);
@@ -872,7 +936,7 @@ const GraphCapture = () => {
         {!!urlParams.return_url && (
           <button
             onClick={handleCancelAndReturn}
-            className="px-4 py-2 rounded bg-gray-800 text-white font-medium"
+            className="px-4 py-2 rounded bg-red-600 text-white font-medium"
           >
             Cancel and Return
           </button>
@@ -951,7 +1015,7 @@ const GraphCapture = () => {
                     className="px-4 py-2 rounded bg-blue-600 text-white font-medium disabled:opacity-50"
                     disabled={isSaving}
                   >
-                    Submit and Return
+                    Submit
                   </button>
                 ) : (
                   <button
@@ -962,10 +1026,10 @@ const GraphCapture = () => {
                     Save Data Points
                   </button>
                 )}
-                {!!urlParams.return_url && !!pendingReturnUrl ? (
+                {!!urlParams.return_url ? (
                   <button
                     onClick={handleReturnNow}
-                    className="px-4 py-2 rounded bg-gray-800 text-white font-medium disabled:opacity-50"
+                    className="px-4 py-2 rounded bg-blue-600 text-white font-medium disabled:opacity-50"
                     disabled={isSaving}
                   >
                     Return to Original Page
