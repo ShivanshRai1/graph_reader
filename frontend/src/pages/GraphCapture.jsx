@@ -1403,14 +1403,99 @@ const GraphCapture = () => {
                           X unit: {curve.config?.xUnitPrefix || curve.x_unit || '-'} | Y unit: {curve.config?.yUnitPrefix || curve.y_unit || '-'}<br />
                           X scale: {curve.config?.xScale || curve.x_scale || '-'} | Y scale: {curve.config?.yScale || curve.y_scale || '-'}
                         </div>
-                        <div className="flex gap-2 mt-2">
-                          <button
-                            className="px-3 py-1 rounded bg-blue-600 text-white text-xs"
-                            onClick={() => setSelectedCurveId(curve.id)}
-                          >
-                            View
-                          </button>
-                        </div>
+                        {editingCurveId === curve.id ? (
+                          <div className="mt-2">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              <label className="text-xs text-gray-700">
+                                Y Scale
+                                <select
+                                  className="w-full mt-1 px-2 py-1 border border-gray-300 rounded text-xs"
+                                  value={editCurveMeta.yScale}
+                                  onChange={(e) => setEditCurveMeta({ ...editCurveMeta, yScale: e.target.value })}
+                                >
+                                  <option value="Linear">Linear</option>
+                                  <option value="Logarithmic">Logarithmic</option>
+                                </select>
+                              </label>
+                              <label className="text-xs text-gray-700">
+                                Y Unit
+                                <select
+                                  className="w-full mt-1 px-2 py-1 border border-gray-300 rounded text-xs"
+                                  value={editCurveMeta.yUnitPrefix}
+                                  onChange={(e) => setEditCurveMeta({ ...editCurveMeta, yUnitPrefix: e.target.value })}
+                                >
+                                  {unitOptions.map((option) => (
+                                    <option key={option.value} value={option.value}>
+                                      {option.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                              <label className="text-xs text-gray-700">
+                                X Scale
+                                <select
+                                  className="w-full mt-1 px-2 py-1 border border-gray-300 rounded text-xs"
+                                  value={editCurveMeta.xScale}
+                                  onChange={(e) => setEditCurveMeta({ ...editCurveMeta, xScale: e.target.value })}
+                                >
+                                  <option value="Linear">Linear</option>
+                                  <option value="Logarithmic">Logarithmic</option>
+                                </select>
+                              </label>
+                              <label className="text-xs text-gray-700">
+                                X Unit
+                                <select
+                                  className="w-full mt-1 px-2 py-1 border border-gray-300 rounded text-xs"
+                                  value={editCurveMeta.xUnitPrefix}
+                                  onChange={(e) => setEditCurveMeta({ ...editCurveMeta, xUnitPrefix: e.target.value })}
+                                >
+                                  {unitOptions.map((option) => (
+                                    <option key={option.value} value={option.value}>
+                                      {option.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                            </div>
+                            <div className="flex gap-2 mt-3">
+                              <button
+                                className="px-3 py-1 rounded bg-green-600 text-white text-xs"
+                                onClick={() => handleEditCurveUpdate(curve.id)}
+                              >
+                                Update Data
+                              </button>
+                              <button
+                                className="px-3 py-1 rounded bg-gray-700 text-white text-xs"
+                                onClick={handleEditCurveCancel}
+                              >
+                                Cancel Edit
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex gap-2 mt-2">
+                            <button
+                              className="px-3 py-1 rounded bg-blue-600 text-white text-xs"
+                              onClick={() => setSelectedCurveId(curve.id)}
+                            >
+                              View
+                            </button>
+                            <button
+                              className="px-3 py-1 rounded bg-red-600 text-white text-xs"
+                              onClick={() => {
+                                setSavedCurves((prev) => prev.filter((c) => c.id !== curve.id));
+                              }}
+                            >
+                              Remove
+                            </button>
+                            <button
+                              className="px-3 py-1 rounded bg-yellow-500 text-white text-xs"
+                              onClick={() => handleEditCurveStart(curve)}
+                            >
+                              Edit
+                            </button>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
