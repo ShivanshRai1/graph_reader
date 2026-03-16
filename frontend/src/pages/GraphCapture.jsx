@@ -1029,7 +1029,8 @@ const GraphCapture = () => {
                 {!!urlParams.return_url ? (
                   <button
                     onClick={handleReturnNow}
-                    className="px-4 py-2 rounded bg-blue-600 text-white font-medium disabled:opacity-50"
+                    className="px-4 py-2 rounded bg-blue-600 text-white font-medium border-none shadow-none disabled:opacity-50"
+                    style={{ backgroundColor: '#2563eb' }}
                     disabled={isSaving}
                   >
                     Return to Original Page
