@@ -101,6 +101,11 @@ const GraphCapture = () => {
   const [isLoadingSavedCurve, setIsLoadingSavedCurve] = useState(false);
   const [savedCurvesSource, setSavedCurvesSource] = useState('company');
   const [showSavedPanel, setShowSavedPanel] = useState(false);
+  const [requestedGraphId, setRequestedGraphId] = useState('');
+  const [graphLoadStatus, setGraphLoadStatus] = useState('idle');
+  const [graphLoadSource, setGraphLoadSource] = useState('');
+  const [graphLoadMessage, setGraphLoadMessage] = useState('');
+  const [graphLoadAttempt, setGraphLoadAttempt] = useState(0);
   const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
   const [urlParams, setUrlParams] = useState({
     partno: '',
@@ -345,15 +350,34 @@ const GraphCapture = () => {
     return points;
   };
 
+  const handleRetryGraphLoad = () => {
+    setGraphLoadAttempt((prev) => prev + 1);
+  };
+
+  const handleBackAfterGraphLoadError = () => {
+    if (urlParams.return_url) {
+      window.location.href = urlParams.return_url;
+      return;
+    }
+    window.history.back();
+  };
+
   useEffect(() => {
     // Parse graph_id directly from URL to avoid timing issues with state
     const searchParams = new URLSearchParams(window.location.search);
     const graphId = searchParams.get('graph_id');
+    setRequestedGraphId(graphId || '');
     
     if (!graphId) {
       console.log('[DEBUG] No graph_id in URL params, skipping fetch');
+      setGraphLoadStatus('idle');
+      setGraphLoadSource('');
+      setGraphLoadMessage('');
       return;
     }
+    setGraphLoadStatus('loading');
+    setGraphLoadSource('');
+    setGraphLoadMessage('Loading graph from DiscoverEE...');
     console.log('[DEBUG] Fetching graph_id:', graphId);
     const fetchGraphById = async () => {
       try {
@@ -407,6 +431,9 @@ const GraphCapture = () => {
             if (fetched.length > 0) {
               console.log('[DEBUG] Setting savedCurves...');
               setSavedCurves(fetched);
+              setGraphLoadStatus('success');
+              setGraphLoadSource('DiscoverEE API');
+              setGraphLoadMessage(`Loaded graph ${graphId} from DiscoverEE.`);
               return;
             }
           }
@@ -447,15 +474,22 @@ const GraphCapture = () => {
           };
           console.log('[DEBUG] Setting savedCurves from Netlify...');
           setSavedCurves([savedCurve]);
+          setGraphLoadStatus('success');
+          setGraphLoadSource('Netlify backend fallback');
+          setGraphLoadMessage(`Loaded graph ${graphId} from Netlify backend.`);
         } else {
           console.log('[DEBUG] Netlify also failed');
+          setGraphLoadStatus('error');
+          setGraphLoadMessage(`Graph ${graphId} was not found in DiscoverEE or Netlify backend.`);
         }
       } catch (error) {
         console.error('[DEBUG] Error in fetchGraphById:', error);
+        setGraphLoadStatus('error');
+        setGraphLoadMessage(`Unable to load graph ${graphId}. Please retry.`);
       }
     };
     fetchGraphById();
-  }, []); // Run once on mount - graphId is parsed from URL directly
+  }, [graphLoadAttempt]); // graphId is parsed from URL directly; retry increments attempt
 
   const saveCurveToBackend = async ({ allowRedirect }) => {
     console.log('=== SAVE CURVE STARTED ===');
@@ -1012,6 +1046,50 @@ const GraphCapture = () => {
         )}
         {/* <p className="text-gray-600">Upload graph images and extract data points easily</p> */}
       </header>
+
+      {requestedGraphId ? (
+        <div
+          className="mb-4 p-3 rounded border flex flex-wrap items-center gap-3"
+          style={{
+            backgroundColor:
+              graphLoadStatus === 'error' ? '#fef2f2' : graphLoadStatus === 'success' ? '#ecfdf5' : '#eff6ff',
+            borderColor:
+              graphLoadStatus === 'error' ? '#fecaca' : graphLoadStatus === 'success' ? '#bbf7d0' : '#bfdbfe',
+            color: '#1f2937',
+          }}
+        >
+          <span className="text-sm font-medium">
+            {graphLoadStatus === 'loading'
+              ? `Loading graph ${requestedGraphId}...`
+              : graphLoadStatus === 'success'
+                ? graphLoadMessage
+                : graphLoadStatus === 'error'
+                  ? graphLoadMessage
+                  : `Graph ID requested: ${requestedGraphId}`}
+          </span>
+          {graphLoadSource ? (
+            <span className="text-xs px-2 py-1 rounded" style={{ backgroundColor: '#ffffff', border: '1px solid #d1d5db' }}>
+              Source: {graphLoadSource}
+            </span>
+          ) : null}
+          {graphLoadStatus === 'error' ? (
+            <button
+              onClick={handleRetryGraphLoad}
+              className="px-3 py-1 rounded bg-blue-600 text-white text-xs"
+            >
+              Retry
+            </button>
+          ) : null}
+          {graphLoadStatus === 'error' ? (
+            <button
+              onClick={handleBackAfterGraphLoadError}
+              className="px-3 py-1 rounded bg-gray-700 text-white text-xs"
+            >
+              Back
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="flex flex-col gap-8">
         <ImageUpload />
