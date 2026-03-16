@@ -349,44 +349,79 @@ const GraphCapture = () => {
     if (!urlParams.graph_id) return;
     const fetchGraphById = async () => {
       try {
-        const response = await fetch(
+        // Try DiscovereE API first
+        const discovereeResponse = await fetch(
           `https://www.discoveree.io/graph_capture_api.php?graph_id=${encodeURIComponent(urlParams.graph_id)}`
         );
-        if (!response.ok) return;
-        const result = await response.json();
-        if (result.status !== 'success' || !Array.isArray(result.graphs) || result.graphs.length === 0) return;
-        const fetched = result.graphs.flatMap((graph) => {
-          const details = Array.isArray(graph.details) ? graph.details : [];
-          const graphImageUrl = graph.graph_img || '';
-          const graphGroupId = buildGraphGroupId(graphImageUrl || String(graph.graph_id));
-          return details.map((detail, i) => ({
-            id: `${graph.graph_id}_${i}`,
-            discoveree_cat_id: graph.graph_id,
-            name: detail.curve_title || graph.graph_title || `Curve ${i + 1}`,
-            points: parseXyString(detail.xy),
+        if (discovereeResponse.ok) {
+          const result = await discovereeResponse.json();
+          if (result.status === 'success' && Array.isArray(result.graphs) && result.graphs.length > 0) {
+            const fetched = result.graphs.flatMap((graph) => {
+              const details = Array.isArray(graph.details) ? graph.details : [];
+              const graphImageUrl = graph.graph_img || '';
+              const graphGroupId = buildGraphGroupId(graphImageUrl || String(graph.graph_id));
+              return details.map((detail, i) => ({
+                id: `${graph.graph_id}_${i}`,
+                discoveree_cat_id: graph.graph_id,
+                name: detail.curve_title || graph.graph_title || `Curve ${i + 1}`,
+                points: parseXyString(detail.xy),
+                config: {
+                  graphTitle: graph.graph_title || '',
+                  curveName: detail.curve_title || '',
+                  xScale: detail.xscale || 'Linear',
+                  yScale: detail.yscale || 'Linear',
+                  xUnitPrefix: detail.xunit || '1',
+                  yUnitPrefix: detail.yunit || '1',
+                  xMin: '', xMax: '', yMin: '', yMax: '',
+                  temperature: detail.tctj || '',
+                },
+                graphGroupId,
+                graphImageUrl,
+              }));
+            });
+            if (fetched.length > 0) {
+              setSavedCurves(fetched);
+              return; // Success, exit
+            }
+          }
+        }
+
+        // Fallback: Try local backend (Netlify)
+        const localResponse = await fetch(`${apiUrl}/api/curves/${urlParams.graph_id}`);
+        if (localResponse.ok) {
+          const curve = await localResponse.json();
+          const graphGroupId = buildGraphGroupId('');
+          const savedCurve = {
+            id: curve.id,
+            discoveree_cat_id: curve.discoveree_cat_id || null,
+            name: curve.curve_name || `Curve ${curve.id}`,
+            points: Array.isArray(curve.data_points)
+              ? curve.data_points.map((pt) => ({ x_value: pt.x_value, y_value: pt.y_value }))
+              : [],
             config: {
-              graphTitle: graph.graph_title || '',
-              curveName: detail.curve_title || '',
-              xScale: detail.xscale || 'Linear',
-              yScale: detail.yscale || 'Linear',
-              xUnitPrefix: detail.xunit || '1',
-              yUnitPrefix: detail.yunit || '1',
-              xMin: '', xMax: '', yMin: '', yMax: '',
-              temperature: detail.tctj || '',
+              graphTitle: curve.graph_title || '',
+              curveName: curve.curve_name || '',
+              xScale: curve.x_scale || 'Linear',
+              yScale: curve.y_scale || 'Linear',
+              xUnitPrefix: curve.x_unit || '1',
+              yUnitPrefix: curve.y_unit || '1',
+              xMin: curve.x_min ? String(curve.x_min) : '',
+              xMax: curve.x_max ? String(curve.x_max) : '',
+              yMin: curve.y_min ? String(curve.y_min) : '',
+              yMax: curve.y_max ? String(curve.y_max) : '',
+              temperature: curve.temperature || '',
             },
             graphGroupId,
-            graphImageUrl,
-          }));
-        });
-        if (fetched.length > 0) {
-          setSavedCurves(fetched);
+            graphImageUrl: '',
+          };
+          setSavedCurves([savedCurve]);
         }
       } catch {
         // silently fail — tool remains usable
       }
     };
     fetchGraphById();
-  }, [urlParams.graph_id]);
+  }, [urlParams.graph_id, apiUrl]);
 
   const saveCurveToBackend = async ({ allowRedirect }) => {
     console.log('=== SAVE CURVE STARTED ===');
