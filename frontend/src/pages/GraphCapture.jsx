@@ -386,8 +386,9 @@ const GraphCapture = () => {
           }
         }
 
-        // Fallback: Try local backend (Netlify)
-        const localResponse = await fetch(`${apiUrl}/api/curves/${urlParams.graph_id}`);
+        // Fallback: Try Netlify deployed backend (same domain)
+        const netlifyBackendUrl = `${window.location.origin}/api/curves/${urlParams.graph_id}`;
+        const localResponse = await fetch(netlifyBackendUrl);
         if (localResponse.ok) {
           const curve = await localResponse.json();
           const graphGroupId = buildGraphGroupId('');
