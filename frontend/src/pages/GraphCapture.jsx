@@ -125,8 +125,14 @@ const GraphCapture = () => {
   const [editingCurveId, setEditingCurveId] = useState('');
   // Helper function to convert friendly label to return parameter name
   const convertLabelToReturnParam = (label) => {
+    const trimmed = (label || '').trim();
+    // Keep already-safe parameter names unchanged (e.g. graph_tctj)
+    if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(trimmed)) {
+      return trimmed;
+    }
+
     // Remove content in parentheses: "No. of branches or Order (n)" → "No. of branches or Order"
-    const cleaned = label.replace(/\s*\([^)]*\)\s*/g, '').trim();
+    const cleaned = trimmed.replace(/\s*\([^)]*\)\s*/g, '').trim();
     
     // Split by spaces, dots, commas, hyphens
     const words = cleaned.split(/[\s\.,\-]+/).filter((w) => w.length > 0);
@@ -151,6 +157,7 @@ const GraphCapture = () => {
     xUnitPrefix: '1',
     yUnitPrefix: '1',
   });
+  const [editCurveSymbolValues, setEditCurveSymbolValues] = useState({});
   // State for axis confirmation and freezing (Issue 5 & 7)
   const [isAxisMappingConfirmed, setIsAxisMappingConfirmed] = useState(false);
   const [frozenGraphConfig, setFrozenGraphConfig] = useState(null);
@@ -191,6 +198,34 @@ const GraphCapture = () => {
     { value: '1e12', label: 'Tera (T) = 1e12' },
   ];
 
+  const normalizeCurveSymbolValues = (curve) => {
+    if (curve?.symbolValues && typeof curve.symbolValues === 'object') {
+      return { ...curve.symbolValues };
+    }
+
+    const rawTctj = curve?.config?.temperature ?? curve?.temperature ?? curve?.tctj;
+    if (rawTctj && typeof rawTctj === 'object' && !Array.isArray(rawTctj)) {
+      return { ...rawTctj };
+    }
+
+    if (rawTctj !== undefined && rawTctj !== null && rawTctj !== '') {
+      if (symbolNames.length === 1) {
+        return { [symbolNames[0]]: String(rawTctj) };
+      }
+      return { tctj: String(rawTctj) };
+    }
+
+    return { ...symbolValues };
+  };
+
+  const handleViewCurve = (curve) => {
+    setSelectedCurveId(curve.id);
+    const curveSymbols = normalizeCurveSymbolValues(curve);
+    if (Object.keys(curveSymbols).length > 0) {
+      setSymbolValues((prev) => ({ ...prev, ...curveSymbols }));
+    }
+  };
+
   const handleEditCurveStart = (curve) => {
     setEditingCurveId(curve.id);
     setEditCurveMeta({
@@ -199,10 +234,12 @@ const GraphCapture = () => {
       xUnitPrefix: curve.config?.xUnitPrefix || curve.x_unit || '1',
       yUnitPrefix: curve.config?.yUnitPrefix || curve.y_unit || '1',
     });
+    setEditCurveSymbolValues(normalizeCurveSymbolValues(curve));
   };
 
   const handleEditCurveCancel = () => {
     setEditingCurveId('');
+    setEditCurveSymbolValues({});
   };
 
   const handleEditCurveUpdate = (curveId) => {
@@ -218,6 +255,7 @@ const GraphCapture = () => {
             xUnitPrefix: editCurveMeta.xUnitPrefix,
             yUnitPrefix: editCurveMeta.yUnitPrefix,
           },
+          symbolValues: { ...editCurveSymbolValues },
           x_scale: editCurveMeta.xScale,
           y_scale: editCurveMeta.yScale,
           x_unit: editCurveMeta.xUnitPrefix,
@@ -226,6 +264,7 @@ const GraphCapture = () => {
       })
     );
     setEditingCurveId('');
+    setEditCurveSymbolValues({});
   };
 
   const normalizeCurveConfig = (curve) => ({
@@ -279,7 +318,10 @@ const GraphCapture = () => {
       } else {
         const paramName = convertLabelToReturnParam(symbolWithPotentialValue);
         symbolNames.push(paramName);
-        initialSymbolValues[paramName] = '';
+        initialSymbolValues[paramName] =
+          searchParams.get(paramName) ||
+          searchParams.get(`return_${paramName}`) ||
+          '';
         labelMap[paramName] = symbolWithPotentialValue;
       }
     });
@@ -381,12 +423,21 @@ const GraphCapture = () => {
             const graphGroupId = buildGraphGroupId(graphImageUrl || String(discovereeGraph.graph_id));
             const fetched = discovereeDetails.map((detail, i) => {
               const points = parseXyString(detail.xy);
+              const detailSymbolValues =
+                detail.tctj && typeof detail.tctj === 'object' && !Array.isArray(detail.tctj)
+                  ? detail.tctj
+                  : detail.tctj !== undefined && detail.tctj !== null && detail.tctj !== ''
+                    ? symbolNames.length === 1
+                      ? { [symbolNames[0]]: String(detail.tctj) }
+                      : { tctj: String(detail.tctj) }
+                    : {};
               console.log('[DEBUG] Parsed detail', i, 'xy:', detail.xy, 'points count:', points.length);
               return {
                 id: `${discovereeGraph.graph_id}_${detail.id || i}`,
                 discoveree_cat_id: discovereeGraph.graph_id,
                 name: detail.curve_title || discovereeGraph.graph_title || `Curve ${i + 1}`,
                 points,
+                symbolValues: detailSymbolValues,
                 config: {
                   graphTitle: discovereeGraph.graph_title || '',
                   curveName: detail.curve_title || '',
@@ -430,6 +481,7 @@ const GraphCapture = () => {
             points: Array.isArray(curve.data_points)
               ? curve.data_points.map((pt) => ({ x_value: pt.x_value, y_value: pt.y_value }))
               : [],
+            symbolValues: {},
             config: {
               graphTitle: curve.graph_title || '',
               curveName: curve.curve_name || '',
@@ -629,6 +681,7 @@ const GraphCapture = () => {
         discoveree_cat_id: companyGraphId,
         name: payload.curve_name,
         points: payload.data_points,
+        symbolValues: { ...symbolValues },
         config: { ...graphConfig },
         graphGroupId,
         graphImageUrl,
@@ -916,7 +969,12 @@ const GraphCapture = () => {
 
     // Add all symbol values with their return parameter names (dynamic)
     // Only add if the value is not just the friendly label
-    Object.entries(symbolValues).forEach(([paramName, value]) => {
+    const activeSymbolValues =
+      selectedCurve?.symbolValues && Object.keys(selectedCurve.symbolValues).length > 0
+        ? selectedCurve.symbolValues
+        : symbolValues;
+
+    Object.entries(activeSymbolValues).forEach(([paramName, value]) => {
       const friendlyLabel = symbolLabels[paramName];
       // Only add if value exists and is not the friendly label itself
       if (value && value !== friendlyLabel) {
@@ -1276,6 +1334,29 @@ const GraphCapture = () => {
                                       </select>
                                     </label>
                                   </div>
+                                  {symbolNames && symbolNames.length > 0 ? (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+                                      {symbolNames.map((symbol) => {
+                                        const displayLabel = symbolLabels[symbol] || symbol;
+                                        return (
+                                          <label key={`${curve.id}_${symbol}`} className="text-xs text-gray-700">
+                                            {displayLabel}
+                                            <input
+                                              type="text"
+                                              className="w-full mt-1 px-2 py-1 border border-gray-300 rounded text-xs"
+                                              value={editCurveSymbolValues[symbol] || ''}
+                                              onChange={(e) =>
+                                                setEditCurveSymbolValues({
+                                                  ...editCurveSymbolValues,
+                                                  [symbol]: e.target.value,
+                                                })
+                                              }
+                                            />
+                                          </label>
+                                        );
+                                      })}
+                                    </div>
+                                  ) : null}
                                   <div className="flex gap-2 mt-3">
                                     <button
                                       className="px-3 py-1 rounded bg-green-600 text-white text-xs"
@@ -1295,7 +1376,7 @@ const GraphCapture = () => {
                                 <div className="flex gap-2 mt-2">
                                   <button
                                     className="px-3 py-1 rounded bg-blue-600 text-white text-xs"
-                                    onClick={() => setSelectedCurveId(curve.id)}
+                                    onClick={() => handleViewCurve(curve)}
                                   >
                                     View
                                   </button>
@@ -1478,6 +1559,29 @@ const GraphCapture = () => {
                                 </select>
                               </label>
                             </div>
+                            {symbolNames && symbolNames.length > 0 ? (
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+                                {symbolNames.map((symbol) => {
+                                  const displayLabel = symbolLabels[symbol] || symbol;
+                                  return (
+                                    <label key={`${curve.id}_${symbol}`} className="text-xs text-gray-700">
+                                      {displayLabel}
+                                      <input
+                                        type="text"
+                                        className="w-full mt-1 px-2 py-1 border border-gray-300 rounded text-xs"
+                                        value={editCurveSymbolValues[symbol] || ''}
+                                        onChange={(e) =>
+                                          setEditCurveSymbolValues({
+                                            ...editCurveSymbolValues,
+                                            [symbol]: e.target.value,
+                                          })
+                                        }
+                                      />
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            ) : null}
                             <div className="flex gap-2 mt-3">
                               <button
                                 className="px-3 py-1 rounded bg-green-600 text-white text-xs"
@@ -1497,7 +1601,7 @@ const GraphCapture = () => {
                           <div className="flex gap-2 mt-2">
                             <button
                               className="px-3 py-1 rounded bg-blue-600 text-white text-xs"
-                              onClick={() => setSelectedCurveId(curve.id)}
+                              onClick={() => handleViewCurve(curve)}
                             >
                               View
                             </button>
