@@ -457,6 +457,24 @@ const GraphCapture = () => {
     fetchGraphById();
   }, []); // graphId is parsed from URL directly
 
+  // Auto-open first curve in edit mode when graph_id loads data
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    const graphId = searchParams.get('graph_id');
+    
+    if (graphId && savedCurves.length > 0 && !editingCurveId) {
+      const firstCurve = savedCurves[0];
+      console.log('[DEBUG] Auto-opening first curve in edit mode:', firstCurve.id);
+      setEditingCurveId(firstCurve.id);
+      setEditCurveMeta({
+        xScale: firstCurve.config?.xScale || firstCurve.x_scale || 'Linear',
+        yScale: firstCurve.config?.yScale || firstCurve.y_scale || 'Linear',
+        xUnitPrefix: firstCurve.config?.xUnitPrefix || firstCurve.x_unit || '1',
+        yUnitPrefix: firstCurve.config?.yUnitPrefix || firstCurve.y_unit || '1',
+      });
+    }
+  }, [savedCurves, editingCurveId]);
+
   const saveCurveToBackend = async ({ allowRedirect }) => {
     console.log('=== SAVE CURVE STARTED ===');
     console.log('GraphConfig:', graphConfig);
