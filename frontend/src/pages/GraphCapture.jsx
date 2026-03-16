@@ -346,40 +346,55 @@ const GraphCapture = () => {
   };
 
   useEffect(() => {
-    if (!urlParams.graph_id) return;
+    if (!urlParams.graph_id) {
+      console.log('[DEBUG] No graph_id in URL params, skipping fetch');
+      return;
+    }
+    console.log('[DEBUG] Fetching graph_id:', urlParams.graph_id);
     const fetchGraphById = async () => {
       try {
         // Try DiscovereE API first
+        console.log('[DEBUG] Attempting DiscovereE API fetch...');
         const discovereeResponse = await fetch(
           `https://www.discoveree.io/graph_capture_api.php?graph_id=${encodeURIComponent(urlParams.graph_id)}`
         );
+        console.log('[DEBUG] DiscovereE response status:', discovereeResponse.status);
         if (discovereeResponse.ok) {
           const result = await discovereeResponse.json();
+          console.log('[DEBUG] DiscovereE response:', result);
           if (result.status === 'success' && Array.isArray(result.graphs) && result.graphs.length > 0) {
+            console.log('[DEBUG] Successfully parsed DiscovereE data, graphs count:', result.graphs.length);
             const fetched = result.graphs.flatMap((graph) => {
               const details = Array.isArray(graph.details) ? graph.details : [];
+              console.log('[DEBUG] Graph details count:', details.length);
               const graphImageUrl = graph.graph_img || '';
               const graphGroupId = buildGraphGroupId(graphImageUrl || String(graph.graph_id));
-              return details.map((detail, i) => ({
-                id: `${graph.graph_id}_${i}`,
-                discoveree_cat_id: graph.graph_id,
-                name: detail.curve_title || graph.graph_title || `Curve ${i + 1}`,
-                points: parseXyString(detail.xy),
-                config: {
-                  graphTitle: graph.graph_title || '',
-                  curveName: detail.curve_title || '',
-                  xScale: detail.xscale || 'Linear',
-                  yScale: detail.yscale || 'Linear',
-                  xUnitPrefix: detail.xunit || '1',
-                  yUnitPrefix: detail.yunit || '1',
-                  xMin: '', xMax: '', yMin: '', yMax: '',
-                  temperature: detail.tctj || '',
-                },
-                graphGroupId,
-                graphImageUrl,
-              }));
+              return details.map((detail, i) => {
+                const points = parseXyString(detail.xy);
+                console.log('[DEBUG] Parsed detail', i, 'xy:', detail.xy, 'points count:', points.length);
+                return {
+                  id: `${graph.graph_id}_${i}`,
+                  discoveree_cat_id: graph.graph_id,
+                  name: detail.curve_title || graph.graph_title || `Curve ${i + 1}`,
+                  points,
+                  config: {
+                    graphTitle: graph.graph_title || '',
+                    curveName: detail.curve_title || '',
+                    xScale: detail.xscale || 'Linear',
+                    yScale: detail.yscale || 'Linear',
+                    xUnitPrefix: detail.xunit || '1',
+                    yUnitPrefix: detail.yunit || '1',
+                    xMin: '', xMax: '', yMin: '', yMax: '',
+                    temperature: detail.tctj || '',
+                  },
+                  graphGroupId,
+                  graphImageUrl,
+                };
+              });
             });
+            console.log('[DEBUG] Total fetched curves:', fetched.length);
             if (fetched.length > 0) {
+              console.log('[DEBUG] Setting savedCurves...');
               setSavedCurves(fetched);
               return; // Success, exit
             }
@@ -387,10 +402,14 @@ const GraphCapture = () => {
         }
 
         // Fallback: Try Netlify deployed backend (same domain)
+        console.log('[DEBUG] DiscovereE failed or returned no data, trying Netlify fallback...');
         const netlifyBackendUrl = `${window.location.origin}/api/curves/${urlParams.graph_id}`;
+        console.log('[DEBUG] Netlify URL:', netlifyBackendUrl);
         const localResponse = await fetch(netlifyBackendUrl);
+        console.log('[DEBUG] Netlify response status:', localResponse.status);
         if (localResponse.ok) {
           const curve = await localResponse.json();
+          console.log('[DEBUG] Netlify response:', curve);
           const graphGroupId = buildGraphGroupId('');
           const savedCurve = {
             id: curve.id,
@@ -415,10 +434,13 @@ const GraphCapture = () => {
             graphGroupId,
             graphImageUrl: '',
           };
+          console.log('[DEBUG] Setting savedCurves from Netlify...');
           setSavedCurves([savedCurve]);
+        } else {
+          console.log('[DEBUG] Netlify also failed');
         }
-      } catch {
-        // silently fail — tool remains usable
+      } catch (error) {
+        console.error('[DEBUG] Error in fetchGraphById:', error);
       }
     };
     fetchGraphById();
