@@ -457,23 +457,47 @@ const GraphCapture = () => {
     fetchGraphById();
   }, []); // graphId is parsed from URL directly
 
-  // Auto-open first curve in edit mode when graph_id loads data
+  // Auto-load first curve into main canvas when graph_id loads data
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
     const graphId = searchParams.get('graph_id');
     
-    if (graphId && savedCurves.length > 0 && !editingCurveId) {
+    if (graphId && savedCurves.length > 0) {
       const firstCurve = savedCurves[0];
-      console.log('[DEBUG] Auto-opening first curve in edit mode:', firstCurve.id);
-      setEditingCurveId(firstCurve.id);
-      setEditCurveMeta({
+      console.log('[DEBUG] Auto-loading first curve into canvas:', firstCurve.id);
+      
+      // Set graph config
+      setGraphConfig({
+        ...graphConfig,
+        graphTitle: firstCurve.config?.graphTitle || firstCurve.graph_title || '',
+        curveName: firstCurve.config?.curveName || firstCurve.curve_name || '',
+        partNumber: firstCurve.config?.partNumber || firstCurve.part_number || '',
         xScale: firstCurve.config?.xScale || firstCurve.x_scale || 'Linear',
         yScale: firstCurve.config?.yScale || firstCurve.y_scale || 'Linear',
         xUnitPrefix: firstCurve.config?.xUnitPrefix || firstCurve.x_unit || '1',
         yUnitPrefix: firstCurve.config?.yUnitPrefix || firstCurve.y_unit || '1',
+        xMin: firstCurve.config?.xMin || (firstCurve.x_min ? String(firstCurve.x_min) : ''),
+        xMax: firstCurve.config?.xMax || (firstCurve.x_max ? String(firstCurve.x_max) : ''),
+        yMin: firstCurve.config?.yMin || (firstCurve.y_min ? String(firstCurve.y_min) : ''),
+        yMax: firstCurve.config?.yMax || (firstCurve.y_max ? String(firstCurve.y_max) : ''),
+        temperature: firstCurve.config?.temperature || firstCurve.temperature || '',
       });
+      
+      // Load curve points into canvas
+      const loadedPoints = Array.isArray(firstCurve.points)
+        ? firstCurve.points.map((point) => ({
+            x: point.x_value || point.x,
+            y: point.y_value || point.y,
+            imported: true,
+          }))
+        : [];
+      
+      replaceDataPoints(loadedPoints);
+      setIsReadOnly(true);
+      
+      console.log('[DEBUG] Curve loaded into canvas, points count:', loadedPoints.length);
     }
-  }, [savedCurves, editingCurveId]);
+  }, [savedCurves, graphConfig, replaceDataPoints, setGraphConfig]);
 
   const saveCurveToBackend = async ({ allowRedirect }) => {
     console.log('=== SAVE CURVE STARTED ===');
