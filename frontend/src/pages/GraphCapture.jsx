@@ -346,17 +346,21 @@ const GraphCapture = () => {
   };
 
   useEffect(() => {
-    if (!urlParams.graph_id) {
+    // Parse graph_id directly from URL to avoid timing issues with state
+    const searchParams = new URLSearchParams(window.location.search);
+    const graphId = searchParams.get('graph_id');
+    
+    if (!graphId) {
       console.log('[DEBUG] No graph_id in URL params, skipping fetch');
       return;
     }
-    console.log('[DEBUG] Fetching graph_id:', urlParams.graph_id);
+    console.log('[DEBUG] Fetching graph_id:', graphId);
     const fetchGraphById = async () => {
       try {
         // Try DiscovereE API first
         console.log('[DEBUG] Attempting DiscovereE API fetch...');
         const discovereeResponse = await fetch(
-          `https://www.discoveree.io/graph_capture_api.php?graph_id=${encodeURIComponent(urlParams.graph_id)}`
+          `https://www.discoveree.io/graph_capture_api.php?graph_id=${encodeURIComponent(graphId)}`
         );
         console.log('[DEBUG] DiscovereE response status:', discovereeResponse.status);
         if (discovereeResponse.ok) {
@@ -403,7 +407,7 @@ const GraphCapture = () => {
 
         // Fallback: Try Netlify deployed backend (same domain)
         console.log('[DEBUG] DiscovereE failed or returned no data, trying Netlify fallback...');
-        const netlifyBackendUrl = `${window.location.origin}/api/curves/${urlParams.graph_id}`;
+        const netlifyBackendUrl = `${window.location.origin}/api/curves/${graphId}`;
         console.log('[DEBUG] Netlify URL:', netlifyBackendUrl);
         const localResponse = await fetch(netlifyBackendUrl);
         console.log('[DEBUG] Netlify response status:', localResponse.status);
@@ -444,7 +448,7 @@ const GraphCapture = () => {
       }
     };
     fetchGraphById();
-  }, [urlParams.graph_id, apiUrl]);
+  }, []); // Run once on mount - graphId is parsed from URL directly
 
   const saveCurveToBackend = async ({ allowRedirect }) => {
     console.log('=== SAVE CURVE STARTED ===');
