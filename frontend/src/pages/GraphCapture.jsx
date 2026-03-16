@@ -90,6 +90,7 @@ const GraphCapture = () => {
     setGraphConfig,
     replaceDataPoints,
     clearDataPoints,
+    setUploadedImage,
   } = useGraph();
   const [isSaving, setIsSaving] = useState(false);
   const [isReadOnly, setIsReadOnly] = useState(false);
@@ -466,6 +467,12 @@ const GraphCapture = () => {
       const firstCurve = savedCurves[0];
       console.log('[DEBUG] Auto-loading first curve into canvas:', firstCurve.id);
       
+      // Set the graph image from DiscoverEE
+      if (firstCurve.graphImageUrl) {
+        console.log('[DEBUG] Setting graph image:', firstCurve.graphImageUrl);
+        setUploadedImage(firstCurve.graphImageUrl);
+      }
+      
       // Set graph config
       setGraphConfig({
         ...graphConfig,
@@ -497,7 +504,7 @@ const GraphCapture = () => {
       
       console.log('[DEBUG] Curve loaded into canvas, points count:', loadedPoints.length);
     }
-  }, [savedCurves, graphConfig, replaceDataPoints, setGraphConfig]);
+  }, [savedCurves, graphConfig, replaceDataPoints, setGraphConfig, setUploadedImage]);
 
   const saveCurveToBackend = async ({ allowRedirect }) => {
     console.log('=== SAVE CURVE STARTED ===');
