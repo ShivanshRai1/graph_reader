@@ -163,6 +163,8 @@ const GraphCapture = () => {
   const [frozenGraphConfig, setFrozenGraphConfig] = useState(null);
   const [showReturnDecisionModal, setShowReturnDecisionModal] = useState(false);
   const [pendingReturnUrl, setPendingReturnUrl] = useState('');
+  const savedGraphsSectionRef = useRef(null);
+  const hasAutoScrolledToSavedGraphs = useRef(false);
 
   const selectedCurve = savedCurves.find((curve) => curve.id === selectedCurveId);
   const groupedCurves = useMemo(() => {
@@ -557,6 +559,27 @@ const GraphCapture = () => {
       console.log('[DEBUG] Curve loaded into canvas, points count:', loadedPoints.length);
     }
   }, [savedCurves, graphConfig, replaceDataPoints, setGraphConfig, setUploadedImage]);
+
+  // Auto-scroll to Saved Graphs when opening with graph_id so edit/remove actions are visible immediately.
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    const graphId = searchParams.get('graph_id');
+
+    if (!graphId || savedCurves.length === 0 || hasAutoScrolledToSavedGraphs.current) {
+      return;
+    }
+
+    hasAutoScrolledToSavedGraphs.current = true;
+
+    window.requestAnimationFrame(() => {
+      if (savedGraphsSectionRef.current) {
+        savedGraphsSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+      }
+
+      window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+    });
+  }, [savedCurves.length, uploadedImage]);
 
   const saveCurveToBackend = async ({ allowRedirect }) => {
     console.log('=== SAVE CURVE STARTED ===');
@@ -1198,36 +1221,36 @@ const GraphCapture = () => {
                   setFrozenGraphConfig(null);
                   clearDataPoints();
                 }}
-              />
-
-              {/* Dynamic Symbol Input Boxes - Only show if other_symb exists in URL */}
-              {symbolNames && symbolNames.length > 0 && (
-                <div className="mt-4 p-4 border rounded" style={{ backgroundColor: '#ffffff', borderColor: 'var(--color-border)' }}>
-                  {symbolNames.map((symbol) => {
-                    // Use the friendly label stored in symbolLabels map
-                    const displayLabel = symbolLabels[symbol] || symbol;
-                    return (
-                    <div key={symbol} className="mb-3">
-                      <label className="block mb-1 text-sm font-medium" style={{ color: '#213547' }}>
-                        {displayLabel}
-                      </label>
-                      <input
-                        type="text"
-                        value={symbolValues[symbol] || ''}
-                        onChange={(e) => setSymbolValues({ ...symbolValues, [symbol]: e.target.value })}
-                        placeholder={`Enter value for ${displayLabel}`}
-                        className="w-full px-3 py-2 border rounded text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                        style={{
-                          color: '#213547',
-                          backgroundColor: '#ffffff',
-                          borderColor: 'var(--color-border)',
-                        }}
-                      />
-                    </div>
-                    );
-                  })}
-                </div>
-              )}
+              >
+                {/* Dynamic Symbol Input Boxes - Only show if other_symb exists in URL */}
+                {symbolNames && symbolNames.length > 0 && (
+                  <div className="p-4 border rounded" style={{ backgroundColor: '#ffffff', borderColor: 'var(--color-border)' }}>
+                    {symbolNames.map((symbol) => {
+                      // Use the friendly label stored in symbolLabels map
+                      const displayLabel = symbolLabels[symbol] || symbol;
+                      return (
+                      <div key={symbol} className="mb-3">
+                        <label className="block mb-1 text-sm font-medium" style={{ color: '#213547' }}>
+                          {displayLabel}
+                        </label>
+                        <input
+                          type="text"
+                          value={symbolValues[symbol] || ''}
+                          onChange={(e) => setSymbolValues({ ...symbolValues, [symbol]: e.target.value })}
+                          placeholder={`Enter value for ${displayLabel}`}
+                          className="w-full px-3 py-2 border rounded text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                          style={{
+                            color: '#213547',
+                            backgroundColor: '#ffffff',
+                            borderColor: 'var(--color-border)',
+                          }}
+                        />
+                      </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </GraphConfig>
 
               <div className="mt-6 flex flex-row gap-4 items-center">
                 {urlParams.graph_title === 'rth_cth' ? (
@@ -1275,6 +1298,7 @@ const GraphCapture = () => {
               {/* Saved Graphs Section */}
               {savedCurves.length > 0 && (
                 <div
+                  ref={savedGraphsSectionRef}
                   className="mt-10 p-4 rounded shadow"
                   style={{ backgroundColor: '#ffffff', color: '#213547', border: '1px solid var(--color-border)' }}
                 >
@@ -1500,6 +1524,7 @@ const GraphCapture = () => {
 
         {!uploadedImage && savedCurves.length > 0 && (
           <div
+            ref={savedGraphsSectionRef}
             className="mt-2 p-4 rounded shadow"
             style={{ backgroundColor: '#ffffff', color: '#213547', border: '1px solid var(--color-border)' }}
           >

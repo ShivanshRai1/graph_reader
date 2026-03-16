@@ -1,7 +1,7 @@
 import { useGraph } from '../context/GraphContext';
 import { useState, useEffect, useRef } from 'react';
 
-const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNameReadOnly = false, initialCurveName = '', initialGraphTitle = '', isAxisMappingConfirmed = false, onConfirmAxisMapping = () => {}, onRetakeAxis = () => {} }) => {
+const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNameReadOnly = false, initialCurveName = '', initialGraphTitle = '', isAxisMappingConfirmed = false, onConfirmAxisMapping = () => {}, onRetakeAxis = () => {}, children = null }) => {
   const { graphConfig, setGraphConfig } = useGraph();
   const [logError, setLogError] = useState({ x: '', y: '' });
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -196,19 +196,6 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             disabled={false}
           />
         </label>
-        <label className="block mb-3 font-medium text-gray-800">
-          <span className="block mb-1 text-sm text-gray-800">Curve/Line Name:</span>
-          <input
-            type="text"
-            name="curveName"
-            value={graphConfig.curveName}
-            onChange={handleChange}
-            placeholder="Enter curve name"
-            className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white"
-            readOnly={false}
-            disabled={false}
-          />
-        </label>
         {showTctj && (
           <label className="block mb-3 font-medium text-gray-800">
             <span className="block mb-1 text-sm text-gray-800">TC/TJ (Temperature):</span>
@@ -222,6 +209,19 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             />
           </label>
         )}
+        <label className="block mb-3 font-medium text-gray-800">
+          <span className="block mb-1 text-sm text-gray-800">Curve/Line Name:</span>
+          <input
+            type="text"
+            name="curveName"
+            value={graphConfig.curveName}
+            onChange={handleChange}
+            placeholder="Enter curve name"
+            className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white"
+            readOnly={false}
+            disabled={false}
+          />
+        </label>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6" style={{ opacity: isAxisMappingConfirmed ? 0.6 : 1, pointerEvents: isAxisMappingConfirmed ? 'none' : 'auto' }}>
@@ -397,6 +397,8 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
           )}
         </div>
       </div>
+
+      {children ? <div className="mt-4">{children}</div> : null}
 
       {/* Axis Mapping Status & Controls (Issue 5 & 7) */}
       <div className="mt-6 p-4 border-2 rounded-lg" style={{ borderColor: isAxisMappingConfirmed ? '#4caf50' : '#ffc107', backgroundColor: isAxisMappingConfirmed ? '#e8f5e9' : '#fff3e0' }}>
