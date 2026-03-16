@@ -819,8 +819,33 @@ const GraphCapture = () => {
       }
 
       console.log('Symbol values:', symbolValues);
-      const tctjValue = symbolValues && Object.keys(symbolValues).length > 0 ? symbolValues : graphConfig.temperature || '';
-      console.log('TCTJ Value:', tctjValue);
+      const getTctjValueForApi = () => {
+        if (!symbolValues || typeof symbolValues !== 'object') {
+          return graphConfig.temperature || '';
+        }
+
+        if (symbolValues.graph_tctj) {
+          return String(symbolValues.graph_tctj);
+        }
+
+        const nonEmptyEntries = Object.entries(symbolValues).filter(([, value]) =>
+          value !== undefined && value !== null && String(value).trim() !== ''
+        );
+
+        if (nonEmptyEntries.length === 1) {
+          return String(nonEmptyEntries[0][1]);
+        }
+
+        if (nonEmptyEntries.length > 1) {
+          // Keep all symbol values in a plain string to match API expectation for tctj.
+          return nonEmptyEntries.map(([key, value]) => `${key}:${value}`).join(';');
+        }
+
+        return graphConfig.temperature || '';
+      };
+
+      const tctjValue = getTctjValueForApi();
+      console.log('TCTJ Value (plain string):', tctjValue);
 
       const detailPayload = {
         curve_title: urlParams.curve_title || graphConfig.curveName || '',
