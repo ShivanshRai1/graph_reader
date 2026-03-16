@@ -682,17 +682,38 @@ const GraphCapture = () => {
   };
 
   const handleReturnNow = () => {
-    const target = pendingReturnUrl || urlParams.return_url;
-    if (target) {
-      window.location.href = target;
+    if (pendingReturnUrl) {
+      window.location.href = pendingReturnUrl;
       return;
     }
+
+    if (urlParams.return_url) {
+      const searchParams = new URLSearchParams(window.location.search);
+      const graphIdForReturn =
+        searchParams.get('graph_id') ||
+        urlParams.graph_id ||
+        selectedCurve?.discoveree_cat_id ||
+        selectedCurve?.id ||
+        '';
+      const returnUrl = constructReturnUrl(urlParams.return_url, graphIdForReturn);
+      window.location.href = returnUrl;
+      return;
+    }
+
     setShowReturnDecisionModal(false);
   };
 
   const handleCancelAndReturn = () => {
     if (urlParams.return_url) {
-      window.location.href = urlParams.return_url;
+      const searchParams = new URLSearchParams(window.location.search);
+      const graphIdForReturn =
+        searchParams.get('graph_id') ||
+        urlParams.graph_id ||
+        selectedCurve?.discoveree_cat_id ||
+        selectedCurve?.id ||
+        '';
+      const returnUrl = constructReturnUrl(urlParams.return_url, graphIdForReturn);
+      window.location.href = returnUrl;
     }
   };
 
