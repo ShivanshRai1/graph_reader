@@ -334,7 +334,7 @@ const GraphCapture = () => {
   const parseXyString = (xy) => {
     if (!xy) return [];
     const points = [];
-    const matches = [...xy.matchAll(/\{x:([^,}]+),y:([^}]+)\}/g)];
+    const matches = [...xy.matchAll(/\{\s*x:\s*([^,}]+)\s*,\s*y:\s*([^}]+)\s*\}/g)];
     matches.forEach((match) => {
       const x = parseFloat(match[1]);
       const y = parseFloat(match[2]);
@@ -362,51 +362,58 @@ const GraphCapture = () => {
         const discovereeResponse = await fetch(
           `https://www.discoveree.io/graph_capture_api.php?graph_id=${encodeURIComponent(graphId)}`
         );
-        console.log('[DEBUG] DiscovereE response status:', discovereeResponse.status);
+        console.log('[DEBUG] DiscoverEE response status:', discovereeResponse.status);
         if (discovereeResponse.ok) {
           const result = await discovereeResponse.json();
-          console.log('[DEBUG] DiscovereE response:', result);
-          if (result.status === 'success' && Array.isArray(result.graphs) && result.graphs.length > 0) {
-            console.log('[DEBUG] Successfully parsed DiscovereE data, graphs count:', result.graphs.length);
-            const fetched = result.graphs.flatMap((graph) => {
-              const details = Array.isArray(graph.details) ? graph.details : [];
-              console.log('[DEBUG] Graph details count:', details.length);
-              const graphImageUrl = graph.graph_img || '';
-              const graphGroupId = buildGraphGroupId(graphImageUrl || String(graph.graph_id));
-              return details.map((detail, i) => {
-                const points = parseXyString(detail.xy);
-                console.log('[DEBUG] Parsed detail', i, 'xy:', detail.xy, 'points count:', points.length);
-                return {
-                  id: `${graph.graph_id}_${i}`,
-                  discoveree_cat_id: graph.graph_id,
-                  name: detail.curve_title || graph.graph_title || `Curve ${i + 1}`,
-                  points,
-                  config: {
-                    graphTitle: graph.graph_title || '',
-                    curveName: detail.curve_title || '',
-                    xScale: detail.xscale || 'Linear',
-                    yScale: detail.yscale || 'Linear',
-                    xUnitPrefix: detail.xunit || '1',
-                    yUnitPrefix: detail.yunit || '1',
-                    xMin: '', xMax: '', yMin: '', yMax: '',
-                    temperature: detail.tctj || '',
-                  },
-                  graphGroupId,
-                  graphImageUrl,
-                };
-              });
+          console.log('[DEBUG] DiscoverEE response:', result);
+
+          const discovereeGraph = result?.graph && !Array.isArray(result.graph) ? result.graph : null;
+          const discovereeDetails = Array.isArray(result?.details)
+            ? result.details
+            : Array.isArray(discovereeGraph?.details)
+              ? discovereeGraph.details
+              : [];
+
+          if (result.status === 'success' && discovereeGraph && discovereeDetails.length > 0) {
+            console.log('[DEBUG] Successfully parsed DiscoverEE data, details count:', discovereeDetails.length);
+            const graphImageUrl = discovereeGraph.graph_img || '';
+            const graphGroupId = buildGraphGroupId(graphImageUrl || String(discovereeGraph.graph_id));
+            const fetched = discovereeDetails.map((detail, i) => {
+              const points = parseXyString(detail.xy);
+              console.log('[DEBUG] Parsed detail', i, 'xy:', detail.xy, 'points count:', points.length);
+              return {
+                id: `${discovereeGraph.graph_id}_${detail.id || i}`,
+                discoveree_cat_id: discovereeGraph.graph_id,
+                name: detail.curve_title || discovereeGraph.graph_title || `Curve ${i + 1}`,
+                points,
+                config: {
+                  graphTitle: discovereeGraph.graph_title || '',
+                  curveName: detail.curve_title || '',
+                  xScale: detail.xscale === '1' ? 'Linear' : detail.xscale || 'Linear',
+                  yScale: detail.yscale === '1' ? 'Linear' : detail.yscale || 'Linear',
+                  xUnitPrefix: detail.xunit || '1',
+                  yUnitPrefix: detail.yunit || '1',
+                  xMin: '',
+                  xMax: '',
+                  yMin: '',
+                  yMax: '',
+                  temperature: detail.tctj || '',
+                },
+                graphGroupId,
+                graphImageUrl,
+              };
             });
             console.log('[DEBUG] Total fetched curves:', fetched.length);
             if (fetched.length > 0) {
               console.log('[DEBUG] Setting savedCurves...');
               setSavedCurves(fetched);
-              return; // Success, exit
+              return;
             }
           }
         }
 
         // Fallback: Try Netlify deployed backend (same domain)
-        console.log('[DEBUG] DiscovereE failed or returned no data, trying Netlify fallback...');
+        console.log('[DEBUG] DiscoverEE failed or returned no data, trying Netlify fallback...');
         const netlifyBackendUrl = `${window.location.origin}/api/curves/${graphId}`;
         console.log('[DEBUG] Netlify URL:', netlifyBackendUrl);
         const localResponse = await fetch(netlifyBackendUrl);
@@ -1304,6 +1311,62 @@ const GraphCapture = () => {
                   </div>
                 ) : null}
               </div> */}
+            </div>
+          </div>
+        )}
+
+        {!uploadedImage && savedCurves.length > 0 && (
+          <div
+            className="mt-2 p-4 rounded shadow"
+            style={{ backgroundColor: '#ffffff', color: '#213547', border: '1px solid var(--color-border)' }}
+          >
+            <h2 className="text-lg font-bold mb-4" style={{ color: '#213547' }}>
+              Saved Graphs
+            </h2>
+            <div className="flex flex-col gap-4 max-h-80 overflow-y-auto pr-2">
+              {groupedCurves.map((group, groupIndex) => (
+                <div key={group.id} className="rounded p-3" style={{ border: '1px solid var(--color-border)', background: '#ffffff' }}>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="font-semibold" style={{ color: '#213547' }}>
+                      {group.curves[0]?.config?.graphTitle || group.curves[0]?.graph_title || `Graph ${groupIndex + 1}`} ({group.curves.length} curves)
+                    </div>
+                    <button
+                      className="px-3 py-1 rounded bg-gray-900 text-white text-xs"
+                      onClick={() => setCombinedGroupId(group.id)}
+                    >
+                      View combined graph
+                    </button>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    {group.curves.map((curve) => (
+                      <div
+                        key={curve.id}
+                        className="rounded p-3 hover:bg-gray-100"
+                        style={{ backgroundColor: '#ffffff', color: '#213547', border: '1px solid var(--color-border)' }}
+                      >
+                        <div className="font-semibold mb-1" style={{ color: '#213547' }}>
+                          {curve.config?.curveName || curve.curve_name || curve.name || `Curve #${curve.id}`}
+                        </div>
+                        <div className="text-xs mb-1">
+                          Points: {curve.points?.length ?? curve.data_points?.length ?? 0}
+                        </div>
+                        <div className="text-xs mb-2 text-gray-700">
+                          X unit: {curve.config?.xUnitPrefix || curve.x_unit || '-'} | Y unit: {curve.config?.yUnitPrefix || curve.y_unit || '-'}<br />
+                          X scale: {curve.config?.xScale || curve.x_scale || '-'} | Y scale: {curve.config?.yScale || curve.y_scale || '-'}
+                        </div>
+                        <div className="flex gap-2 mt-2">
+                          <button
+                            className="px-3 py-1 rounded bg-blue-600 text-white text-xs"
+                            onClick={() => setSelectedCurveId(curve.id)}
+                          >
+                            View
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}
