@@ -508,6 +508,12 @@ const GraphCapture = () => {
     setShowReturnDecisionModal(false);
   };
 
+  const handleCancelAndReturn = () => {
+    if (urlParams.return_url) {
+      window.location.href = urlParams.return_url;
+    }
+  };
+
   const sendToCompanyDatabase = async (graphImageUrl, graphId, allowRedirect) => {
     // ============================================================
     // TESTING MODE: Set to false to skip actual API call
@@ -859,10 +865,18 @@ const GraphCapture = () => {
 
   return (
     <div className="w-full min-h-screen p-8" style={{ backgroundColor: '#ffffff', color: '#213547' }}>
-      <header className="mb-8">
+      <header className="mb-8 flex items-start justify-between gap-4">
         <h1 className="text-2xl font-bold mb-2" style={{ color: '#213547' }}>
           Graph Capture Tool
         </h1>
+        {!!urlParams.return_url && (
+          <button
+            onClick={handleCancelAndReturn}
+            className="px-4 py-2 rounded bg-gray-800 text-white font-medium"
+          >
+            Cancel and Return
+          </button>
+        )}
         {/* <p className="text-gray-600">Upload graph images and extract data points easily</p> */}
       </header>
 
