@@ -520,8 +520,9 @@ const GraphCapture = () => {
 
     const payload = {
       graph: {
+        graph_id: String(companyGraphId),
         discoveree_cat_id: String(curve?.discoveree_cat_id || urlParams.discoveree_cat_id || ''),
-        identifier: String(curve?.identifier || urlParams.identifier || ''),
+        identifier: String(curve?.identifier || urlParams.identifier || companyGraphId || ''),
       },
       details: [detailPayload],
     };
@@ -1226,7 +1227,7 @@ const GraphCapture = () => {
       const savedCurve = {
         id: result.id,
         graphId: String(companyGraphId || ''),
-        identifier: String((savedCurves[0]?.identifier ? String(savedCurves[0].identifier) : urlParams.identifier) || ''),
+        identifier: String(existingGraphIdentifier || companyGraphId || ''),
         discoveree_cat_id: String(urlParams.discoveree_cat_id || companyGraphId || ''),
         testuser_id: urlParams.testuser_id || '',
         name: payload.curve_name,
@@ -1428,8 +1429,9 @@ const GraphCapture = () => {
       const uniqueIdentifier = `usergraph_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
       const companyApiPayload = {
         graph: {
+          graph_id: isAppendingToExistingGraph ? String(existingGraphId) : '',
           discoveree_cat_id: urlParams.discoveree_cat_id ? String(urlParams.discoveree_cat_id) : '',
-          identifier: isAppendingToExistingGraph ? String(existingGraphIdentifier || '') : uniqueIdentifier,
+          identifier: isAppendingToExistingGraph ? String(existingGraphIdentifier || existingGraphId || '') : uniqueIdentifier,
           partno: urlParams.partno || '',
           manf: urlParams.manufacturer || '',
           graph_title: urlParams.graph_title || '',
