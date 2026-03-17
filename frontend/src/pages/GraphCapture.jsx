@@ -510,7 +510,7 @@ const GraphCapture = () => {
     const payload = {
       graph: {
         discoveree_cat_id: String(curve?.discoveree_cat_id || urlParams.discoveree_cat_id || ''),
-        identifier: `edit_${Date.now()}_${Math.floor(Math.random() * 100000)}`,
+        identifier: String(curve?.identifier || urlParams.identifier || companyGraphId || ''),
       },
       details: [detailPayload],
     };
@@ -933,6 +933,7 @@ const GraphCapture = () => {
                 id: `${discovereeGraph.graph_id}_${detail.id || i}`,
                 detailId: detail.id ? String(detail.id) : '',
                 graphId: String(discovereeGraph.graph_id || ''),
+                identifier: String(discovereeGraph.identifier || ''),
                 discoveree_cat_id: String(
                   discovereeGraph.discoveree_cat_id ||
                   result?.discoveree_cat_id ||
@@ -1211,6 +1212,7 @@ const GraphCapture = () => {
       const savedCurve = {
         id: result.id,
         graphId: String(companyGraphId || ''),
+        identifier: String(urlParams.identifier || (savedCurves[0]?.identifier ? String(savedCurves[0].identifier) : '')),
         discoveree_cat_id: String(urlParams.discoveree_cat_id || companyGraphId || ''),
         testuser_id: urlParams.testuser_id || '',
         name: payload.curve_name,
@@ -1402,6 +1404,10 @@ const GraphCapture = () => {
         searchParams.get('graph_id') ||
         urlParams.graph_id ||
         (savedCurves[0]?.graphId ? String(savedCurves[0].graphId) : '');
+      const existingGraphIdentifier =
+        searchParams.get('identifier') ||
+        urlParams.identifier ||
+        (savedCurves[0]?.identifier ? String(savedCurves[0].identifier) : '');
       const isAppendingToExistingGraph = Boolean(existingGraphId);
 
       // Build the JSON payload for company's API
@@ -1409,7 +1415,7 @@ const GraphCapture = () => {
       const companyApiPayload = {
         graph: {
           discoveree_cat_id: urlParams.discoveree_cat_id ? String(urlParams.discoveree_cat_id) : '',
-          identifier: isAppendingToExistingGraph ? String(existingGraphId) : uniqueIdentifier,
+          identifier: isAppendingToExistingGraph ? String(existingGraphIdentifier || '') : uniqueIdentifier,
           partno: urlParams.partno || '',
           manf: urlParams.manufacturer || '',
           graph_title: urlParams.graph_title || '',
@@ -1448,6 +1454,7 @@ const GraphCapture = () => {
 
       console.log('Company save mode:', isAppendingToExistingGraph ? 'append-existing-graph' : 'create-new-graph', {
         existingGraphId,
+        existingGraphIdentifier,
       });
 
       console.log('Making request to Company API:', COMPANY_API_SAVE_URL);
