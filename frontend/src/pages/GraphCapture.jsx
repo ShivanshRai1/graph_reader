@@ -102,6 +102,7 @@ const GraphCapture = () => {
   const [isLoadingSavedCurve, setIsLoadingSavedCurve] = useState(false);
   const [savedCurvesSource, setSavedCurvesSource] = useState('company');
   const [showSavedPanel, setShowSavedPanel] = useState(false);
+  const [isUpdatingCurveId, setIsUpdatingCurveId] = useState('');
   const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
   const [urlParams, setUrlParams] = useState({
     partno: '',
@@ -244,29 +245,183 @@ const GraphCapture = () => {
     setEditCurveSymbolValues({});
   };
 
-  const handleEditCurveUpdate = (curveId) => {
-    setSavedCurves((prev) =>
-      prev.map((curve) => {
-        if (curve.id !== curveId) return curve;
-        return {
-          ...curve,
-          config: {
-            ...(curve.config || {}),
-            xScale: editCurveMeta.xScale,
-            yScale: editCurveMeta.yScale,
-            xUnitPrefix: editCurveMeta.xUnitPrefix,
-            yUnitPrefix: editCurveMeta.yUnitPrefix,
-          },
-          symbolValues: { ...editCurveSymbolValues },
-          x_scale: editCurveMeta.xScale,
-          y_scale: editCurveMeta.yScale,
-          x_unit: editCurveMeta.xUnitPrefix,
-          y_unit: editCurveMeta.yUnitPrefix,
-        };
-      })
+  const getTctjValueFromSymbols = (symbols = {}, fallback = '') => {
+    if (!symbols || typeof symbols !== 'object') {
+      return fallback || '';
+    }
+
+    if (symbols.graph_tctj !== undefined && symbols.graph_tctj !== null && String(symbols.graph_tctj).trim() !== '') {
+      return String(symbols.graph_tctj);
+    }
+
+    const nonEmptyEntries = Object.entries(symbols).filter(([, value]) =>
+      value !== undefined && value !== null && String(value).trim() !== ''
     );
-    setEditingCurveId('');
-    setEditCurveSymbolValues({});
+
+    if (nonEmptyEntries.length === 1) {
+      return String(nonEmptyEntries[0][1]);
+    }
+
+    if (nonEmptyEntries.length > 1) {
+      return nonEmptyEntries.map(([key, value]) => `${key}:${value}`).join(';');
+    }
+
+    return fallback || '';
+  };
+
+  const getGraphIdForCurve = (curve) => {
+    if (curve?.discoveree_cat_id !== undefined && curve?.discoveree_cat_id !== null && String(curve.discoveree_cat_id) !== '') {
+      return String(curve.discoveree_cat_id);
+    }
+
+    const rawId = String(curve?.id || '');
+    if (rawId.includes('_')) {
+      const [prefix] = rawId.split('_');
+      if (prefix) return prefix;
+    }
+
+    return urlParams.graph_id ? String(urlParams.graph_id) : '';
+  };
+
+  const pushEditedCurveToApi = async (curve, nextMeta, nextSymbols) => {
+    const tctjValue = getTctjValueFromSymbols(nextSymbols, curve?.config?.temperature || curve?.temperature || '');
+    const curvePoints = Array.isArray(curve?.points)
+      ? curve.points
+      : Array.isArray(curve?.data_points)
+        ? curve.data_points
+        : [];
+
+    if (savedCurvesSource !== 'company') {
+      const localCurveId = curve?.id;
+      if (!localCurveId) {
+        throw new Error('Missing local curve id for update.');
+      }
+
+      const localPayload = {
+        x_scale: nextMeta.xScale,
+        y_scale: nextMeta.yScale,
+        x_unit: nextMeta.xUnitPrefix,
+        y_unit: nextMeta.yUnitPrefix,
+        temperature: tctjValue,
+      };
+
+      const localResponse = await fetch(`${apiUrl}/api/curves/${localCurveId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(localPayload),
+      });
+
+      if (!localResponse.ok) {
+        throw new Error(`Local API update failed (${localResponse.status})`);
+      }
+
+      return;
+    }
+
+    const companyGraphId = getGraphIdForCurve(curve);
+    if (!companyGraphId) {
+      throw new Error('Missing company graph_id for update.');
+    }
+
+    const xy = curvePoints
+      .map((point) => {
+        const xValue = point?.x_value ?? point?.x;
+        const yValue = point?.y_value ?? point?.y;
+        return `{x:${xValue},y:${yValue}}`;
+      })
+      .join(',');
+
+    if (!xy) {
+      throw new Error('No points available to send in edit update.');
+    }
+
+    const payload = {
+      graph: {
+        discoveree_cat_id: String(urlParams.discoveree_cat_id || companyGraphId),
+        identifier: `edit_${Date.now()}_${Math.floor(Math.random() * 100000)}`,
+        partno: urlParams.partno || '',
+        manf: urlParams.manufacturer || '',
+        graph_title: curve?.config?.graphTitle || urlParams.graph_title || '',
+        x_title: urlParams.x_label || '',
+        y_title: urlParams.y_label || '',
+        graph_img: curve?.graphImageUrl || '',
+        mark_review: '1',
+        testuser_id: urlParams.testuser_id || '',
+      },
+      details: [
+        {
+          curve_title: curve?.config?.curveName || curve?.curve_name || curve?.name || '',
+          xy,
+          tctj: tctjValue,
+          df_tj: tctjValue,
+          xscale: nextMeta.xScale || 'Linear',
+          yscale: nextMeta.yScale || 'Linear',
+          xunit: nextMeta.xUnitPrefix || '1',
+          yunit: nextMeta.yUnitPrefix || '1',
+        },
+      ],
+    };
+
+    const response = await fetch(`https://www.discoveree.io/graph_capture_api.php?graph_id=${encodeURIComponent(companyGraphId)}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Company API update failed (${response.status})`);
+    }
+
+    const result = await response.json().catch(() => ({}));
+    if (result?.status && result.status !== 'success') {
+      throw new Error(result?.msg || 'Company API returned non-success status');
+    }
+  };
+
+  const handleEditCurveUpdate = async (curveId) => {
+    const targetCurve = savedCurves.find((curve) => curve.id === curveId);
+    if (!targetCurve) {
+      alert('Unable to find the selected curve for update.');
+      return;
+    }
+
+    setIsUpdatingCurveId(curveId);
+    try {
+      await pushEditedCurveToApi(targetCurve, editCurveMeta, editCurveSymbolValues);
+
+      setSavedCurves((prev) =>
+        prev.map((curve) => {
+          if (curve.id !== curveId) return curve;
+          return {
+            ...curve,
+            config: {
+              ...(curve.config || {}),
+              xScale: editCurveMeta.xScale,
+              yScale: editCurveMeta.yScale,
+              xUnitPrefix: editCurveMeta.xUnitPrefix,
+              yUnitPrefix: editCurveMeta.yUnitPrefix,
+            },
+            symbolValues: { ...editCurveSymbolValues },
+            x_scale: editCurveMeta.xScale,
+            y_scale: editCurveMeta.yScale,
+            x_unit: editCurveMeta.xUnitPrefix,
+            y_unit: editCurveMeta.yUnitPrefix,
+          };
+        })
+      );
+      setEditingCurveId('');
+      setEditCurveSymbolValues({});
+      alert('Curve updated successfully.');
+    } catch (error) {
+      console.error('Edit update API error:', error);
+      alert(`Edit update failed: ${error.message}`);
+    } finally {
+      setIsUpdatingCurveId('');
+    }
   };
 
   const normalizeCurveConfig = (curve) => ({
@@ -1417,8 +1572,9 @@ const GraphCapture = () => {
                                     <button
                                       className="px-3 py-1 rounded bg-green-600 text-white text-xs"
                                       onClick={() => handleEditCurveUpdate(curve.id)}
+                                      disabled={isUpdatingCurveId === curve.id}
                                     >
-                                      Update Data
+                                      {isUpdatingCurveId === curve.id ? 'Updating...' : 'Update Data'}
                                     </button>
                                     <button
                                       className="px-3 py-1 rounded bg-gray-700 text-white text-xs"
@@ -1643,8 +1799,9 @@ const GraphCapture = () => {
                               <button
                                 className="px-3 py-1 rounded bg-green-600 text-white text-xs"
                                 onClick={() => handleEditCurveUpdate(curve.id)}
+                                disabled={isUpdatingCurveId === curve.id}
                               >
-                                Update Data
+                                {isUpdatingCurveId === curve.id ? 'Updating...' : 'Update Data'}
                               </button>
                               <button
                                 className="px-3 py-1 rounded bg-gray-700 text-white text-xs"
