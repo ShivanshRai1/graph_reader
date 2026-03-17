@@ -1,7 +1,7 @@
 import { useGraph } from '../context/GraphContext';
 import { useState, useEffect, useRef } from 'react';
 
-const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNameReadOnly = false, initialCurveName = '', initialGraphTitle = '', isAxisMappingConfirmed = false, onConfirmAxisMapping = () => {}, onRetakeAxis = () => {}, children = null }) => {
+const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNameReadOnly = false, initialCurveName = '', initialGraphTitle = '', isAxisMappingConfirmed = false, isEditingCurve = false, onConfirmAxisMapping = () => {}, onRetakeAxis = () => {}, children = null }) => {
   const { graphConfig, setGraphConfig } = useGraph();
   const [logError, setLogError] = useState({ x: '', y: '' });
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -191,10 +191,17 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             value={graphConfig.graphTitle || ''}
             onChange={handleChange}
             placeholder="Enter graph title"
-            className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white"
-            readOnly={false}
-            disabled={false}
+            className={`w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 ${
+              isGraphTitleReadOnly
+                ? 'bg-gray-100 cursor-not-allowed opacity-70'
+                : 'bg-white'
+            }`}
+            readOnly={isGraphTitleReadOnly}
+            disabled={isGraphTitleReadOnly}
           />
+          {isGraphTitleReadOnly && (
+            <span className="text-xs text-gray-600 mt-1 italic">Read-only (set from URL)</span>
+          )}
         </label>
         {showTctj && (
           <label className="block mb-3 font-medium text-gray-800">
@@ -224,12 +231,12 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
         </label>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6" style={{ opacity: isAxisMappingConfirmed ? 0.6 : 1, pointerEvents: isAxisMappingConfirmed ? 'none' : 'auto' }}>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6" style={{ opacity: (isAxisMappingConfirmed || isEditingCurve) ? 0.5 : 1, pointerEvents: (isAxisMappingConfirmed || isEditingCurve) ? 'none' : 'auto' }}>
         <div>
-          <h4 className="text-gray-800 font-semibold mb-3">Y-Axis {isAxisMappingConfirmed && '🔒'}</h4>
+          <h4 className="text-gray-800 font-semibold mb-3">Y-Axis {isAxisMappingConfirmed && '🔒'} {isEditingCurve && '(disabled during edit)'}</h4>
           <label className="block mb-3">
             <span className="block text-sm font-medium text-gray-800 mb-1">Scale:</span>
-            <select name="yScale" value={graphConfig.yScale} onChange={handleChange} disabled={isAxisMappingConfirmed} className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed">
+            <select name="yScale" value={graphConfig.yScale} onChange={handleChange} disabled={isAxisMappingConfirmed || isEditingCurve} className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed">
               <option value="Linear">Linear</option>
               <option value="Logarithmic">Logarithmic</option>
             </select>
@@ -239,7 +246,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
           )}
           <label className="block mb-3">
             <span className="block text-sm font-medium text-gray-800 mb-1">Unit:</span>
-            <select name="yUnitPrefix" value={graphConfig.yUnitPrefix} onChange={handleChange} disabled={isAxisMappingConfirmed} className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed">
+            <select name="yUnitPrefix" value={graphConfig.yUnitPrefix} onChange={handleChange} disabled={isAxisMappingConfirmed || isEditingCurve} className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed">
               <option value="">-select-</option>
               <option value="1e-12">pico (p) = 1e-12</option>
               <option value="1e-9">nano (n) = 1e-9</option>
@@ -262,7 +269,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
                   inputMode="decimal"
                   value={logInputs.yMin}
                   onChange={(e) => handleLogValueChange('yMin', e.target.value)}
-                  disabled={isAxisMappingConfirmed}
+                  disabled={isAxisMappingConfirmed || isEditingCurve}
                   placeholder="e.g., 100000"
                   className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed"
                   title="Enter actual value (e.g., 100000 or 1e5)"
@@ -276,7 +283,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
                   inputMode="decimal"
                   value={logInputs.yMax}
                   onChange={(e) => handleLogValueChange('yMax', e.target.value)}
-                  disabled={isAxisMappingConfirmed}
+                  disabled={isAxisMappingConfirmed || isEditingCurve}
                   placeholder="e.g., 100000"
                   className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed"
                   title="Enter actual value (e.g., 100000 or 1e5)"
@@ -293,7 +300,8 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
                   name="yMin"
                   value={graphConfig.yMin}
                   onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white"
+                  disabled={isAxisMappingConfirmed || isEditingCurve}
+                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed"
                 />
               </label>
               <label className="block mb-3">
@@ -303,7 +311,8 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
                   name="yMax"
                   value={graphConfig.yMax}
                   onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white"
+                  disabled={isAxisMappingConfirmed || isEditingCurve}
+                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed"
                 />
                 {logError.y && <span className="block text-xs text-red-600 mt-1">{logError.y}</span>}
               </label>
@@ -312,10 +321,10 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
         </div>
 
         <div>
-          <h4 className="text-gray-800 font-semibold mb-3">X-Axis {isAxisMappingConfirmed && '🔒'}</h4>
+          <h4 className="text-gray-800 font-semibold mb-3">X-Axis {isAxisMappingConfirmed && '🔒'} {isEditingCurve && '(disabled during edit)'}</h4>
           <label className="block mb-3">
             <span className="block text-sm font-medium text-gray-800 mb-1">Scale:</span>
-            <select name="xScale" value={graphConfig.xScale} onChange={handleChange} disabled={isAxisMappingConfirmed} className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed">
+            <select name="xScale" value={graphConfig.xScale} onChange={handleChange} disabled={isAxisMappingConfirmed || isEditingCurve} className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed">
               <option value="Linear">Linear</option>
               <option value="Logarithmic">Logarithmic</option>
             </select>
@@ -325,7 +334,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
           )}
           <label className="block mb-3">
             <span className="block text-sm font-medium text-gray-800 mb-1">Unit:</span>
-            <select name="xUnitPrefix" value={graphConfig.xUnitPrefix} onChange={handleChange} disabled={isAxisMappingConfirmed} className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed">
+            <select name="xUnitPrefix" value={graphConfig.xUnitPrefix} onChange={handleChange} disabled={isAxisMappingConfirmed || isEditingCurve} className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed">
               <option value="">-select-</option>
               <option value="1e-12">pico (p) = 1e-12</option>
               <option value="1e-9">nano (n) = 1e-9</option>
@@ -348,7 +357,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
                   inputMode="decimal"
                   value={logInputs.xMin}
                   onChange={(e) => handleLogValueChange('xMin', e.target.value)}
-                  disabled={isAxisMappingConfirmed}
+                  disabled={isAxisMappingConfirmed || isEditingCurve}
                   placeholder="e.g., 100000"
                   className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed"
                   title="Enter actual value (e.g., 100000 or 1e5)"
@@ -362,7 +371,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
                   inputMode="decimal"
                   value={logInputs.xMax}
                   onChange={(e) => handleLogValueChange('xMax', e.target.value)}
-                  disabled={isAxisMappingConfirmed}
+                  disabled={isAxisMappingConfirmed || isEditingCurve}
                   placeholder="e.g., 100000"
                   className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed"
                   title="Enter actual value (e.g., 100000 or 1e5)"
@@ -379,7 +388,8 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
                   name="xMin"
                   value={graphConfig.xMin}
                   onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white"
+                  disabled={isAxisMappingConfirmed || isEditingCurve}
+                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed"
                 />
               </label>
               <label className="block mb-3">
@@ -389,7 +399,8 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
                   name="xMax"
                   value={graphConfig.xMax}
                   onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white"
+                  disabled={isAxisMappingConfirmed || isEditingCurve}
+                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed"
                 />
                 {logError.x && <span className="block text-xs text-red-600 mt-1">{logError.x}</span>}
               </label>

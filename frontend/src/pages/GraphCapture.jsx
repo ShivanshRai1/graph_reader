@@ -583,6 +583,11 @@ const GraphCapture = () => {
       return;
     }
 
+    const confirmed = window.confirm('Are you sure you want to update this curve?');
+    if (!confirmed) {
+      return;
+    }
+
     setIsUpdatingCurveId(curveId);
     try {
       await pushEditedCurveToApi(targetCurve, editCurveMeta, editCurveSymbolValues);
@@ -780,6 +785,12 @@ const GraphCapture = () => {
       const removedIds = new Set(curvesToRemove.map((curve) => curve.id));
       setSavedCurves((prev) => prev.filter((curve) => !removedIds.has(curve.id)));
       clearGraphIdContext();
+
+      // Redirect to return_url if it exists
+      if (urlParams.return_url) {
+        console.log('Redirecting to return_url:', urlParams.return_url);
+        window.location.href = urlParams.return_url;
+      }
     } catch (error) {
       console.error('Remove all API error:', error);
       alert(`Remove all failed: ${error.message}`);
@@ -894,6 +905,28 @@ const GraphCapture = () => {
       temperature: tctjValue && tctjValue !== '0' ? tctjValue : prevConfig.temperature,
     }));
   }, [window.location.search]);
+
+  // Auto-fill graph title from graph_id if graph_id is provided but graph_title is not
+  useEffect(() => {
+    const hasGraphId = Boolean(urlParams.graph_id);
+    const hasGraphTitle = Boolean(urlParams.graph_title);
+    
+    // If graph_id is present but graph_title is not, and current graphConfig.graphTitle is empty, try to fetch the title
+    if (hasGraphId && !hasGraphTitle && !graphConfig.graphTitle && savedCurves.length > 0) {
+      const matchingCurve = savedCurves.find(
+        (curve) => (curve.graphId || getGraphIdForCurve(curve)) === String(urlParams.graph_id)
+      );
+      if (matchingCurve) {
+        const fetchedTitle = matchingCurve.config?.graphTitle || matchingCurve.graph_title || matchingCurve.name;
+        if (fetchedTitle) {
+          setGraphConfig((prev) => ({
+            ...prev,
+            graphTitle: fetchedTitle,
+          }));
+        }
+      }
+    }
+  }, [urlParams.graph_id, savedCurves, graphConfig.graphTitle]);
 
   const parseXyString = (xy) => {
     if (!xy) return [];
@@ -1775,11 +1808,12 @@ const GraphCapture = () => {
             <div className="w-full lg:w-3/5">
               <GraphConfig 
                 showTctj={urlParams.tctj !== '0'} 
-                isGraphTitleReadOnly={false} 
+                isGraphTitleReadOnly={Boolean(urlParams.graph_id || urlParams.graph_title)} 
                 isCurveNameReadOnly={false} 
                 initialCurveName={urlParams.curve_title} 
                 initialGraphTitle={urlParams.graph_title}
                 isAxisMappingConfirmed={isAxisMappingConfirmed}
+                isEditingCurve={Boolean(editingCurveId)}
                 onConfirmAxisMapping={() => {
                   setIsAxisMappingConfirmed(true);
                   setFrozenGraphConfig({ ...graphConfig });
