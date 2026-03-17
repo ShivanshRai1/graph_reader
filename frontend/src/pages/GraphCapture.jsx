@@ -1237,7 +1237,7 @@ const GraphCapture = () => {
       const savedCurve = {
         id: result.id,
         graphId: String(companyGraphId || ''),
-        identifier: String(existingGraphIdentifier || companyGraphId || ''),
+        identifier: String(companyGraphId || ''),
         discoveree_cat_id: String(urlParams.discoveree_cat_id || companyGraphId || ''),
         testuser_id: urlParams.testuser_id || '',
         name: payload.curve_name,
