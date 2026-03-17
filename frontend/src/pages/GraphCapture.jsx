@@ -177,7 +177,8 @@ const GraphCapture = () => {
 
     savedCurves.forEach((curve, index) => {
       const imageUrl = curve.graphImageUrl ?? curve.graph_img ?? '';
-      const groupId = curve.graphGroupId ?? buildGraphGroupId(imageUrl) ?? `graph_${index}`;
+      const graphIdKey = curve.graphId ? `graphId_${String(curve.graphId)}` : '';
+      const groupId = graphIdKey || curve.graphGroupId || buildGraphGroupId(imageUrl) || `graph_${index}`;
       const existing = groups.get(groupId) || {
         id: groupId,
         imageUrl,
