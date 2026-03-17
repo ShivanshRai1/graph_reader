@@ -305,12 +305,29 @@ const GraphCapture = () => {
         temperature: tctjValue,
       };
 
-      const localResponse = await fetch(`${apiUrl}/api/curves/${localCurveId}`, {
+      const localUrl = `${apiUrl}/api/curves/${localCurveId}`;
+      console.log('=== EDIT API REQUEST ===', {
+        source: 'local',
+        url: localUrl,
+        method: 'PUT',
+        payload: localPayload,
+      });
+
+      const localResponse = await fetch(localUrl, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(localPayload),
+      });
+
+      const localResult = await localResponse.json().catch(() => ({}));
+      console.log('=== EDIT API RESPONSE ===', {
+        source: 'local',
+        url: localUrl,
+        status: localResponse.status,
+        ok: localResponse.ok,
+        response: localResult,
       });
 
       if (!localResponse.ok) {
@@ -364,19 +381,34 @@ const GraphCapture = () => {
       ],
     };
 
-    const response = await fetch(`https://www.discoveree.io/graph_capture_api.php?graph_id=${encodeURIComponent(companyGraphId)}`, {
+    const companyUrl = `https://www.discoveree.io/graph_capture_api.php?graph_id=${encodeURIComponent(companyGraphId)}`;
+    console.log('=== EDIT API REQUEST ===', {
+      source: 'company',
+      url: companyUrl,
+      method: 'POST',
+      payload,
+    });
+
+    const response = await fetch(companyUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload),
     });
+    const result = await response.json().catch(() => ({}));
+    console.log('=== EDIT API RESPONSE ===', {
+      source: 'company',
+      url: companyUrl,
+      status: response.status,
+      ok: response.ok,
+      response: result,
+    });
 
     if (!response.ok) {
       throw new Error(`Company API update failed (${response.status})`);
     }
 
-    const result = await response.json().catch(() => ({}));
     if (result?.status && result.status !== 'success') {
       throw new Error(result?.msg || 'Company API returned non-success status');
     }
