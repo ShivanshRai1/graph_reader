@@ -555,6 +555,16 @@ const GraphCapture = () => {
       response: result,
     });
 
+    const returnedGraphId = result?.graph_id ? String(result.graph_id) : '';
+    console.log('=== GRAPH ID CONSISTENCY CHECK (EDIT) ===', {
+      expectedGraphId: String(companyGraphId),
+      sentGraphId: String(payload?.graph?.graph_id || ''),
+      sentIdentifier: String(payload?.graph?.identifier || ''),
+      returnedGraphId,
+      matchesExpected: !returnedGraphId || returnedGraphId === String(companyGraphId),
+      note: 'If matchesExpected is false, API is creating/updating a different graph context than requested.',
+    });
+
     if (!response.ok) {
       throw new Error(`Company API update failed (${response.status})`);
     }
@@ -1497,6 +1507,17 @@ const GraphCapture = () => {
       console.log('Company API Response received:', result);
       console.log('Company Graph ID from API:', result?.graph_id);
       const companyGraphId = result?.graph_id || existingGraphId || null;
+      const requestedGraphId = isAppendingToExistingGraph ? String(existingGraphId || '') : '';
+      const returnedGraphId = result?.graph_id ? String(result.graph_id) : '';
+      console.log('=== GRAPH ID CONSISTENCY CHECK (SAVE) ===', {
+        mode: isAppendingToExistingGraph ? 'append-existing-graph' : 'create-new-graph',
+        requestedGraphId,
+        sentGraphId: String(companyApiPayload?.graph?.graph_id || ''),
+        sentIdentifier: String(companyApiPayload?.graph?.identifier || ''),
+        returnedGraphId,
+        matchesRequested: !requestedGraphId || requestedGraphId === returnedGraphId,
+        note: 'If matchesRequested is false during append-existing-graph, API is returning a different graph_id than requested.',
+      });
       syncGraphIdContext(isAppendingToExistingGraph ? existingGraphId : companyGraphId);
 
       // Update local backend with the real discoveree_cat_id
