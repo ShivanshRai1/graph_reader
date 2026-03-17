@@ -103,6 +103,8 @@ const GraphCapture = () => {
   const [savedCurvesSource, setSavedCurvesSource] = useState('company');
   const [showSavedPanel, setShowSavedPanel] = useState(false);
   const [isUpdatingCurveId, setIsUpdatingCurveId] = useState('');
+  const [isRemovingCurveId, setIsRemovingCurveId] = useState('');
+  const [isRemovingAllGraphs, setIsRemovingAllGraphs] = useState(false);
   const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
   const [urlParams, setUrlParams] = useState({
     partno: '',
@@ -360,6 +362,7 @@ const GraphCapture = () => {
     const detailPayload = {
       curve_title: curve?.config?.curveName || curve?.curve_name || curve?.name || '',
     };
+    if (curve?.detailId) detailPayload.id = String(curve.detailId);
     if (currentMeta.xScale !== nextMeta.xScale) detailPayload.xscale = nextMeta.xScale || 'Linear';
     if (currentMeta.yScale !== nextMeta.yScale) detailPayload.yscale = nextMeta.yScale || 'Linear';
     if (currentMeta.xUnitPrefix !== nextMeta.xUnitPrefix) detailPayload.xunit = nextMeta.xUnitPrefix || '1';
@@ -380,6 +383,8 @@ const GraphCapture = () => {
     const companyUrl = `https://www.discoveree.io/graph_capture_api.php?graph_id=${encodeURIComponent(companyGraphId)}`;
     console.log('=== EDIT API REQUEST ===', {
       source: 'company',
+      targetGraphId: companyGraphId,
+      targetDetailId: curve?.detailId || '',
       url: companyUrl,
       method: 'POST',
       payload,
@@ -395,6 +400,8 @@ const GraphCapture = () => {
     const result = await response.json().catch(() => ({}));
     console.log('=== EDIT API RESPONSE ===', {
       source: 'company',
+      targetGraphId: companyGraphId,
+      targetDetailId: curve?.detailId || '',
       url: companyUrl,
       status: response.status,
       ok: response.ok,
@@ -449,6 +456,148 @@ const GraphCapture = () => {
       alert(`Edit update failed: ${error.message}`);
     } finally {
       setIsUpdatingCurveId('');
+    }
+  };
+
+  const removeCurveViaApi = async (curve) => {
+    if (savedCurvesSource !== 'company') {
+      const localUrl = `${apiUrl}/api/curves/${curve.id}`;
+      console.log('=== REMOVE API REQUEST ===', {
+        source: 'local',
+        url: localUrl,
+        method: 'DELETE',
+      });
+
+      const localResponse = await fetch(localUrl, {
+        method: 'DELETE',
+      });
+
+      const localResult = await localResponse.json().catch(() => ({}));
+      console.log('=== REMOVE API RESPONSE ===', {
+        source: 'local',
+        url: localUrl,
+        status: localResponse.status,
+        ok: localResponse.ok,
+        response: localResult,
+      });
+
+      if (!localResponse.ok) {
+        throw new Error(`Local remove failed (${localResponse.status})`);
+      }
+
+      return;
+    }
+
+    const graphId = curve.graphId || getGraphIdForCurve(curve);
+    const detailId = curve.detailId ? String(curve.detailId) : '';
+    const discovereeCatId = curve.discoveree_cat_id ? String(curve.discoveree_cat_id) : String(urlParams.discoveree_cat_id || '');
+    const testuserId = String(urlParams.testuser_id || '');
+
+    if (!graphId) {
+      throw new Error('Missing graph_id for remove.');
+    }
+
+    if (!detailId) {
+      throw new Error('Missing curve id for remove.');
+    }
+
+    const removePayload = new URLSearchParams({
+      action: 'remove',
+      graph_id: String(graphId),
+      id: detailId,
+      discoveree_cat_id: discovereeCatId,
+      testuser_id: testuserId,
+    });
+
+    const companyUrl = `https://www.discoveree.io/graph_capture_api.php?${removePayload.toString()}`;
+    console.log('=== REMOVE API REQUEST ===', {
+      source: 'company',
+      targetGraphId: String(graphId),
+      targetDetailId: detailId,
+      url: companyUrl,
+      method: 'GET',
+      payload: Object.fromEntries(removePayload.entries()),
+    });
+
+    const response = await fetch(companyUrl, {
+      method: 'GET',
+    });
+
+    const responseText = await response.text();
+    let result = responseText;
+    try {
+      result = JSON.parse(responseText);
+    } catch {
+      // Keep raw text response when API does not return JSON.
+    }
+
+    console.log('=== REMOVE API RESPONSE ===', {
+      source: 'company',
+      targetGraphId: String(graphId),
+      targetDetailId: detailId,
+      url: companyUrl,
+      status: response.status,
+      ok: response.ok,
+      response: result,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Company remove failed (${response.status})`);
+    }
+  };
+
+  const handleRemoveCurve = async (curve) => {
+    if (!curve) {
+      return;
+    }
+
+    const confirmed = window.confirm('Remove this curve?');
+    if (!confirmed) {
+      return;
+    }
+
+    setIsRemovingCurveId(curve.id);
+
+    try {
+      await removeCurveViaApi(curve);
+      setSavedCurves((prev) => prev.filter((item) => item.id !== curve.id));
+    } catch (error) {
+      console.error('Remove API error:', error);
+      alert(`Remove failed: ${error.message}`);
+    } finally {
+      setIsRemovingCurveId('');
+    }
+  };
+
+  const handleRemoveAllGraphs = async () => {
+    const activeGraphId = urlParams.graph_id || (savedCurves[0] ? (savedCurves[0].graphId || getGraphIdForCurve(savedCurves[0])) : '');
+    const curvesToRemove = activeGraphId
+      ? savedCurves.filter((curve) => (curve.graphId || getGraphIdForCurve(curve)) === String(activeGraphId))
+      : [...savedCurves];
+
+    if (curvesToRemove.length === 0) {
+      alert('No graphs found to remove.');
+      return;
+    }
+
+    const confirmed = window.confirm(`Remove all graphs for graph_id ${activeGraphId || 'current selection'}?`);
+    if (!confirmed) {
+      return;
+    }
+
+    setIsRemovingAllGraphs(true);
+    try {
+      for (const curve of curvesToRemove) {
+        await removeCurveViaApi(curve);
+      }
+
+      const removedIds = new Set(curvesToRemove.map((curve) => curve.id));
+      setSavedCurves((prev) => prev.filter((curve) => !removedIds.has(curve.id)));
+    } catch (error) {
+      console.error('Remove all API error:', error);
+      alert(`Remove all failed: ${error.message}`);
+    } finally {
+      setIsRemovingAllGraphs(false);
     }
   };
 
@@ -619,6 +768,8 @@ const GraphCapture = () => {
               console.log('[DEBUG] Parsed detail', i, 'xy:', detail.xy, 'points count:', points.length);
               return {
                 id: `${discovereeGraph.graph_id}_${detail.id || i}`,
+                detailId: detail.id ? String(detail.id) : '',
+                graphId: String(discovereeGraph.graph_id || ''),
                 discoveree_cat_id: discovereeGraph.graph_id,
                 name: detail.curve_title || discovereeGraph.graph_title || `Curve ${i + 1}`,
                 points,
@@ -661,6 +812,8 @@ const GraphCapture = () => {
           const graphGroupId = buildGraphGroupId('');
           const savedCurve = {
             id: curve.id,
+            detailId: '',
+            graphId: '',
             discoveree_cat_id: curve.discoveree_cat_id || null,
             name: curve.curve_name || `Curve ${curve.id}`,
             points: Array.isArray(curve.data_points)
@@ -1467,14 +1620,23 @@ const GraphCapture = () => {
                   </button>
                 )}
                 {!!urlParams.return_url ? (
-                  <button
-                    onClick={handleReturnNow}
-                    className="px-4 py-2 rounded bg-blue-600 text-white font-medium border-none shadow-none disabled:opacity-50"
-                    style={{ backgroundColor: '#2563eb' }}
-                    disabled={isSaving}
-                  >
-                    Return to Original Page
-                  </button>
+                  <>
+                    <button
+                      onClick={handleReturnNow}
+                      className="px-4 py-2 rounded bg-blue-600 text-white font-medium border-none shadow-none disabled:opacity-50"
+                      style={{ backgroundColor: '#2563eb' }}
+                      disabled={isSaving || isRemovingAllGraphs}
+                    >
+                      Return to Original Page
+                    </button>
+                    <button
+                      onClick={handleRemoveAllGraphs}
+                      className="px-4 py-2 rounded bg-red-600 text-white font-medium disabled:opacity-50"
+                      disabled={isSaving || isRemovingAllGraphs || savedCurves.length === 0}
+                    >
+                      {isRemovingAllGraphs ? 'Removing All Graphs...' : 'Remove All Graphs'}
+                    </button>
+                  </>
                 ) : null}
                 {isSaving ? (
                   <span className="text-sm" style={{ color: '#6b7280' }}>
@@ -1627,12 +1789,10 @@ const GraphCapture = () => {
                                   </button>
                                   <button
                                     className="px-3 py-1 rounded bg-red-600 text-white text-xs"
-                                    onClick={() => {
-                                      // Remove this curve from savedCurves
-                                      setSavedCurves((prev) => prev.filter((c) => c.id !== curve.id));
-                                    }}
+                                    onClick={() => handleRemoveCurve(curve)}
+                                    disabled={isRemovingCurveId === curve.id || isRemovingAllGraphs}
                                   >
-                                    Remove
+                                    {isRemovingCurveId === curve.id ? 'Removing...' : 'Remove'}
                                   </button>
                                   <button
                                     className="px-3 py-1 rounded bg-yellow-500 text-white text-xs"
@@ -1854,11 +2014,10 @@ const GraphCapture = () => {
                             </button>
                             <button
                               className="px-3 py-1 rounded bg-red-600 text-white text-xs"
-                              onClick={() => {
-                                setSavedCurves((prev) => prev.filter((c) => c.id !== curve.id));
-                              }}
+                              onClick={() => handleRemoveCurve(curve)}
+                              disabled={isRemovingCurveId === curve.id || isRemovingAllGraphs}
                             >
-                              Remove
+                              {isRemovingCurveId === curve.id ? 'Removing...' : 'Remove'}
                             </button>
                             <button
                               className="px-3 py-1 rounded bg-yellow-500 text-white text-xs"
