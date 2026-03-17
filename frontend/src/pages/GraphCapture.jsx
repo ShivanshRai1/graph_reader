@@ -1023,6 +1023,15 @@ const GraphCapture = () => {
             if (fetched.length > 0) {
               console.log('[DEBUG] Setting savedCurves...');
               setSavedCurves(fetched);
+              
+              // Auto-populate graph title from fetched data if not already set
+              const firstCurve = fetched[0];
+              if (firstCurve?.config?.graphTitle && !urlParams.graph_title) {
+                setGraphConfig((prev) => ({
+                  ...prev,
+                  graphTitle: firstCurve.config.graphTitle,
+                }));
+              }
               return;
             }
           }
@@ -1074,6 +1083,14 @@ const GraphCapture = () => {
           };
           console.log('[DEBUG] Setting savedCurves from Netlify...');
           setSavedCurves([savedCurve]);
+          
+          // Auto-populate graph title from fetched data if not already set
+          if (savedCurve?.config?.graphTitle && !urlParams.graph_title) {
+            setGraphConfig((prev) => ({
+              ...prev,
+              graphTitle: savedCurve.config.graphTitle,
+            }));
+          }
         } else {
           console.log('[DEBUG] Netlify also failed');
         }
