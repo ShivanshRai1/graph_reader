@@ -286,6 +286,23 @@ const GraphCapture = () => {
     return urlParams.graph_id ? String(urlParams.graph_id) : '';
   };
 
+  const getDetailIdForCurve = (curve) => {
+    if (curve?.detailId !== undefined && curve?.detailId !== null && String(curve.detailId).trim() !== '') {
+      return String(curve.detailId);
+    }
+
+    const rawId = String(curve?.id || '');
+    if (rawId.includes('_')) {
+      const parts = rawId.split('_');
+      const suffix = parts[parts.length - 1];
+      if (suffix && /^\d+$/.test(suffix)) {
+        return suffix;
+      }
+    }
+
+    return '';
+  };
+
   const pushEditedCurveToApi = async (curve, nextMeta, nextSymbols) => {
     const tctjValue = getTctjValueFromSymbols(nextSymbols, curve?.config?.temperature || curve?.temperature || '');
     const currentMeta = {
@@ -489,7 +506,7 @@ const GraphCapture = () => {
     }
 
     const graphId = curve.graphId || getGraphIdForCurve(curve);
-    const detailId = curve.detailId ? String(curve.detailId) : '';
+    const detailId = getDetailIdForCurve(curve);
     const discovereeCatId = curve.discoveree_cat_id ? String(curve.discoveree_cat_id) : String(urlParams.discoveree_cat_id || '');
     const testuserId = String(urlParams.testuser_id || '');
 
@@ -498,6 +515,7 @@ const GraphCapture = () => {
     }
 
     if (!detailId) {
+      console.error('Remove skipped: missing detail id', { curve });
       throw new Error('Missing curve id for remove.');
     }
 
