@@ -812,6 +812,7 @@ const GraphCapture = () => {
 
           if (result.status === 'success' && discovereeGraph && discovereeDetails.length > 0) {
             console.log('[DEBUG] Successfully parsed DiscoverEE data, details count:', discovereeDetails.length);
+            console.log('[DEBUG] discovereeGraph all fields:', JSON.stringify(discovereeGraph, null, 2));
             const graphImageUrl = discovereeGraph.graph_img || '';
             const graphGroupId = buildGraphGroupId(graphImageUrl || String(discovereeGraph.graph_id));
             const fetched = discovereeDetails.map((detail, i) => {
