@@ -199,9 +199,6 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             readOnly={isGraphTitleReadOnly}
             disabled={isGraphTitleReadOnly}
           />
-          {isGraphTitleReadOnly && (
-            <span className="text-xs text-gray-600 mt-1 italic">Read-only (set from URL)</span>
-          )}
         </label>
         {showTctj && (
           <label className="block mb-3 font-medium text-gray-800">
