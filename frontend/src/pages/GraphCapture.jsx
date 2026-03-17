@@ -531,7 +531,7 @@ const GraphCapture = () => {
     const graphId = curve.graphId || getGraphIdForCurve(curve);
     const detailId = getDetailIdForCurve(curve);
     const discovereeCatId = curve.discoveree_cat_id ? String(curve.discoveree_cat_id) : String(urlParams.discoveree_cat_id || '');
-    const testuserId = String(urlParams.testuser_id || '');
+    const testuserId = String(curve.testuser_id || urlParams.testuser_id || '');
 
     if (!graphId) {
       throw new Error('Missing graph_id for remove.');
@@ -830,6 +830,7 @@ const GraphCapture = () => {
                 detailId: detail.id ? String(detail.id) : '',
                 graphId: String(discovereeGraph.graph_id || ''),
                 discoveree_cat_id: discovereeGraph.graph_id,
+                testuser_id: searchParams.get('testuser_id') || '',
                 name: detail.curve_title || discovereeGraph.graph_title || `Curve ${i + 1}`,
                 points,
                 symbolValues: detailSymbolValues,
@@ -1102,6 +1103,7 @@ const GraphCapture = () => {
       const savedCurve = {
         id: result.id,
         discoveree_cat_id: companyGraphId,
+        testuser_id: urlParams.testuser_id || '',
         name: payload.curve_name,
         points: payload.data_points,
         symbolValues: { ...symbolValues },
