@@ -1632,6 +1632,7 @@ const GraphCapture = () => {
                     <button
                       onClick={handleRemoveAllGraphs}
                       className="px-4 py-2 rounded bg-red-600 text-white font-medium disabled:opacity-50"
+                      style={{ backgroundColor: '#dc2626' }}
                       disabled={isSaving || isRemovingAllGraphs || savedCurves.length === 0}
                     >
                       {isRemovingAllGraphs ? 'Removing All Graphs...' : 'Remove All Graphs'}
@@ -1789,6 +1790,7 @@ const GraphCapture = () => {
                                   </button>
                                   <button
                                     className="px-3 py-1 rounded bg-red-600 text-white text-xs"
+                                    style={{ backgroundColor: '#dc2626' }}
                                     onClick={() => handleRemoveCurve(curve)}
                                     disabled={isRemovingCurveId === curve.id || isRemovingAllGraphs}
                                   >
@@ -2014,6 +2016,7 @@ const GraphCapture = () => {
                             </button>
                             <button
                               className="px-3 py-1 rounded bg-red-600 text-white text-xs"
+                              style={{ backgroundColor: '#dc2626' }}
                               onClick={() => handleRemoveCurve(curve)}
                               disabled={isRemovingCurveId === curve.id || isRemovingAllGraphs}
                             >
