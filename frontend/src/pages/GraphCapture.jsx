@@ -303,6 +303,29 @@ const GraphCapture = () => {
     return '';
   };
 
+  const triggerGetWithoutCors = (url) =>
+    new Promise((resolve) => {
+      // Fire-and-forget fallback for endpoints that work in browser URL bar but block fetch via CORS.
+      const img = new Image();
+      img.onload = () => resolve({ sent: true, via: 'img' });
+      img.onerror = () => resolve({ sent: true, via: 'img' });
+      img.src = `${url}${url.includes('?') ? '&' : '?'}_ts=${Date.now()}`;
+    });
+
+  const clearGraphIdContext = () => {
+    setUrlParams((prev) => ({ ...prev, graph_id: '' }));
+    setReturnGraphId('');
+    setSelectedCurveId('');
+    setCombinedGroupId('');
+    autoLoadedGraphIdRef.current = '';
+    hasAutoScrolledToSavedGraphs.current = false;
+
+    const currentUrl = new URL(window.location.href);
+    currentUrl.searchParams.delete('graph_id');
+    currentUrl.searchParams.delete('return_graph_id');
+    window.history.replaceState({}, '', currentUrl.toString());
+  };
+
   const pushEditedCurveToApi = async (curve, nextMeta, nextSymbols) => {
     const tctjValue = getTctjValueFromSymbols(nextSymbols, curve?.config?.temperature || curve?.temperature || '');
     const currentMeta = {
@@ -537,30 +560,47 @@ const GraphCapture = () => {
       payload: Object.fromEntries(removePayload.entries()),
     });
 
-    const response = await fetch(companyUrl, {
-      method: 'GET',
-    });
-
-    const responseText = await response.text();
-    let result = responseText;
     try {
-      result = JSON.parse(responseText);
-    } catch {
-      // Keep raw text response when API does not return JSON.
-    }
+      const response = await fetch(companyUrl, {
+        method: 'GET',
+      });
 
-    console.log('=== REMOVE API RESPONSE ===', {
-      source: 'company',
-      targetGraphId: String(graphId),
-      targetDetailId: detailId,
-      url: companyUrl,
-      status: response.status,
-      ok: response.ok,
-      response: result,
-    });
+      const responseText = await response.text();
+      let result = responseText;
+      try {
+        result = JSON.parse(responseText);
+      } catch {
+        // Keep raw text response when API does not return JSON.
+      }
 
-    if (!response.ok) {
-      throw new Error(`Company remove failed (${response.status})`);
+      console.log('=== REMOVE API RESPONSE ===', {
+        source: 'company',
+        targetGraphId: String(graphId),
+        targetDetailId: detailId,
+        url: companyUrl,
+        status: response.status,
+        ok: response.ok,
+        response: result,
+      });
+
+      if (!response.ok) {
+        throw new Error(`Company remove failed (${response.status})`);
+      }
+    } catch (error) {
+      const maybeCors = error?.message === 'Failed to fetch' || error?.name === 'TypeError';
+      if (!maybeCors) {
+        throw error;
+      }
+
+      console.warn('Remove fetch blocked by CORS, using browser fallback:', companyUrl);
+      const fallbackResult = await triggerGetWithoutCors(companyUrl);
+      console.log('=== REMOVE API RESPONSE (FALLBACK) ===', {
+        source: 'company',
+        targetGraphId: String(graphId),
+        targetDetailId: detailId,
+        url: companyUrl,
+        fallbackResult,
+      });
     }
   };
 
@@ -611,6 +651,7 @@ const GraphCapture = () => {
 
       const removedIds = new Set(curvesToRemove.map((curve) => curve.id));
       setSavedCurves((prev) => prev.filter((curve) => !removedIds.has(curve.id)));
+      clearGraphIdContext();
     } catch (error) {
       console.error('Remove all API error:', error);
       alert(`Remove all failed: ${error.message}`);
