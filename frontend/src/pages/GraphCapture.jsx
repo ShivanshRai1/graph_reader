@@ -166,6 +166,7 @@ const GraphCapture = () => {
   const [pendingReturnUrl, setPendingReturnUrl] = useState('');
   const savedGraphsSectionRef = useRef(null);
   const hasAutoScrolledToSavedGraphs = useRef(false);
+  const autoLoadedGraphIdRef = useRef('');
 
   const selectedCurve = savedCurves.find((curve) => curve.id === selectedCurveId);
   const groupedCurves = useMemo(() => {
@@ -285,11 +286,26 @@ const GraphCapture = () => {
 
   const pushEditedCurveToApi = async (curve, nextMeta, nextSymbols) => {
     const tctjValue = getTctjValueFromSymbols(nextSymbols, curve?.config?.temperature || curve?.temperature || '');
-    const curvePoints = Array.isArray(curve?.points)
-      ? curve.points
-      : Array.isArray(curve?.data_points)
-        ? curve.data_points
-        : [];
+    const currentMeta = {
+      xScale: curve.config?.xScale || curve.x_scale || 'Linear',
+      yScale: curve.config?.yScale || curve.y_scale || 'Linear',
+      xUnitPrefix: curve.config?.xUnitPrefix || curve.x_unit || '1',
+      yUnitPrefix: curve.config?.yUnitPrefix || curve.y_unit || '1',
+    };
+    const currentTctjValue = getTctjValueFromSymbols(
+      normalizeCurveSymbolValues(curve),
+      curve?.config?.temperature || curve?.temperature || ''
+    );
+    const hasMetaChanges =
+      currentMeta.xScale !== nextMeta.xScale ||
+      currentMeta.yScale !== nextMeta.yScale ||
+      currentMeta.xUnitPrefix !== nextMeta.xUnitPrefix ||
+      currentMeta.yUnitPrefix !== nextMeta.yUnitPrefix;
+    const hasTctjChange = String(currentTctjValue || '') !== String(tctjValue || '');
+
+    if (!hasMetaChanges && !hasTctjChange) {
+      throw new Error('No changes detected to update.');
+    }
 
     if (savedCurvesSource !== 'company') {
       const localCurveId = curve?.id;
@@ -297,13 +313,12 @@ const GraphCapture = () => {
         throw new Error('Missing local curve id for update.');
       }
 
-      const localPayload = {
-        x_scale: nextMeta.xScale,
-        y_scale: nextMeta.yScale,
-        x_unit: nextMeta.xUnitPrefix,
-        y_unit: nextMeta.yUnitPrefix,
-        temperature: tctjValue,
-      };
+      const localPayload = {};
+      if (currentMeta.xScale !== nextMeta.xScale) localPayload.x_scale = nextMeta.xScale;
+      if (currentMeta.yScale !== nextMeta.yScale) localPayload.y_scale = nextMeta.yScale;
+      if (currentMeta.xUnitPrefix !== nextMeta.xUnitPrefix) localPayload.x_unit = nextMeta.xUnitPrefix;
+      if (currentMeta.yUnitPrefix !== nextMeta.yUnitPrefix) localPayload.y_unit = nextMeta.yUnitPrefix;
+      if (hasTctjChange) localPayload.temperature = tctjValue;
 
       const localUrl = `${apiUrl}/api/curves/${localCurveId}`;
       console.log('=== EDIT API REQUEST ===', {
@@ -342,43 +357,24 @@ const GraphCapture = () => {
       throw new Error('Missing company graph_id for update.');
     }
 
-    const xy = curvePoints
-      .map((point) => {
-        const xValue = point?.x_value ?? point?.x;
-        const yValue = point?.y_value ?? point?.y;
-        return `{x:${xValue},y:${yValue}}`;
-      })
-      .join(',');
-
-    if (!xy) {
-      throw new Error('No points available to send in edit update.');
+    const detailPayload = {
+      curve_title: curve?.config?.curveName || curve?.curve_name || curve?.name || '',
+    };
+    if (currentMeta.xScale !== nextMeta.xScale) detailPayload.xscale = nextMeta.xScale || 'Linear';
+    if (currentMeta.yScale !== nextMeta.yScale) detailPayload.yscale = nextMeta.yScale || 'Linear';
+    if (currentMeta.xUnitPrefix !== nextMeta.xUnitPrefix) detailPayload.xunit = nextMeta.xUnitPrefix || '1';
+    if (currentMeta.yUnitPrefix !== nextMeta.yUnitPrefix) detailPayload.yunit = nextMeta.yUnitPrefix || '1';
+    if (hasTctjChange) {
+      detailPayload.tctj = tctjValue;
+      detailPayload.df_tj = tctjValue;
     }
 
     const payload = {
       graph: {
         discoveree_cat_id: String(urlParams.discoveree_cat_id || companyGraphId),
         identifier: `edit_${Date.now()}_${Math.floor(Math.random() * 100000)}`,
-        partno: urlParams.partno || '',
-        manf: urlParams.manufacturer || '',
-        graph_title: curve?.config?.graphTitle || urlParams.graph_title || '',
-        x_title: urlParams.x_label || '',
-        y_title: urlParams.y_label || '',
-        graph_img: curve?.graphImageUrl || '',
-        mark_review: '1',
-        testuser_id: urlParams.testuser_id || '',
       },
-      details: [
-        {
-          curve_title: curve?.config?.curveName || curve?.curve_name || curve?.name || '',
-          xy,
-          tctj: tctjValue,
-          df_tj: tctjValue,
-          xscale: nextMeta.xScale || 'Linear',
-          yscale: nextMeta.yScale || 'Linear',
-          xunit: nextMeta.xUnitPrefix || '1',
-          yunit: nextMeta.yUnitPrefix || '1',
-        },
-      ],
+      details: [detailPayload],
     };
 
     const companyUrl = `https://www.discoveree.io/graph_capture_api.php?graph_id=${encodeURIComponent(companyGraphId)}`;
@@ -705,6 +701,11 @@ const GraphCapture = () => {
     const graphId = searchParams.get('graph_id');
     
     if (graphId && savedCurves.length > 0) {
+      if (autoLoadedGraphIdRef.current === graphId) {
+        return;
+      }
+      autoLoadedGraphIdRef.current = graphId;
+
       const firstCurve = savedCurves[0];
       console.log('[DEBUG] Auto-loading first curve into canvas:', firstCurve.id);
       
@@ -715,8 +716,8 @@ const GraphCapture = () => {
       }
       
       // Set graph config
-      setGraphConfig({
-        ...graphConfig,
+      setGraphConfig((prev) => ({
+        ...prev,
         graphTitle: firstCurve.config?.graphTitle || firstCurve.graph_title || '',
         curveName: firstCurve.config?.curveName || firstCurve.curve_name || '',
         partNumber: firstCurve.config?.partNumber || firstCurve.part_number || '',
@@ -729,7 +730,7 @@ const GraphCapture = () => {
         yMin: firstCurve.config?.yMin || (firstCurve.y_min ? String(firstCurve.y_min) : ''),
         yMax: firstCurve.config?.yMax || (firstCurve.y_max ? String(firstCurve.y_max) : ''),
         temperature: firstCurve.config?.temperature || firstCurve.temperature || '',
-      });
+      }));
       
       // Load curve points into canvas
       const loadedPoints = Array.isArray(firstCurve.points)
@@ -745,7 +746,7 @@ const GraphCapture = () => {
       
       console.log('[DEBUG] Curve loaded into canvas, points count:', loadedPoints.length);
     }
-  }, [savedCurves, graphConfig, replaceDataPoints, setGraphConfig, setUploadedImage]);
+  }, [savedCurves, replaceDataPoints, setGraphConfig, setUploadedImage]);
 
   // Auto-scroll to Saved Graphs when opening with graph_id so edit/remove actions are visible immediately.
   useEffect(() => {
