@@ -169,6 +169,150 @@ const GraphCapture = () => {
     return paramName;
   };
 
+      const buildSymbolKeyCandidates = (label) => {
+        const trimmed = (label || '').trim();
+        if (!trimmed) return [];
+
+        const cleaned = trimmed.replace(/\s*\([^)]*\)\s*/g, ' ').trim();
+        const safeExact = /^[A-Za-z_][A-Za-z0-9_]*$/.test(cleaned) ? cleaned : '';
+        const compact = cleaned.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9_]/g, '');
+        const snake = cleaned
+          .toLowerCase()
+          .replace(/[^a-z0-9_\s]/g, ' ')
+          .replace(/\s+/g, '_')
+          .replace(/_+/g, '_')
+          .replace(/^_+|_+$/g, '');
+        const legacy = convertLabelToReturnParam(cleaned);
+
+        return Array.from(new Set([safeExact, compact, snake, legacy].filter(Boolean)));
+      };
+
+      const resolveSymbolParamName = (label, searchParams) => {
+        const candidates = buildSymbolKeyCandidates(label);
+        const keys = Array.from(searchParams.keys());
+
+        for (const candidate of candidates) {
+          const lowerCandidate = candidate.toLowerCase();
+
+          const directMatch = keys.find((key) => key.toLowerCase() === lowerCandidate);
+          if (directMatch) {
+            return directMatch;
+          }
+
+          const returnMatch = keys.find((key) => key.toLowerCase() === `return_${lowerCandidate}`);
+          if (returnMatch) {
+            return returnMatch.substring(7);
+          }
+        }
+
+        return candidates[0] || convertLabelToReturnParam(label);
+      };
+
+      const parseSymbolValuesFromText = (rawValue, preferredKeys = []) => {
+        const text = String(rawValue || '').trim();
+        if (!text) return {};
+
+        const parsedEntries = text
+          .split(';')
+          .map((part) => part.trim())
+          .filter(Boolean)
+          .map((part) => {
+            const separatorIndex = part.indexOf(':');
+            if (separatorIndex === -1) return null;
+            const key = part.slice(0, separatorIndex).trim();
+            const value = part.slice(separatorIndex + 1).trim();
+            return key && value ? [key, value] : null;
+          })
+          .filter(Boolean);
+
+        if (parsedEntries.length > 0) {
+          return Object.fromEntries(parsedEntries);
+        }
+
+        if (preferredKeys.length === 1) {
+          return { [preferredKeys[0]]: text };
+        }
+
+        return { tctj: text };
+      };
+
+      const extractDetailSymbolValues = (detail = {}, preferredKeys = []) => {
+        const directValues = preferredKeys.reduce((accumulator, key) => {
+          const rawValue = detail?.[key];
+          if (rawValue !== undefined && rawValue !== null && String(rawValue).trim() !== '') {
+            accumulator[key] = String(rawValue);
+          }
+          return accumulator;
+        }, {});
+
+        if (Object.keys(directValues).length > 0) {
+          return directValues;
+        }
+
+        if (detail?.symbol_values && typeof detail.symbol_values === 'object' && !Array.isArray(detail.symbol_values)) {
+          return Object.fromEntries(
+            Object.entries(detail.symbol_values)
+              .filter(([, value]) => value !== undefined && value !== null && String(value).trim() !== '')
+              .map(([key, value]) => [key, String(value)])
+          );
+        }
+
+        return parseSymbolValuesFromText(detail?.tctj, preferredKeys);
+      };
+
+      const buildDynamicSymbolPayload = (values = {}, labels = {}, preferredKeys = [], fallbackValue = '') => {
+        const orderedKeys = Array.from(
+          new Set([
+            ...(Array.isArray(preferredKeys) ? preferredKeys : []),
+            ...Object.keys(labels || {}),
+            ...Object.keys(values || {}),
+          ].filter(Boolean))
+        );
+
+        const symbolTitles = {};
+        const symbolValuesPayload = {};
+
+        orderedKeys.forEach((key) => {
+          const label = String(labels?.[key] || '').trim();
+          const rawValue = values?.[key];
+
+          if (label) {
+            symbolTitles[key] = label;
+          }
+
+          if (rawValue !== undefined && rawValue !== null && String(rawValue).trim() !== '') {
+            symbolValuesPayload[key] = String(rawValue).trim();
+          }
+        });
+
+        const primaryKey =
+          orderedKeys.find((key) => ['graph_tctj', 'tctj', 'tctj_title'].includes(key)) ||
+          Object.keys(symbolValuesPayload)[0] ||
+          orderedKeys[0] ||
+          '';
+
+        const primaryValue =
+          (primaryKey && symbolValuesPayload[primaryKey]) ||
+          Object.values(symbolValuesPayload)[0] ||
+          String(fallbackValue || '').trim();
+
+        const legacyTctjValue =
+          Object.keys(symbolValuesPayload).length <= 1
+            ? primaryValue
+            : Object.entries(symbolValuesPayload)
+                .map(([key, value]) => `${key}:${value}`)
+                .join(';');
+
+        return {
+          symbolTitles,
+          symbolValues: symbolValuesPayload,
+          primaryKey,
+          primaryLabel: primaryKey ? symbolTitles[primaryKey] || '' : '',
+          primaryValue,
+          legacyTctjValue,
+        };
+      };
+
   const [symbolLabels, setSymbolLabels] = useState({});
   const [editCurveMeta, setEditCurveMeta] = useState({
     xScale: 'Linear',
@@ -232,10 +376,7 @@ const GraphCapture = () => {
     }
 
     if (rawTctj !== undefined && rawTctj !== null && rawTctj !== '') {
-      if (symbolNames.length === 1) {
-        return { [symbolNames[0]]: String(rawTctj) };
-      }
-      return { tctj: String(rawTctj) };
+      return parseSymbolValuesFromText(rawTctj, symbolNames);
     }
 
     return { ...symbolValues };
@@ -331,23 +472,7 @@ const GraphCapture = () => {
       return fallback || '';
     }
 
-    if (symbols.graph_tctj !== undefined && symbols.graph_tctj !== null && String(symbols.graph_tctj).trim() !== '') {
-      return String(symbols.graph_tctj);
-    }
-
-    const nonEmptyEntries = Object.entries(symbols).filter(([, value]) =>
-      value !== undefined && value !== null && String(value).trim() !== ''
-    );
-
-    if (nonEmptyEntries.length === 1) {
-      return String(nonEmptyEntries[0][1]);
-    }
-
-    if (nonEmptyEntries.length > 1) {
-      return nonEmptyEntries.map(([key, value]) => `${key}:${value}`).join(';');
-    }
-
-    return fallback || '';
+    return buildDynamicSymbolPayload(symbols, symbolLabels, symbolNames, fallback).legacyTctjValue || fallback || '';
   };
 
   const normalizePointsForComparison = (points = []) =>
@@ -437,7 +562,13 @@ const GraphCapture = () => {
   };
 
   const pushEditedCurveToApi = async (curve, nextMeta, nextSymbols) => {
-    const tctjValue = getTctjValueFromSymbols(nextSymbols, curve?.config?.temperature || curve?.temperature || '');
+    const nextSymbolPayload = buildDynamicSymbolPayload(
+      nextSymbols,
+      symbolLabels,
+      symbolNames,
+      curve?.config?.temperature || curve?.temperature || ''
+    );
+    const tctjValue = nextSymbolPayload.legacyTctjValue;
     const currentPoints = normalizePointsForComparison(curve?.points);
     const nextPoints = normalizePointsForComparison(dataPoints);
     const currentMeta = {
@@ -529,6 +660,9 @@ const GraphCapture = () => {
     if (hasTctjChange) {
       detailPayload.tctj = tctjValue;
       detailPayload.df_tj = tctjValue;
+      Object.entries(nextSymbolPayload.symbolValues).forEach(([key, value]) => {
+        detailPayload[key] = value;
+      });
     }
     if (hasXyChanges) {
       detailPayload.xy = buildCompanyXyString(nextPoints);
@@ -542,6 +676,12 @@ const GraphCapture = () => {
       },
       details: [detailPayload],
     };
+
+    if (hasTctjChange) {
+      Object.entries(nextSymbolPayload.symbolTitles).forEach(([key, value]) => {
+        payload.graph[key] = value;
+      });
+    }
 
     const companyUrl = `https://www.discoveree.io/graph_capture_api.php?graph_id=${encodeURIComponent(companyGraphId)}`;
     console.log('=== EDIT API REQUEST ===', {
@@ -858,13 +998,13 @@ const GraphCapture = () => {
     symbolArray.forEach((symbolWithPotentialValue) => {
       if (symbolWithPotentialValue.includes('=')) {
         const [label, symbolValue] = symbolWithPotentialValue.split('=').map((s) => s.trim());
-        const paramName = convertLabelToReturnParam(label);
+        const paramName = resolveSymbolParamName(label, searchParams);
         
         symbolNames.push(paramName);
         initialSymbolValues[paramName] = symbolValue;
         labelMap[paramName] = label; // Store the friendly label for display
       } else {
-        const paramName = convertLabelToReturnParam(symbolWithPotentialValue);
+        const paramName = resolveSymbolParamName(symbolWithPotentialValue, searchParams);
         symbolNames.push(paramName);
         initialSymbolValues[paramName] =
           searchParams.get(paramName) ||
@@ -998,11 +1138,7 @@ const GraphCapture = () => {
               const detailSymbolValues =
                 detail.tctj && typeof detail.tctj === 'object' && !Array.isArray(detail.tctj)
                   ? detail.tctj
-                  : detail.tctj !== undefined && detail.tctj !== null && detail.tctj !== ''
-                    ? symbolNames.length === 1
-                      ? { [symbolNames[0]]: String(detail.tctj) }
-                      : { tctj: String(detail.tctj) }
-                    : {};
+                  : extractDetailSymbolValues(detail, symbolNames);
               console.log('[DEBUG] Parsed detail', i, 'xy:', detail.xy, 'points count:', points.length);
               return {
                 id: `${discovereeGraph.graph_id}_${detail.id || i}`,
@@ -1447,32 +1583,13 @@ const GraphCapture = () => {
       }
 
       console.log('Symbol values:', symbolValues);
-      const getTctjValueForApi = () => {
-        if (!symbolValues || typeof symbolValues !== 'object') {
-          return graphConfig.temperature || '';
-        }
-
-        if (symbolValues.graph_tctj) {
-          return String(symbolValues.graph_tctj);
-        }
-
-        const nonEmptyEntries = Object.entries(symbolValues).filter(([, value]) =>
-          value !== undefined && value !== null && String(value).trim() !== ''
-        );
-
-        if (nonEmptyEntries.length === 1) {
-          return String(nonEmptyEntries[0][1]);
-        }
-
-        if (nonEmptyEntries.length > 1) {
-          // Keep all symbol values in a plain string to match API expectation for tctj.
-          return nonEmptyEntries.map(([key, value]) => `${key}:${value}`).join(';');
-        }
-
-        return graphConfig.temperature || '';
-      };
-
-      const tctjValue = getTctjValueForApi();
+      const dynamicSymbolPayload = buildDynamicSymbolPayload(
+        symbolValues,
+        symbolLabels,
+        symbolNames,
+        graphConfig.temperature || ''
+      );
+      const tctjValue = dynamicSymbolPayload.legacyTctjValue;
       console.log('TCTJ Value (plain string):', tctjValue);
 
       const detailPayload = {
@@ -1485,11 +1602,9 @@ const GraphCapture = () => {
         xunit: graphConfig.xUnitPrefix || '1',
         yunit: graphConfig.yUnitPrefix || '1',
       };
-
-      const tctjTitle =
-        symbolLabels.graph_tctj ||
-        symbolLabels.tctj ||
-        (symbolNames.length > 0 ? symbolNames[0] : '');
+      Object.entries(dynamicSymbolPayload.symbolValues).forEach(([key, value]) => {
+        detailPayload[key] = value;
+      });
 
       const searchParams = new URLSearchParams(window.location.search);
       const existingGraphId =
@@ -1514,13 +1629,15 @@ const GraphCapture = () => {
           graph_title: graphConfig.graphTitle || urlParams.graph_title || '',
           x_title: urlParams.x_label || '',
           y_title: urlParams.y_label || '',
-          tctj_title: tctjTitle,
           graph_img: graphImageUrl || '',
           mark_review: '1',
           testuser_id: urlParams.testuser_id || '',
         },
         details: [detailPayload],
       };
+      Object.entries(dynamicSymbolPayload.symbolTitles).forEach(([key, value]) => {
+        companyApiPayload.graph[key] = value;
+      });
 
       console.log('Complete Company API Payload:', companyApiPayload);
       console.log('Graph object:', companyApiPayload.graph);
