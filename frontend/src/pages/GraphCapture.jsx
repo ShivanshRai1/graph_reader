@@ -618,7 +618,11 @@ const GraphCapture = () => {
 
     try {
       await removeCurveViaApi(curve);
-      setSavedCurves((prev) => prev.filter((item) => item.id !== curve.id));
+      const remainingCurves = savedCurves.filter((item) => item.id !== curve.id);
+      setSavedCurves(remainingCurves);
+      if (remainingCurves.length === 0) {
+        clearGraphIdContext();
+      }
     } catch (error) {
       console.error('Remove API error:', error);
       alert(`Remove failed: ${error.message}`);
@@ -869,6 +873,7 @@ const GraphCapture = () => {
             console.log('[DEBUG] DiscoverEE graph found but details are empty. Skipping Netlify fallback.');
             setSavedCurves([]);
             setSavedCurvesSource('company');
+            clearGraphIdContext();
             return;
           }
         }
