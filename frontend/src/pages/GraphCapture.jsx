@@ -893,7 +893,7 @@ const GraphCapture = () => {
       partNumber: partno || prevConfig.partNumber,
       temperature: tctjValue && tctjValue !== '0' ? tctjValue : prevConfig.temperature,
     }));
-  }, []);
+  }, [window.location.search]);
 
   const parseXyString = (xy) => {
     if (!xy) return [];
