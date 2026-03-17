@@ -211,6 +211,10 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   };
 
   const drawDataPoints = (ctx) => {
+    if (!isAxisMappingConfirmed) {
+      return;
+    }
+
     dataPoints.forEach((point, index) => {
       // Only draw if point has valid canvas coordinates
       if (typeof point.canvasX !== 'number' || typeof point.canvasY !== 'number' || 

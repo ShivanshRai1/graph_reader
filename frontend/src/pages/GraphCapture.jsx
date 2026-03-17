@@ -409,6 +409,16 @@ const GraphCapture = () => {
     window.history.replaceState({}, '', currentUrl.toString());
   };
 
+  const syncGraphIdContext = (nextGraphId) => {
+    if (!nextGraphId) return;
+    const nextId = String(nextGraphId);
+    setUrlParams((prev) => ({ ...prev, graph_id: nextId }));
+
+    const currentUrl = new URL(window.location.href);
+    currentUrl.searchParams.set('graph_id', nextId);
+    window.history.replaceState({}, '', currentUrl.toString());
+  };
+
   const pushEditedCurveToApi = async (curve, nextMeta, nextSymbols) => {
     const tctjValue = getTctjValueFromSymbols(nextSymbols, curve?.config?.temperature || curve?.temperature || '');
     const currentPoints = normalizePointsForComparison(curve?.points);
@@ -550,6 +560,9 @@ const GraphCapture = () => {
     if (result?.status && result.status !== 'success') {
       throw new Error(result?.msg || 'Company API returned non-success status');
     }
+
+    const updatedGraphId = result?.graph_id ? String(result.graph_id) : String(companyGraphId);
+    return updatedGraphId;
   };
 
   const handleEditCurveUpdate = async (curveId) => {
@@ -561,7 +574,10 @@ const GraphCapture = () => {
 
     setIsUpdatingCurveId(curveId);
     try {
-      await pushEditedCurveToApi(targetCurve, editCurveMeta, editCurveSymbolValues);
+      const updatedGraphId = await pushEditedCurveToApi(targetCurve, editCurveMeta, editCurveSymbolValues);
+      if (updatedGraphId) {
+        syncGraphIdContext(updatedGraphId);
+      }
 
       setSavedCurves((prev) =>
         prev.map((curve) => {
@@ -1481,6 +1497,7 @@ const GraphCapture = () => {
       console.log('Company API Response received:', result);
       console.log('Company Graph ID from API:', result?.graph_id);
       const companyGraphId = result?.graph_id || existingGraphId || null;
+      syncGraphIdContext(companyGraphId);
 
       // Update local backend with the real discoveree_cat_id
       if (companyGraphId && graphId) {
