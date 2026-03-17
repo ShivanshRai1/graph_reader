@@ -263,7 +263,7 @@ const GraphCapture = () => {
   };
 
   const handleEditCurveStart = (curve) => {
-    setSelectedCurveId(curve.id);
+    setSelectedCurveId('');
     if (curve.graphImageUrl) {
       setUploadedImage(curve.graphImageUrl);
     }
@@ -333,6 +333,28 @@ const GraphCapture = () => {
     return fallback || '';
   };
 
+  const normalizePointsForComparison = (points = []) =>
+    (Array.isArray(points) ? points : [])
+      .map((point) => ({
+        x: Number(point?.x_value ?? point?.x),
+        y: Number(point?.y_value ?? point?.y),
+      }))
+      .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
+
+  const havePointsChanged = (originalPoints = [], nextPoints = []) => {
+    if (originalPoints.length !== nextPoints.length) {
+      return true;
+    }
+
+    return originalPoints.some((point, index) => {
+      const nextPoint = nextPoints[index];
+      return !nextPoint || point.x !== nextPoint.x || point.y !== nextPoint.y;
+    });
+  };
+
+  const buildCompanyXyString = (points = []) =>
+    points.map((point) => `{x:${point.x},y:${point.y}}`).join(',');
+
   const getGraphIdForCurve = (curve) => {
     if (curve?.graphId !== undefined && curve?.graphId !== null && String(curve.graphId).trim() !== '') {
       return String(curve.graphId);
@@ -389,6 +411,8 @@ const GraphCapture = () => {
 
   const pushEditedCurveToApi = async (curve, nextMeta, nextSymbols) => {
     const tctjValue = getTctjValueFromSymbols(nextSymbols, curve?.config?.temperature || curve?.temperature || '');
+    const currentPoints = normalizePointsForComparison(curve?.points);
+    const nextPoints = normalizePointsForComparison(dataPoints);
     const currentMeta = {
       xScale: curve.config?.xScale || curve.x_scale || 'Linear',
       yScale: curve.config?.yScale || curve.y_scale || 'Linear',
@@ -405,8 +429,9 @@ const GraphCapture = () => {
       currentMeta.xUnitPrefix !== nextMeta.xUnitPrefix ||
       currentMeta.yUnitPrefix !== nextMeta.yUnitPrefix;
     const hasTctjChange = String(currentTctjValue || '') !== String(tctjValue || '');
+    const hasXyChanges = havePointsChanged(currentPoints, nextPoints);
 
-    if (!hasMetaChanges && !hasTctjChange) {
+    if (!hasMetaChanges && !hasTctjChange && !hasXyChanges) {
       throw new Error('No changes detected to update.');
     }
 
@@ -422,6 +447,12 @@ const GraphCapture = () => {
       if (currentMeta.xUnitPrefix !== nextMeta.xUnitPrefix) localPayload.x_unit = nextMeta.xUnitPrefix;
       if (currentMeta.yUnitPrefix !== nextMeta.yUnitPrefix) localPayload.y_unit = nextMeta.yUnitPrefix;
       if (hasTctjChange) localPayload.temperature = tctjValue;
+      if (hasXyChanges) {
+        localPayload.data_points = nextPoints.map((point) => ({
+          x_value: point.x,
+          y_value: point.y,
+        }));
+      }
 
       const localUrl = `${apiUrl}/api/curves/${localCurveId}`;
       console.log('=== EDIT API REQUEST ===', {
@@ -471,6 +502,9 @@ const GraphCapture = () => {
     if (hasTctjChange) {
       detailPayload.tctj = tctjValue;
       detailPayload.df_tj = tctjValue;
+    }
+    if (hasXyChanges) {
+      detailPayload.xy = buildCompanyXyString(nextPoints);
     }
 
     const payload = {
@@ -534,6 +568,10 @@ const GraphCapture = () => {
           if (curve.id !== curveId) return curve;
           return {
             ...curve,
+            points: normalizePointsForComparison(dataPoints).map((point) => ({
+              x_value: point.x,
+              y_value: point.y,
+            })),
             config: {
               ...(curve.config || {}),
               xScale: editCurveMeta.xScale,
