@@ -1307,13 +1307,19 @@ const GraphCapture = () => {
         symbolLabels.tctj ||
         (symbolNames.length > 0 ? symbolNames[0] : '');
 
+      const searchParams = new URLSearchParams(window.location.search);
+      const existingGraphId =
+        searchParams.get('graph_id') ||
+        urlParams.graph_id ||
+        (savedCurves[0]?.graphId ? String(savedCurves[0].graphId) : '');
+      const isAppendingToExistingGraph = Boolean(existingGraphId);
+
       // Build the JSON payload for company's API
-      // Always use a unique identifier for each save to ensure a new graph is created
       const uniqueIdentifier = `usergraph_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
       const companyApiPayload = {
         graph: {
           discoveree_cat_id: urlParams.discoveree_cat_id ? String(urlParams.discoveree_cat_id) : '',
-          identifier: uniqueIdentifier,
+          identifier: isAppendingToExistingGraph ? String(existingGraphId) : uniqueIdentifier,
           partno: urlParams.partno || '',
           manf: urlParams.manufacturer || '',
           graph_title: urlParams.graph_title || '',
@@ -1346,7 +1352,13 @@ const GraphCapture = () => {
         return null;
       }
 
-      const COMPANY_API_SAVE_URL = 'https://www.discoveree.io/graph_capture_api.php';
+      const COMPANY_API_SAVE_URL = isAppendingToExistingGraph
+        ? `https://www.discoveree.io/graph_capture_api.php?graph_id=${encodeURIComponent(existingGraphId)}`
+        : 'https://www.discoveree.io/graph_capture_api.php';
+
+      console.log('Company save mode:', isAppendingToExistingGraph ? 'append-existing-graph' : 'create-new-graph', {
+        existingGraphId,
+      });
 
       console.log('Making request to Company API:', COMPANY_API_SAVE_URL);
       console.log('Request body:', JSON.stringify(companyApiPayload, null, 2));
@@ -1371,7 +1383,7 @@ const GraphCapture = () => {
       const result = await response.json();
       console.log('Company API Response received:', result);
       console.log('Company Graph ID from API:', result?.graph_id);
-      const companyGraphId = result?.graph_id ?? null;
+      const companyGraphId = result?.graph_id || existingGraphId || null;
 
       // Update local backend with the real discoveree_cat_id
       if (companyGraphId && graphId) {
