@@ -226,6 +226,36 @@ const GraphCapture = () => {
 
   const handleViewCurve = (curve) => {
     setSelectedCurveId(curve.id);
+    if (curve.graphImageUrl) {
+      setUploadedImage(curve.graphImageUrl);
+    }
+
+    setGraphConfig((prev) => ({
+      ...prev,
+      graphTitle: curve.config?.graphTitle || curve.graph_title || prev.graphTitle || '',
+      curveName: curve.config?.curveName || curve.curve_name || curve.name || prev.curveName || '',
+      partNumber: curve.config?.partNumber || curve.part_number || prev.partNumber || '',
+      xScale: curve.config?.xScale || curve.x_scale || prev.xScale || 'Linear',
+      yScale: curve.config?.yScale || curve.y_scale || prev.yScale || 'Linear',
+      xUnitPrefix: curve.config?.xUnitPrefix || curve.x_unit || prev.xUnitPrefix || '1',
+      yUnitPrefix: curve.config?.yUnitPrefix || curve.y_unit || prev.yUnitPrefix || '1',
+      xMin: curve.config?.xMin || (curve.x_min ? String(curve.x_min) : prev.xMin || ''),
+      xMax: curve.config?.xMax || (curve.x_max ? String(curve.x_max) : prev.xMax || ''),
+      yMin: curve.config?.yMin || (curve.y_min ? String(curve.y_min) : prev.yMin || ''),
+      yMax: curve.config?.yMax || (curve.y_max ? String(curve.y_max) : prev.yMax || ''),
+      temperature: curve.config?.temperature || curve.temperature || prev.temperature || '',
+    }));
+
+    const loadedPoints = Array.isArray(curve.points)
+      ? curve.points.map((point) => ({
+          x: point.x_value ?? point.x,
+          y: point.y_value ?? point.y,
+          imported: true,
+        }))
+      : [];
+    replaceDataPoints(loadedPoints);
+    setIsReadOnly(true);
+
     const curveSymbols = normalizeCurveSymbolValues(curve);
     if (Object.keys(curveSymbols).length > 0) {
       setSymbolValues((prev) => ({ ...prev, ...curveSymbols }));
@@ -233,6 +263,37 @@ const GraphCapture = () => {
   };
 
   const handleEditCurveStart = (curve) => {
+    setSelectedCurveId(curve.id);
+    if (curve.graphImageUrl) {
+      setUploadedImage(curve.graphImageUrl);
+    }
+
+    setGraphConfig((prev) => ({
+      ...prev,
+      graphTitle: curve.config?.graphTitle || curve.graph_title || prev.graphTitle || '',
+      curveName: curve.config?.curveName || curve.curve_name || curve.name || prev.curveName || '',
+      partNumber: curve.config?.partNumber || curve.part_number || prev.partNumber || '',
+      xScale: curve.config?.xScale || curve.x_scale || prev.xScale || 'Linear',
+      yScale: curve.config?.yScale || curve.y_scale || prev.yScale || 'Linear',
+      xUnitPrefix: curve.config?.xUnitPrefix || curve.x_unit || prev.xUnitPrefix || '1',
+      yUnitPrefix: curve.config?.yUnitPrefix || curve.y_unit || prev.yUnitPrefix || '1',
+      xMin: curve.config?.xMin || (curve.x_min ? String(curve.x_min) : prev.xMin || ''),
+      xMax: curve.config?.xMax || (curve.x_max ? String(curve.x_max) : prev.xMax || ''),
+      yMin: curve.config?.yMin || (curve.y_min ? String(curve.y_min) : prev.yMin || ''),
+      yMax: curve.config?.yMax || (curve.y_max ? String(curve.y_max) : prev.yMax || ''),
+      temperature: curve.config?.temperature || curve.temperature || prev.temperature || '',
+    }));
+
+    const loadedPoints = Array.isArray(curve.points)
+      ? curve.points.map((point) => ({
+          x: point.x_value ?? point.x,
+          y: point.y_value ?? point.y,
+          imported: true,
+        }))
+      : [];
+    replaceDataPoints(loadedPoints);
+    setIsReadOnly(false);
+
     setEditingCurveId(curve.id);
     setEditCurveMeta({
       xScale: curve.config?.xScale || curve.x_scale || 'Linear',
@@ -926,7 +987,7 @@ const GraphCapture = () => {
     fetchGraphById();
   }, []); // graphId is parsed from URL directly
 
-  // Auto-load first curve into main canvas when graph_id loads data
+  // Auto-load graph context (image + axis settings) but keep points empty until View/Edit is clicked.
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
     const graphId = searchParams.get('graph_id');
@@ -938,7 +999,7 @@ const GraphCapture = () => {
       autoLoadedGraphIdRef.current = graphId;
 
       const firstCurve = savedCurves[0];
-      console.log('[DEBUG] Auto-loading first curve into canvas:', firstCurve.id);
+      console.log('[DEBUG] Auto-loading graph context without points:', firstCurve.id);
       
       // Set the graph image from DiscoverEE
       if (firstCurve.graphImageUrl) {
@@ -950,7 +1011,7 @@ const GraphCapture = () => {
       setGraphConfig((prev) => ({
         ...prev,
         graphTitle: firstCurve.config?.graphTitle || firstCurve.graph_title || '',
-        curveName: firstCurve.config?.curveName || firstCurve.curve_name || '',
+        curveName: '',
         partNumber: firstCurve.config?.partNumber || firstCurve.part_number || '',
         xScale: firstCurve.config?.xScale || firstCurve.x_scale || 'Linear',
         yScale: firstCurve.config?.yScale || firstCurve.y_scale || 'Linear',
@@ -962,20 +1023,11 @@ const GraphCapture = () => {
         yMax: firstCurve.config?.yMax || (firstCurve.y_max ? String(firstCurve.y_max) : ''),
         temperature: firstCurve.config?.temperature || firstCurve.temperature || '',
       }));
-      
-      // Load curve points into canvas
-      const loadedPoints = Array.isArray(firstCurve.points)
-        ? firstCurve.points.map((point) => ({
-            x: point.x_value || point.x,
-            y: point.y_value || point.y,
-            imported: true,
-          }))
-        : [];
-      
-      replaceDataPoints(loadedPoints);
-      setIsReadOnly(true);
-      
-      console.log('[DEBUG] Curve loaded into canvas, points count:', loadedPoints.length);
+
+      replaceDataPoints([]);
+      setIsReadOnly(false);
+
+      console.log('[DEBUG] Graph context loaded. Captured points remain empty until View/Edit.');
     }
   }, [savedCurves, replaceDataPoints, setGraphConfig, setUploadedImage]);
 
