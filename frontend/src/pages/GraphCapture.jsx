@@ -254,7 +254,7 @@ const GraphCapture = () => {
         }))
       : [];
     replaceDataPoints(loadedPoints);
-    setIsReadOnly(true);
+    setIsReadOnly(false);
 
     const curveSymbols = normalizeCurveSymbolValues(curve);
     if (Object.keys(curveSymbols).length > 0) {
@@ -520,7 +520,7 @@ const GraphCapture = () => {
     const payload = {
       graph: {
         discoveree_cat_id: String(curve?.discoveree_cat_id || urlParams.discoveree_cat_id || ''),
-        identifier: String(curve?.identifier || urlParams.identifier || companyGraphId || ''),
+        identifier: String(companyGraphId),
       },
       details: [detailPayload],
     };
@@ -1228,7 +1228,7 @@ const GraphCapture = () => {
       const savedCurve = {
         id: result.id,
         graphId: String(companyGraphId || ''),
-        identifier: String(urlParams.identifier || (savedCurves[0]?.identifier ? String(savedCurves[0].identifier) : '')),
+        identifier: String(companyGraphId || ''),
         discoveree_cat_id: String(urlParams.discoveree_cat_id || companyGraphId || ''),
         testuser_id: urlParams.testuser_id || '',
         name: payload.curve_name,
@@ -1420,10 +1420,6 @@ const GraphCapture = () => {
         searchParams.get('graph_id') ||
         urlParams.graph_id ||
         (savedCurves[0]?.graphId ? String(savedCurves[0].graphId) : '');
-      const existingGraphIdentifier =
-        searchParams.get('identifier') ||
-        urlParams.identifier ||
-        (savedCurves[0]?.identifier ? String(savedCurves[0].identifier) : '');
       const isAppendingToExistingGraph = Boolean(existingGraphId);
 
       // Build the JSON payload for company's API
