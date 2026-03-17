@@ -520,7 +520,7 @@ const GraphCapture = () => {
     const payload = {
       graph: {
         discoveree_cat_id: String(curve?.discoveree_cat_id || urlParams.discoveree_cat_id || ''),
-        identifier: String(companyGraphId),
+        identifier: String(curve?.identifier || urlParams.identifier || ''),
       },
       details: [detailPayload],
     };
@@ -561,8 +561,7 @@ const GraphCapture = () => {
       throw new Error(result?.msg || 'Company API returned non-success status');
     }
 
-    const updatedGraphId = result?.graph_id ? String(result.graph_id) : String(companyGraphId);
-    return updatedGraphId;
+    return String(companyGraphId);
   };
 
   const handleEditCurveUpdate = async (curveId) => {
@@ -574,10 +573,8 @@ const GraphCapture = () => {
 
     setIsUpdatingCurveId(curveId);
     try {
-      const updatedGraphId = await pushEditedCurveToApi(targetCurve, editCurveMeta, editCurveSymbolValues);
-      if (updatedGraphId) {
-        syncGraphIdContext(updatedGraphId);
-      }
+      await pushEditedCurveToApi(targetCurve, editCurveMeta, editCurveSymbolValues);
+      syncGraphIdContext(targetCurve.graphId || getGraphIdForCurve(targetCurve));
 
       setSavedCurves((prev) =>
         prev.map((curve) => {
@@ -1228,7 +1225,7 @@ const GraphCapture = () => {
       const savedCurve = {
         id: result.id,
         graphId: String(companyGraphId || ''),
-        identifier: String(companyGraphId || ''),
+        identifier: String((savedCurves[0]?.identifier ? String(savedCurves[0].identifier) : urlParams.identifier) || ''),
         discoveree_cat_id: String(urlParams.discoveree_cat_id || companyGraphId || ''),
         testuser_id: urlParams.testuser_id || '',
         name: payload.curve_name,
@@ -1420,6 +1417,10 @@ const GraphCapture = () => {
         searchParams.get('graph_id') ||
         urlParams.graph_id ||
         (savedCurves[0]?.graphId ? String(savedCurves[0].graphId) : '');
+      const existingGraphIdentifier =
+        searchParams.get('identifier') ||
+        urlParams.identifier ||
+        (savedCurves[0]?.identifier ? String(savedCurves[0].identifier) : '');
       const isAppendingToExistingGraph = Boolean(existingGraphId);
 
       // Build the JSON payload for company's API
@@ -1493,7 +1494,7 @@ const GraphCapture = () => {
       console.log('Company API Response received:', result);
       console.log('Company Graph ID from API:', result?.graph_id);
       const companyGraphId = result?.graph_id || existingGraphId || null;
-      syncGraphIdContext(companyGraphId);
+      syncGraphIdContext(isAppendingToExistingGraph ? existingGraphId : companyGraphId);
 
       // Update local backend with the real discoveree_cat_id
       if (companyGraphId && graphId) {
