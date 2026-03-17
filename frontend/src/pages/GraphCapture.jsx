@@ -82,6 +82,22 @@ const buildGraphGroupId = (imageUrl) => {
   return `graph_${hash.toString(36)}`;
 };
 
+const resolveGraphTitle = (graph = {}, details = []) => {
+  const detailList = Array.isArray(details) ? details : [];
+  const candidates = [
+    graph?.graph_title,
+    graph?.graphTitle,
+    graph?.title,
+    detailList[0]?.graph_title,
+    detailList[0]?.curve_title,
+    graph?.partno,
+    graph?.identifier,
+    graph?.graph_id ? `Graph ${graph.graph_id}` : '',
+  ];
+
+  return candidates.find((value) => String(value || '').trim() !== '') || '';
+};
+
 const GraphCapture = () => {
   const {
     uploadedImage,
@@ -976,6 +992,7 @@ const GraphCapture = () => {
             console.log('[DEBUG] discovereeGraph all fields:', JSON.stringify(discovereeGraph, null, 2));
             const graphImageUrl = discovereeGraph.graph_img || '';
             const graphGroupId = buildGraphGroupId(graphImageUrl || String(discovereeGraph.graph_id));
+            const resolvedGraphTitle = resolveGraphTitle(discovereeGraph, discovereeDetails);
             const fetched = discovereeDetails.map((detail, i) => {
               const points = parseXyString(detail.xy);
               const detailSymbolValues =
@@ -999,11 +1016,11 @@ const GraphCapture = () => {
                   ''
                 ),
                 testuser_id: searchParams.get('testuser_id') || '',
-                name: detail.curve_title || discovereeGraph.graph_title || `Curve ${i + 1}`,
+                name: detail.curve_title || resolvedGraphTitle || `Curve ${i + 1}`,
                 points,
                 symbolValues: detailSymbolValues,
                 config: {
-                  graphTitle: discovereeGraph.graph_title || '',
+                  graphTitle: resolvedGraphTitle,
                   curveName: detail.curve_title || '',
                   xScale: detail.xscale === '1' ? 'Linear' : detail.xscale || 'Linear',
                   yScale: detail.yscale === '1' ? 'Linear' : detail.yscale || 'Linear',
@@ -1026,10 +1043,10 @@ const GraphCapture = () => {
               
               // Auto-populate graph title from fetched data if not already set
               const firstCurve = fetched[0];
-              if (firstCurve?.config?.graphTitle && !urlParams.graph_title) {
+              if (resolvedGraphTitle && !urlParams.graph_title) {
                 setGraphConfig((prev) => ({
                   ...prev,
-                  graphTitle: firstCurve.config.graphTitle,
+                  graphTitle: resolvedGraphTitle,
                 }));
               }
               return;
@@ -1124,7 +1141,7 @@ const GraphCapture = () => {
       // Set graph config
       setGraphConfig((prev) => ({
         ...prev,
-        graphTitle: firstCurve.config?.graphTitle || firstCurve.graph_title || '',
+        graphTitle: firstCurve.config?.graphTitle || firstCurve.graph_title || firstCurve.name || '',
         curveName: '',
         partNumber: firstCurve.config?.partNumber || firstCurve.part_number || '',
         xScale: firstCurve.config?.xScale || firstCurve.x_scale || 'Linear',
