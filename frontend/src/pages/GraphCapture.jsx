@@ -864,6 +864,13 @@ const GraphCapture = () => {
               return;
             }
           }
+
+          if (result.status === 'success' && discovereeGraph) {
+            console.log('[DEBUG] DiscoverEE graph found but details are empty. Skipping Netlify fallback.');
+            setSavedCurves([]);
+            setSavedCurvesSource('company');
+            return;
+          }
         }
 
         // Fallback: Try Netlify deployed backend (same domain)
