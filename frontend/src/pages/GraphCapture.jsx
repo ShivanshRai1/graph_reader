@@ -273,8 +273,8 @@ const GraphCapture = () => {
   };
 
   const getGraphIdForCurve = (curve) => {
-    if (curve?.discoveree_cat_id !== undefined && curve?.discoveree_cat_id !== null && String(curve.discoveree_cat_id) !== '') {
-      return String(curve.discoveree_cat_id);
+    if (curve?.graphId !== undefined && curve?.graphId !== null && String(curve.graphId).trim() !== '') {
+      return String(curve.graphId);
     }
 
     const rawId = String(curve?.id || '');
@@ -414,7 +414,7 @@ const GraphCapture = () => {
 
     const payload = {
       graph: {
-        discoveree_cat_id: String(urlParams.discoveree_cat_id || companyGraphId),
+        discoveree_cat_id: String(curve?.discoveree_cat_id || urlParams.discoveree_cat_id || ''),
         identifier: `edit_${Date.now()}_${Math.floor(Math.random() * 100000)}`,
       },
       details: [detailPayload],
@@ -830,7 +830,12 @@ const GraphCapture = () => {
                 id: `${discovereeGraph.graph_id}_${detail.id || i}`,
                 detailId: detail.id ? String(detail.id) : '',
                 graphId: String(discovereeGraph.graph_id || ''),
-                discoveree_cat_id: discovereeGraph.graph_id,
+                discoveree_cat_id: String(
+                  discovereeGraph.discoveree_cat_id ||
+                  result?.discoveree_cat_id ||
+                  urlParams.discoveree_cat_id ||
+                  ''
+                ),
                 testuser_id: searchParams.get('testuser_id') || '',
                 name: detail.curve_title || discovereeGraph.graph_title || `Curve ${i + 1}`,
                 points,
@@ -1103,7 +1108,8 @@ const GraphCapture = () => {
 
       const savedCurve = {
         id: result.id,
-        discoveree_cat_id: companyGraphId,
+        graphId: String(companyGraphId || ''),
+        discoveree_cat_id: String(urlParams.discoveree_cat_id || companyGraphId || ''),
         testuser_id: urlParams.testuser_id || '',
         name: payload.curve_name,
         points: payload.data_points,
