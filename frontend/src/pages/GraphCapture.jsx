@@ -545,12 +545,23 @@ const GraphCapture = () => {
       return String(curve.detailId);
     }
 
+    if (curve?.detail_id !== undefined && curve?.detail_id !== null && String(curve.detail_id).trim() !== '') {
+      return String(curve.detail_id);
+    }
+
     const rawId = String(curve?.id || '');
     if (rawId.includes('_')) {
       const parts = rawId.split('_');
       const suffix = parts[parts.length - 1];
       if (suffix && /^\d+$/.test(suffix)) {
         return suffix;
+      }
+    }
+
+    if (/^\d+$/.test(rawId)) {
+      const graphId = getGraphIdForCurve(curve);
+      if (!graphId || String(graphId) !== rawId) {
+        return rawId;
       }
     }
 
@@ -689,9 +700,7 @@ const GraphCapture = () => {
       throw new Error('Missing company graph_id for update.');
     }
 
-    const detailPayload = {
-      curve_title: curve?.config?.curveName || curve?.curve_name || curve?.name || '',
-    };
+    const detailPayload = {};
     const resolvedDetailId = getDetailIdForCurve(curve);
     if (resolvedDetailId) detailPayload.id = String(resolvedDetailId);
     if (currentMeta.xScale !== nextMeta.xScale) detailPayload.xscale = nextMeta.xScale || 'Linear';
@@ -707,6 +716,7 @@ const GraphCapture = () => {
         graph_id: String(companyGraphId),
         discoveree_cat_id: String(curve?.discoveree_cat_id || urlParams.discoveree_cat_id || ''),
         identifier: String(curve?.identifier || urlParams.identifier || companyGraphId || ''),
+        curve_title: String(curve?.config?.curveName || curve?.curve_name || curve?.name || ''),
       },
       details: [detailPayload],
     };
@@ -721,7 +731,7 @@ const GraphCapture = () => {
     console.log('=== EDIT API REQUEST ===', {
       source: 'company',
       targetGraphId: companyGraphId,
-      targetDetailId: curve?.detailId || '',
+      targetDetailId: resolvedDetailId || '',
       url: companyUrl,
       method: 'POST',
       payload,
@@ -738,7 +748,7 @@ const GraphCapture = () => {
     console.log('=== EDIT API RESPONSE ===', {
       source: 'company',
       targetGraphId: companyGraphId,
-      targetDetailId: curve?.detailId || '',
+      targetDetailId: resolvedDetailId || '',
       url: companyUrl,
       status: response.status,
       ok: response.ok,
@@ -1185,6 +1195,7 @@ const GraphCapture = () => {
                 ...graphLevelSymbolValues,
                 ...detailSymbolValues,
               };
+              const resolvedCurveTitle = detail.curve_title || discovereeGraph.curve_title || '';
               console.log('[DEBUG] Parsed detail', i, 'xy:', detail.xy, 'points count:', points.length);
               return {
                 id: `${discovereeGraph.graph_id}_${detail.id || i}`,
@@ -1198,12 +1209,12 @@ const GraphCapture = () => {
                   ''
                 ),
                 testuser_id: searchParams.get('testuser_id') || '',
-                name: detail.curve_title || resolvedGraphTitle || `Curve ${i + 1}`,
+                name: resolvedCurveTitle || resolvedGraphTitle || `Curve ${i + 1}`,
                 points,
                 symbolValues: mergedSymbolValues,
                 config: {
                   graphTitle: resolvedGraphTitle,
-                  curveName: detail.curve_title || '',
+                  curveName: resolvedCurveTitle,
                   xScale: detail.xscale === '1' ? 'Linear' : detail.xscale || 'Linear',
                   yScale: detail.yscale === '1' ? 'Linear' : detail.yscale || 'Linear',
                   xUnitPrefix: detail.xunit || '1',
@@ -1480,14 +1491,17 @@ const GraphCapture = () => {
       const graphGroupId = buildGraphGroupId(uploadedImage || '');
       const graphImageUrl = uploadedImage || '';
       console.log('Local save successful, calling sendToCompanyDatabase...');
-      const companyGraphId = await sendToCompanyDatabase(graphImageUrl, result.id, allowRedirect);
-      console.log('sendToCompanyDatabase returned:', companyGraphId);
+      const companyResult = await sendToCompanyDatabase(graphImageUrl, result.id, allowRedirect);
+      const companyGraphId = companyResult?.graphId ?? null;
+      const companyDetailId = companyResult?.detailId || '';
+      console.log('sendToCompanyDatabase returned graphId:', companyGraphId, 'detailId:', companyDetailId);
 
       const savedCurve = {
         id: result.id,
         graphId: String(companyGraphId || ''),
         identifier: String(companyGraphId || ''),
         discoveree_cat_id: String(urlParams.discoveree_cat_id || companyGraphId || ''),
+        detailId: companyDetailId,
         testuser_id: urlParams.testuser_id || '',
         name: payload.curve_name,
         points: payload.data_points,
@@ -1639,7 +1653,6 @@ const GraphCapture = () => {
       console.log('TCTJ Value (plain string):', tctjValue);
 
       const detailPayload = {
-        curve_title: urlParams.curve_title || graphConfig.curveName || '',
         xy: xyPoints.map((point) => `{x:${point.x},y:${point.y}}`).join(','),
         xscale: graphConfig.xScale || '1',
         yscale: graphConfig.yScale || '1',
@@ -1668,6 +1681,7 @@ const GraphCapture = () => {
           partno: urlParams.partno || '',
           manf: urlParams.manufacturer || '',
           graph_title: graphConfig.graphTitle || urlParams.graph_title || '',
+          curve_title: urlParams.curve_title || graphConfig.curveName || '',
           x_title: urlParams.x_label || '',
           y_title: urlParams.y_label || '',
           graph_img: graphImageUrl || '',
@@ -1732,6 +1746,8 @@ const GraphCapture = () => {
       console.log('Company API Response received:', result);
       console.log('Company Graph ID from API:', result?.graph_id);
       const companyGraphId = result?.graph_id || existingGraphId || null;
+      const companyDetailId = result?.detail_id || result?.details?.[0]?.id || '';
+      console.log('Company Detail ID from API:', companyDetailId);
       const requestedGraphId = isAppendingToExistingGraph ? String(existingGraphId || '') : '';
       const returnedGraphId = result?.graph_id ? String(result.graph_id) : '';
       console.log('=== GRAPH ID CONSISTENCY CHECK (SAVE) ===', {
@@ -1780,7 +1796,7 @@ const GraphCapture = () => {
         // Do not show a second success message
         console.log('No return URL - data saved.');
       }
-      return companyGraphId;
+      return { graphId: companyGraphId, detailId: companyDetailId ? String(companyDetailId) : '' };
     } catch (error) {
       console.error('Full error object:', error);
       console.error('Error name:', error.name);
@@ -2031,11 +2047,12 @@ const GraphCapture = () => {
                           type="text"
                           value={symbolValues[symbol] || ''}
                           onChange={(e) => setSymbolValues({ ...symbolValues, [symbol]: e.target.value })}
+                          disabled={Boolean(editingCurveId)}
                           placeholder={`Enter value for ${displayLabel}`}
                           className="w-full px-3 py-2 border rounded text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-200"
                           style={{
                             color: '#213547',
-                            backgroundColor: '#ffffff',
+                            backgroundColor: editingCurveId ? '#f3f4f6' : '#ffffff',
                             borderColor: 'var(--color-border)',
                           }}
                         />
