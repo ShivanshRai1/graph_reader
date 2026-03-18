@@ -5,6 +5,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
   const { graphConfig, setGraphConfig } = useGraph();
   const [logError, setLogError] = useState({ x: '', y: '' });
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const isConfigLocked = Boolean(isEditingCurve);
   
   // Apply initial values from props when component mounts
   useEffect(() => {
@@ -179,7 +180,13 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
   };
 
   return (
-    <div className="w-full p-5 bg-white rounded-lg mt-5 shadow">
+    <div
+      className="w-full p-5 bg-white rounded-lg mt-5 shadow"
+      style={{
+        opacity: isConfigLocked ? 0.55 : 1,
+        pointerEvents: isConfigLocked ? 'none' : 'auto',
+      }}
+    >
       <h3 className="text-gray-900 text-lg font-semibold mb-5">Graph Configuration</h3>
 
       <div className="mb-5">
@@ -192,12 +199,12 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             onChange={handleChange}
             placeholder="Enter graph title"
             className={`w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 ${
-              isGraphTitleReadOnly
+              isGraphTitleReadOnly || isConfigLocked
                 ? 'bg-gray-100 cursor-not-allowed opacity-70'
                 : 'bg-white'
             }`}
-            readOnly={isGraphTitleReadOnly}
-            disabled={isGraphTitleReadOnly}
+            readOnly={isGraphTitleReadOnly || isConfigLocked}
+            disabled={isGraphTitleReadOnly || isConfigLocked}
           />
         </label>
         {showTctj && (
@@ -208,8 +215,9 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
               name="temperature"
               value={graphConfig.temperature}
               onChange={handleChange}
+              disabled={isConfigLocked}
               placeholder="e.g., -40°C, 25°C"
-              className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white"
+              className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed"
             />
           </label>
         )}
@@ -221,9 +229,9 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             value={graphConfig.curveName}
             onChange={handleChange}
             placeholder="Enter curve name"
-            className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white"
-            readOnly={false}
-            disabled={false}
+            className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed"
+            readOnly={isConfigLocked || isCurveNameReadOnly}
+            disabled={isConfigLocked || isCurveNameReadOnly}
           />
         </label>
       </div>
