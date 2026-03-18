@@ -700,7 +700,9 @@ const GraphCapture = () => {
       throw new Error('Missing company graph_id for update.');
     }
 
-    const detailPayload = {};
+    const detailPayload = {
+      curve_title: String(curve?.config?.curveName || curve?.curve_name || curve?.name || ''),
+    };
     const resolvedDetailId = getDetailIdForCurve(curve);
     if (resolvedDetailId) detailPayload.id = String(resolvedDetailId);
     if (currentMeta.xScale !== nextMeta.xScale) detailPayload.xscale = nextMeta.xScale || 'Linear';
@@ -1683,6 +1685,7 @@ const GraphCapture = () => {
       console.log('TCTJ Value (plain string):', tctjValue);
 
       const detailPayload = {
+        curve_title: urlParams.curve_title || graphConfig.curveName || '',
         xy: xyPoints.map((point) => `{x:${point.x},y:${point.y}}`).join(','),
         xscale: graphConfig.xScale || '1',
         yscale: graphConfig.yScale || '1',
