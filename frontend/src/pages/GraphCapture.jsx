@@ -692,7 +692,8 @@ const GraphCapture = () => {
     const detailPayload = {
       curve_title: curve?.config?.curveName || curve?.curve_name || curve?.name || '',
     };
-    if (curve?.detailId) detailPayload.id = String(curve.detailId);
+    const resolvedDetailId = getDetailIdForCurve(curve);
+    if (resolvedDetailId) detailPayload.id = String(resolvedDetailId);
     if (currentMeta.xScale !== nextMeta.xScale) detailPayload.xscale = nextMeta.xScale || 'Linear';
     if (currentMeta.yScale !== nextMeta.yScale) detailPayload.yscale = nextMeta.yScale || 'Linear';
     if (currentMeta.xUnitPrefix !== nextMeta.xUnitPrefix) detailPayload.xunit = nextMeta.xUnitPrefix || '1';
@@ -2367,9 +2368,6 @@ const GraphCapture = () => {
                         </div>
                         {editingCurveId === curve.id ? (
                           <div className="mt-2">
-                            <div className="text-xs mb-2 text-gray-700">
-                              Detail ID: {getDetailIdForCurve(curve) || '-'}
-                            </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                               <label className="text-xs text-gray-700">
                                 Y Scale
