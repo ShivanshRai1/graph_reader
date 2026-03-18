@@ -1493,15 +1493,45 @@ const GraphCapture = () => {
       console.log('Local save successful, calling sendToCompanyDatabase...');
       const companyResult = await sendToCompanyDatabase(graphImageUrl, result.id, allowRedirect);
       const companyGraphId = companyResult?.graphId ?? null;
-      const companyDetailId = companyResult?.detailId || '';
-      console.log('sendToCompanyDatabase returned graphId:', companyGraphId, 'detailId:', companyDetailId);
+      console.log('sendToCompanyDatabase returned graphId:', companyGraphId);
+
+      // Re-fetch from company API to get the real detail ID for the newly created curve
+      let realDetailId = '';
+      if (companyGraphId) {
+        try {
+          const refetchResp = await fetch(
+            `https://www.discoveree.io/graph_capture_api.php?graph_id=${encodeURIComponent(companyGraphId)}`
+          );
+          if (refetchResp.ok) {
+            const refetchResult = await refetchResp.json();
+            const refetchDetails = Array.isArray(refetchResult?.details)
+              ? refetchResult.details
+              : Array.isArray(refetchResult?.graph?.details)
+                ? refetchResult.graph.details
+                : [];
+            // Find matching detail by xy data (most reliable match)
+            const savedPoints = payload?.data_points || [];
+            const savedXyStr = savedPoints.map((p) => `{x:${p.x_value},y:${p.y_value}}`).join(',');
+            const matchedDetail = refetchDetails.find((d) => {
+              if (savedXyStr && d.xy && d.xy.replace(/\s/g, '') === savedXyStr.replace(/\s/g, '')) return true;
+              return false;
+            }) || refetchDetails[refetchDetails.length - 1]; // fallback to last (newest)
+            if (matchedDetail?.id) {
+              realDetailId = String(matchedDetail.id);
+              console.log('Re-fetched real company detailId:', realDetailId);
+            }
+          }
+        } catch (refetchErr) {
+          console.warn('Could not re-fetch detail ID from company API:', refetchErr);
+        }
+      }
 
       const savedCurve = {
-        id: result.id,
+        id: realDetailId ? `${companyGraphId}_${realDetailId}` : result.id,
         graphId: String(companyGraphId || ''),
         identifier: String(companyGraphId || ''),
         discoveree_cat_id: String(urlParams.discoveree_cat_id || companyGraphId || ''),
-        detailId: companyDetailId,
+        detailId: realDetailId,
         testuser_id: urlParams.testuser_id || '',
         name: payload.curve_name,
         points: payload.data_points,
