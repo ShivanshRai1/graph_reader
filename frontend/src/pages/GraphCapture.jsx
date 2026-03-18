@@ -523,8 +523,12 @@ const GraphCapture = () => {
     });
   };
 
-  const buildCompanyXyString = (points = []) =>
-    points.map((point) => `{x:${point.x},y:${point.y}}`).join(',');
+  const buildCompanyXyString = (points = [], xScale = 'Linear', yScale = 'Linear') =>
+    points.map((point) => {
+      const xVal = xScale === 'Logarithmic' ? Math.pow(10, point.x) : point.x;
+      const yVal = yScale === 'Logarithmic' ? Math.pow(10, point.y) : point.y;
+      return `{x:${xVal},y:${yVal}}`;
+    }).join(',');
 
   const getGraphIdForCurve = (curve) => {
     if (curve?.graphId !== undefined && curve?.graphId !== null && String(curve.graphId).trim() !== '') {
@@ -710,7 +714,7 @@ const GraphCapture = () => {
     if (currentMeta.xUnitPrefix !== nextMeta.xUnitPrefix) detailPayload.xunit = nextMeta.xUnitPrefix || '1';
     if (currentMeta.yUnitPrefix !== nextMeta.yUnitPrefix) detailPayload.yunit = nextMeta.yUnitPrefix || '1';
     if (hasXyChanges) {
-      detailPayload.xy = buildCompanyXyString(nextPoints);
+      detailPayload.xy = buildCompanyXyString(nextPoints, nextMeta.xScale, nextMeta.yScale);
     }
 
     const payload = {
@@ -1660,8 +1664,8 @@ const GraphCapture = () => {
           return Number.isFinite(point.x) && Number.isFinite(point.y);
         })
         .map((point) => ({
-          x: String(point.x * xUnitFactor),
-          y: String(point.y * yUnitFactor),
+          x: String((graphConfig.xScale === 'Logarithmic' ? Math.pow(10, point.x) : point.x) * xUnitFactor),
+          y: String((graphConfig.yScale === 'Logarithmic' ? Math.pow(10, point.y) : point.y) * yUnitFactor),
         }));
 
       console.log('Raw data points count:', dataPoints.length);
