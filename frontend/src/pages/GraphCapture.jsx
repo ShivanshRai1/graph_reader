@@ -492,6 +492,18 @@ const GraphCapture = () => {
     return keys.some((key) => String(currentValues?.[key] || '') !== String(nextValues?.[key] || ''));
   };
 
+  const getGraphDynamicFieldValues = (symbolPayload = {}) => {
+    if (!symbolPayload || typeof symbolPayload !== 'object') {
+      return {};
+    }
+
+    const entries = Object.entries(symbolPayload.symbolValues || {}).filter(
+      ([, value]) => value !== undefined && value !== null && String(value).trim() !== ''
+    );
+
+    return Object.fromEntries(entries.map(([key, value]) => [key, String(value).trim()]));
+  };
+
   const normalizePointsForComparison = (points = []) =>
     (Array.isArray(points) ? points : [])
       .map((point) => ({
@@ -685,23 +697,6 @@ const GraphCapture = () => {
     if (currentMeta.yScale !== nextMeta.yScale) detailPayload.yscale = nextMeta.yScale || 'Linear';
     if (currentMeta.xUnitPrefix !== nextMeta.xUnitPrefix) detailPayload.xunit = nextMeta.xUnitPrefix || '1';
     if (currentMeta.yUnitPrefix !== nextMeta.yUnitPrefix) detailPayload.yunit = nextMeta.yUnitPrefix || '1';
-    if (hasSymbolValueChanges || hasLegacyTemperatureChange) {
-      if (nextSymbolPayload.hasExplicitLegacyFields) {
-        Object.entries(nextSymbolPayload.legacyFieldValues).forEach(([key, value]) => {
-          detailPayload[key] = value;
-        });
-      } else if (hasLegacyTemperatureChange && tctjValue) {
-        detailPayload.tctj = tctjValue;
-        detailPayload.df_tj = tctjValue;
-      }
-
-      Object.entries(nextSymbolPayload.symbolValues).forEach(([key, value]) => {
-        if (key === 'tctj' || key === 'df_tj') {
-          return;
-        }
-        detailPayload[key] = value;
-      });
-    }
     if (hasXyChanges) {
       detailPayload.xy = buildCompanyXyString(nextPoints);
     }
@@ -716,7 +711,7 @@ const GraphCapture = () => {
     };
 
     if (hasSymbolValueChanges || hasLegacyTemperatureChange) {
-      Object.entries(nextSymbolPayload.symbolTitles).forEach(([key, value]) => {
+      Object.entries(getGraphDynamicFieldValues(nextSymbolPayload)).forEach(([key, value]) => {
         payload.graph[key] = value;
       });
     }
@@ -1171,12 +1166,24 @@ const GraphCapture = () => {
             const graphImageUrl = discovereeGraph.graph_img || '';
             const graphGroupId = buildGraphGroupId(graphImageUrl || String(discovereeGraph.graph_id));
             const resolvedGraphTitle = resolveGraphTitle(discovereeGraph, discovereeDetails);
+            const graphLevelSymbolValues = symbolNames.reduce((accumulator, key) => {
+              const value = discovereeGraph?.[key];
+              if (value !== undefined && value !== null && String(value).trim() !== '') {
+                accumulator[key] = String(value).trim();
+              }
+              return accumulator;
+            }, {});
+
             const fetched = discovereeDetails.map((detail, i) => {
               const points = parseXyString(detail.xy);
               const detailSymbolValues =
                 detail.tctj && typeof detail.tctj === 'object' && !Array.isArray(detail.tctj)
                   ? detail.tctj
                   : extractDetailSymbolValues(detail, symbolNames);
+              const mergedSymbolValues = {
+                ...graphLevelSymbolValues,
+                ...detailSymbolValues,
+              };
               console.log('[DEBUG] Parsed detail', i, 'xy:', detail.xy, 'points count:', points.length);
               return {
                 id: `${discovereeGraph.graph_id}_${detail.id || i}`,
@@ -1192,7 +1199,7 @@ const GraphCapture = () => {
                 testuser_id: searchParams.get('testuser_id') || '',
                 name: detail.curve_title || resolvedGraphTitle || `Curve ${i + 1}`,
                 points,
-                symbolValues: detailSymbolValues,
+                symbolValues: mergedSymbolValues,
                 config: {
                   graphTitle: resolvedGraphTitle,
                   curveName: detail.curve_title || '',
@@ -1639,22 +1646,6 @@ const GraphCapture = () => {
         yunit: graphConfig.yUnitPrefix || '1',
       };
 
-      if (dynamicSymbolPayload.hasExplicitLegacyFields) {
-        Object.entries(dynamicSymbolPayload.legacyFieldValues).forEach(([key, value]) => {
-          detailPayload[key] = value;
-        });
-      } else if (tctjValue) {
-        detailPayload.tctj = tctjValue;
-        detailPayload.df_tj = tctjValue;
-      }
-
-      Object.entries(dynamicSymbolPayload.symbolValues).forEach(([key, value]) => {
-        if (key === 'tctj' || key === 'df_tj') {
-          return;
-        }
-        detailPayload[key] = value;
-      });
-
       const searchParams = new URLSearchParams(window.location.search);
       const existingGraphId =
         searchParams.get('graph_id') ||
@@ -1684,7 +1675,7 @@ const GraphCapture = () => {
         },
         details: [detailPayload],
       };
-      Object.entries(dynamicSymbolPayload.symbolTitles).forEach(([key, value]) => {
+      Object.entries(getGraphDynamicFieldValues(dynamicSymbolPayload)).forEach(([key, value]) => {
         companyApiPayload.graph[key] = value;
       });
 
@@ -2376,6 +2367,9 @@ const GraphCapture = () => {
                         </div>
                         {editingCurveId === curve.id ? (
                           <div className="mt-2">
+                            <div className="text-xs mb-2 text-gray-700">
+                              Detail ID: {getDetailIdForCurve(curve) || '-'}
+                            </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                               <label className="text-xs text-gray-700">
                                 Y Scale
