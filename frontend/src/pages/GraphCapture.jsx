@@ -285,8 +285,15 @@ const GraphCapture = () => {
           }
         });
 
+        const legacyFieldValues = {};
+        ['tctj', 'df_tj'].forEach((key) => {
+          if (Object.prototype.hasOwnProperty.call(symbolValuesPayload, key)) {
+            legacyFieldValues[key] = symbolValuesPayload[key];
+          }
+        });
+
         const primaryKey =
-          orderedKeys.find((key) => ['graph_tctj', 'tctj', 'tctj_title'].includes(key)) ||
+          orderedKeys.find((key) => ['graph_tctj', 'tctj', 'df_tj'].includes(key)) ||
           Object.keys(symbolValuesPayload)[0] ||
           orderedKeys[0] ||
           '';
@@ -297,15 +304,13 @@ const GraphCapture = () => {
           String(fallbackValue || '').trim();
 
         const legacyTctjValue =
-          Object.keys(symbolValuesPayload).length <= 1
-            ? primaryValue
-            : Object.entries(symbolValuesPayload)
-                .map(([key, value]) => `${key}:${value}`)
-                .join(';');
+          legacyFieldValues.tctj || legacyFieldValues.df_tj || String(fallbackValue || '').trim();
 
         return {
           symbolTitles,
           symbolValues: symbolValuesPayload,
+          legacyFieldValues,
+          hasExplicitLegacyFields: Object.keys(legacyFieldValues).length > 0,
           primaryKey,
           primaryLabel: primaryKey ? symbolTitles[primaryKey] || '' : '',
           primaryValue,
@@ -475,6 +480,18 @@ const GraphCapture = () => {
     return buildDynamicSymbolPayload(symbols, symbolLabels, symbolNames, fallback).legacyTctjValue || fallback || '';
   };
 
+  const haveSymbolValuesChanged = (currentValues = {}, nextValues = {}, preferredKeys = []) => {
+    const keys = Array.from(
+      new Set([
+        ...(Array.isArray(preferredKeys) ? preferredKeys : []),
+        ...Object.keys(currentValues || {}),
+        ...Object.keys(nextValues || {}),
+      ].filter(Boolean))
+    );
+
+    return keys.some((key) => String(currentValues?.[key] || '') !== String(nextValues?.[key] || ''));
+  };
+
   const normalizePointsForComparison = (points = []) =>
     (Array.isArray(points) ? points : [])
       .map((point) => ({
@@ -562,6 +579,12 @@ const GraphCapture = () => {
   };
 
   const pushEditedCurveToApi = async (curve, nextMeta, nextSymbols) => {
+    const currentSymbolPayload = buildDynamicSymbolPayload(
+      normalizeCurveSymbolValues(curve),
+      symbolLabels,
+      symbolNames,
+      curve?.config?.temperature || curve?.temperature || ''
+    );
     const nextSymbolPayload = buildDynamicSymbolPayload(
       nextSymbols,
       symbolLabels,
@@ -577,19 +600,24 @@ const GraphCapture = () => {
       xUnitPrefix: curve.config?.xUnitPrefix || curve.x_unit || '1',
       yUnitPrefix: curve.config?.yUnitPrefix || curve.y_unit || '1',
     };
-    const currentTctjValue = getTctjValueFromSymbols(
-      normalizeCurveSymbolValues(curve),
-      curve?.config?.temperature || curve?.temperature || ''
-    );
     const hasMetaChanges =
       currentMeta.xScale !== nextMeta.xScale ||
       currentMeta.yScale !== nextMeta.yScale ||
       currentMeta.xUnitPrefix !== nextMeta.xUnitPrefix ||
       currentMeta.yUnitPrefix !== nextMeta.yUnitPrefix;
-    const hasTctjChange = String(currentTctjValue || '') !== String(tctjValue || '');
+    const hasLegacyTemperatureChange =
+      String(currentSymbolPayload.legacyTctjValue || '') !== String(nextSymbolPayload.legacyTctjValue || '');
+    const hasSymbolValueChanges = haveSymbolValuesChanged(
+      currentSymbolPayload.symbolValues,
+      nextSymbolPayload.symbolValues,
+      symbolNames
+    );
     const hasXyChanges = havePointsChanged(currentPoints, nextPoints);
 
-    if (!hasMetaChanges && !hasTctjChange && !hasXyChanges) {
+    const hasLocalChanges = hasMetaChanges || hasLegacyTemperatureChange || hasXyChanges;
+    const hasCompanyChanges = hasMetaChanges || hasLegacyTemperatureChange || hasSymbolValueChanges || hasXyChanges;
+
+    if (!(savedCurvesSource === 'company' ? hasCompanyChanges : hasLocalChanges)) {
       throw new Error('No changes detected to update.');
     }
 
@@ -604,7 +632,7 @@ const GraphCapture = () => {
       if (currentMeta.yScale !== nextMeta.yScale) localPayload.y_scale = nextMeta.yScale;
       if (currentMeta.xUnitPrefix !== nextMeta.xUnitPrefix) localPayload.x_unit = nextMeta.xUnitPrefix;
       if (currentMeta.yUnitPrefix !== nextMeta.yUnitPrefix) localPayload.y_unit = nextMeta.yUnitPrefix;
-      if (hasTctjChange) localPayload.temperature = tctjValue;
+      if (hasLegacyTemperatureChange) localPayload.temperature = tctjValue;
       if (hasXyChanges) {
         localPayload.data_points = nextPoints.map((point) => ({
           x_value: point.x,
@@ -657,10 +685,20 @@ const GraphCapture = () => {
     if (currentMeta.yScale !== nextMeta.yScale) detailPayload.yscale = nextMeta.yScale || 'Linear';
     if (currentMeta.xUnitPrefix !== nextMeta.xUnitPrefix) detailPayload.xunit = nextMeta.xUnitPrefix || '1';
     if (currentMeta.yUnitPrefix !== nextMeta.yUnitPrefix) detailPayload.yunit = nextMeta.yUnitPrefix || '1';
-    if (hasTctjChange) {
-      detailPayload.tctj = tctjValue;
-      detailPayload.df_tj = tctjValue;
+    if (hasSymbolValueChanges || hasLegacyTemperatureChange) {
+      if (nextSymbolPayload.hasExplicitLegacyFields) {
+        Object.entries(nextSymbolPayload.legacyFieldValues).forEach(([key, value]) => {
+          detailPayload[key] = value;
+        });
+      } else if (hasLegacyTemperatureChange && tctjValue) {
+        detailPayload.tctj = tctjValue;
+        detailPayload.df_tj = tctjValue;
+      }
+
       Object.entries(nextSymbolPayload.symbolValues).forEach(([key, value]) => {
+        if (key === 'tctj' || key === 'df_tj') {
+          return;
+        }
         detailPayload[key] = value;
       });
     }
@@ -677,7 +715,7 @@ const GraphCapture = () => {
       details: [detailPayload],
     };
 
-    if (hasTctjChange) {
+    if (hasSymbolValueChanges || hasLegacyTemperatureChange) {
       Object.entries(nextSymbolPayload.symbolTitles).forEach(([key, value]) => {
         payload.graph[key] = value;
       });
@@ -1595,14 +1633,25 @@ const GraphCapture = () => {
       const detailPayload = {
         curve_title: urlParams.curve_title || graphConfig.curveName || '',
         xy: xyPoints.map((point) => `{x:${point.x},y:${point.y}}`).join(','),
-        tctj: tctjValue,
-        df_tj: tctjValue,
         xscale: graphConfig.xScale || '1',
         yscale: graphConfig.yScale || '1',
         xunit: graphConfig.xUnitPrefix || '1',
         yunit: graphConfig.yUnitPrefix || '1',
       };
+
+      if (dynamicSymbolPayload.hasExplicitLegacyFields) {
+        Object.entries(dynamicSymbolPayload.legacyFieldValues).forEach(([key, value]) => {
+          detailPayload[key] = value;
+        });
+      } else if (tctjValue) {
+        detailPayload.tctj = tctjValue;
+        detailPayload.df_tj = tctjValue;
+      }
+
       Object.entries(dynamicSymbolPayload.symbolValues).forEach(([key, value]) => {
+        if (key === 'tctj' || key === 'df_tj') {
+          return;
+        }
         detailPayload[key] = value;
       });
 
