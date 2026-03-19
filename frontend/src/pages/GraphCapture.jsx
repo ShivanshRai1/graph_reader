@@ -1794,11 +1794,13 @@ const GraphCapture = () => {
       const result = await response.json();
       console.log('Company API Response received:', result);
       console.log('Company Graph ID from API:', result?.graph_id);
-      const companyGraphId = result?.graph_id || existingGraphId || null;
+      const returnedGraphId = result?.graph_id ? String(result.graph_id) : '';
+      const companyGraphId = isAppendingToExistingGraph
+        ? String(existingGraphId || '')
+        : (returnedGraphId || null);
       const companyDetailId = result?.detail_id || result?.details?.[0]?.id || '';
       console.log('Company Detail ID from API:', companyDetailId);
       const requestedGraphId = isAppendingToExistingGraph ? String(existingGraphId || '') : '';
-      const returnedGraphId = result?.graph_id ? String(result.graph_id) : '';
       console.log('=== GRAPH ID CONSISTENCY CHECK (SAVE) ===', {
         mode: isAppendingToExistingGraph ? 'append-existing-graph' : 'create-new-graph',
         requestedGraphId,
@@ -1808,7 +1810,7 @@ const GraphCapture = () => {
         matchesRequested: !requestedGraphId || requestedGraphId === returnedGraphId,
         note: 'If matchesRequested is false during append-existing-graph, API is returning a different graph_id than requested.',
       });
-      syncGraphIdContext(isAppendingToExistingGraph ? existingGraphId : companyGraphId);
+      syncGraphIdContext(companyGraphId);
 
       // Update local backend with the real discoveree_cat_id
       if (companyGraphId && graphId) {
