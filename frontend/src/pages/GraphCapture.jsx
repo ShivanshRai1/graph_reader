@@ -387,6 +387,16 @@ const GraphCapture = () => {
     return { ...symbolValues };
   };
 
+  const resolveAxisValue = (primaryValue, secondaryValue, fallbackValue = '') => {
+    const candidates = [primaryValue, secondaryValue, fallbackValue];
+    for (const candidate of candidates) {
+      if (candidate !== undefined && candidate !== null && String(candidate).trim() !== '') {
+        return String(candidate);
+      }
+    }
+    return '';
+  };
+
   const handleViewCurve = (curve) => {
     setSelectedCurveId(curve.id);
     if (curve.graphImageUrl) {
@@ -402,10 +412,10 @@ const GraphCapture = () => {
       yScale: curve.config?.yScale || curve.y_scale || prev.yScale || 'Linear',
       xUnitPrefix: curve.config?.xUnitPrefix || curve.x_unit || prev.xUnitPrefix || '1',
       yUnitPrefix: curve.config?.yUnitPrefix || curve.y_unit || prev.yUnitPrefix || '1',
-      xMin: curve.config?.xMin || (curve.x_min ? String(curve.x_min) : prev.xMin || ''),
-      xMax: curve.config?.xMax || (curve.x_max ? String(curve.x_max) : prev.xMax || ''),
-      yMin: curve.config?.yMin || (curve.y_min ? String(curve.y_min) : prev.yMin || ''),
-      yMax: curve.config?.yMax || (curve.y_max ? String(curve.y_max) : prev.yMax || ''),
+      xMin: resolveAxisValue(curve.config?.xMin, curve.x_min, prev.xMin),
+      xMax: resolveAxisValue(curve.config?.xMax, curve.x_max, prev.xMax),
+      yMin: resolveAxisValue(curve.config?.yMin, curve.y_min, prev.yMin),
+      yMax: resolveAxisValue(curve.config?.yMax, curve.y_max, prev.yMax),
       temperature: curve.config?.temperature || curve.temperature || prev.temperature || '',
     }));
 
@@ -440,10 +450,10 @@ const GraphCapture = () => {
       yScale: curve.config?.yScale || curve.y_scale || prev.yScale || 'Linear',
       xUnitPrefix: curve.config?.xUnitPrefix || curve.x_unit || prev.xUnitPrefix || '1',
       yUnitPrefix: curve.config?.yUnitPrefix || curve.y_unit || prev.yUnitPrefix || '1',
-      xMin: curve.config?.xMin || (curve.x_min ? String(curve.x_min) : prev.xMin || ''),
-      xMax: curve.config?.xMax || (curve.x_max ? String(curve.x_max) : prev.xMax || ''),
-      yMin: curve.config?.yMin || (curve.y_min ? String(curve.y_min) : prev.yMin || ''),
-      yMax: curve.config?.yMax || (curve.y_max ? String(curve.y_max) : prev.yMax || ''),
+      xMin: resolveAxisValue(curve.config?.xMin, curve.x_min, prev.xMin),
+      xMax: resolveAxisValue(curve.config?.xMax, curve.x_max, prev.xMax),
+      yMin: resolveAxisValue(curve.config?.yMin, curve.y_min, prev.yMin),
+      yMax: resolveAxisValue(curve.config?.yMax, curve.y_max, prev.yMax),
       temperature: curve.config?.temperature || curve.temperature || prev.temperature || '',
     }));
 
@@ -1277,10 +1287,10 @@ const GraphCapture = () => {
               yScale: curve.y_scale || 'Linear',
               xUnitPrefix: curve.x_unit || '1',
               yUnitPrefix: curve.y_unit || '1',
-              xMin: curve.x_min ? String(curve.x_min) : '',
-              xMax: curve.x_max ? String(curve.x_max) : '',
-              yMin: curve.y_min ? String(curve.y_min) : '',
-              yMax: curve.y_max ? String(curve.y_max) : '',
+              xMin: resolveAxisValue(curve.x_min),
+              xMax: resolveAxisValue(curve.x_max),
+              yMin: resolveAxisValue(curve.y_min),
+              yMax: resolveAxisValue(curve.y_max),
               temperature: curve.temperature || '',
             },
             graphGroupId,
@@ -1336,10 +1346,10 @@ const GraphCapture = () => {
         yScale: firstCurve.config?.yScale || firstCurve.y_scale || 'Linear',
         xUnitPrefix: firstCurve.config?.xUnitPrefix || firstCurve.x_unit || '1',
         yUnitPrefix: firstCurve.config?.yUnitPrefix || firstCurve.y_unit || '1',
-        xMin: firstCurve.config?.xMin || (firstCurve.x_min ? String(firstCurve.x_min) : ''),
-        xMax: firstCurve.config?.xMax || (firstCurve.x_max ? String(firstCurve.x_max) : ''),
-        yMin: firstCurve.config?.yMin || (firstCurve.y_min ? String(firstCurve.y_min) : ''),
-        yMax: firstCurve.config?.yMax || (firstCurve.y_max ? String(firstCurve.y_max) : ''),
+        xMin: resolveAxisValue(firstCurve.config?.xMin, firstCurve.x_min),
+        xMax: resolveAxisValue(firstCurve.config?.xMax, firstCurve.x_max),
+        yMin: resolveAxisValue(firstCurve.config?.yMin, firstCurve.y_min),
+        yMax: resolveAxisValue(firstCurve.config?.yMax, firstCurve.y_max),
         temperature: firstCurve.config?.temperature || firstCurve.temperature || '',
       }));
 
