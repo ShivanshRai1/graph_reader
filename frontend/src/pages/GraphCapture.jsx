@@ -523,12 +523,8 @@ const GraphCapture = () => {
     });
   };
 
-  const buildCompanyXyString = (points = [], xScale = 'Linear', yScale = 'Linear') =>
-    points.map((point) => {
-      const xVal = xScale === 'Logarithmic' ? Math.pow(10, point.x) : point.x;
-      const yVal = yScale === 'Logarithmic' ? Math.pow(10, point.y) : point.y;
-      return `{x:${xVal},y:${yVal}}`;
-    }).join(',');
+  const buildCompanyXyString = (points = []) =>
+    points.map((point) => `{x:${point.x},y:${point.y}}`).join(',');
 
   const getGraphIdForCurve = (curve) => {
     if (curve?.graphId !== undefined && curve?.graphId !== null && String(curve.graphId).trim() !== '') {
@@ -714,7 +710,7 @@ const GraphCapture = () => {
     if (currentMeta.xUnitPrefix !== nextMeta.xUnitPrefix) detailPayload.xunit = nextMeta.xUnitPrefix || '1';
     if (currentMeta.yUnitPrefix !== nextMeta.yUnitPrefix) detailPayload.yunit = nextMeta.yUnitPrefix || '1';
     if (hasXyChanges) {
-      detailPayload.xy = buildCompanyXyString(nextPoints, nextMeta.xScale, nextMeta.yScale);
+      detailPayload.xy = buildCompanyXyString(nextPoints);
     }
 
     const payload = {
@@ -1019,19 +1015,12 @@ const GraphCapture = () => {
     graphTitle: curve?.config?.graphTitle ?? curve?.graph_title ?? curve?.name,
   });
 
-  const toActualValue = (value, scale) => {
-    if (scale !== 'Logarithmic') return value;
-    return Math.pow(10, value);
-  };
-
-  const formatDisplayValue = (value, scale) => {
+  const formatDisplayValue = (value) => {
     const num = Number(value);
     if (!Number.isFinite(num)) return '';
-    const actual = toActualValue(num, scale);
-    if (!Number.isFinite(actual)) return '';
-    return (Math.abs(actual) > 0 && Math.abs(actual) < 0.0001)
-      ? actual.toExponential(4)
-      : actual.toFixed(4);
+    return (Math.abs(num) > 0 && Math.abs(num) < 0.0001)
+      ? num.toExponential(4)
+      : num.toFixed(4);
   };
 
   useEffect(() => {
@@ -1664,8 +1653,8 @@ const GraphCapture = () => {
           return Number.isFinite(point.x) && Number.isFinite(point.y);
         })
         .map((point) => ({
-          x: String((graphConfig.xScale === 'Logarithmic' ? Math.pow(10, point.x) : point.x) * xUnitFactor),
-          y: String((graphConfig.yScale === 'Logarithmic' ? Math.pow(10, point.y) : point.y) * yUnitFactor),
+          x: String((graphConfig.xScale === 'Logarithmic' ? point.x : point.x * xUnitFactor)),
+          y: String((graphConfig.yScale === 'Logarithmic' ? point.y : point.y * yUnitFactor)),
         }));
 
       console.log('Raw data points count:', dataPoints.length);
@@ -2682,10 +2671,10 @@ const GraphCapture = () => {
                 {selectedCurvePoints.map((pt, idx) => (
                   <tr key={idx}>
                     <td className="px-2 py-1 border" style={{ borderColor: 'var(--color-border)', color: '#213547', background: '#fff' }}>
-                      {formatDisplayValue(pt.x_value ?? pt.x, selectedCurve?.config?.xScale ?? selectedCurve?.x_scale ?? 'Linear')}
+                      {formatDisplayValue(pt.x_value ?? pt.x)}
                     </td>
                     <td className="px-2 py-1 border" style={{ borderColor: 'var(--color-border)', color: '#213547', background: '#fff' }}>
-                      {formatDisplayValue(pt.y_value ?? pt.y, selectedCurve?.config?.yScale ?? selectedCurve?.y_scale ?? 'Linear')}
+                      {formatDisplayValue(pt.y_value ?? pt.y)}
                     </td>
                   </tr>
                 ))}

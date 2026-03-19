@@ -8,25 +8,16 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false }) => {
   const [editX, setEditX] = useState('');
   const [editY, setEditY] = useState('');
 
-  const toActualValue = (value, scale) => {
-    if (scale !== 'Logarithmic') return value;
-    return Math.pow(10, value);
+  const formatDisplayValue = (value) => {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return 'Invalid';
+    return (Math.abs(value) > 0 && Math.abs(value) < 0.0001)
+      ? value.toExponential(6)
+      : value.toFixed(6);
   };
 
-  const formatDisplayValue = (value, scale) => {
+  const formatExportValue = (value) => {
     if (typeof value !== 'number' || !Number.isFinite(value)) return 'Invalid';
-    const actual = toActualValue(value, scale);
-    if (!Number.isFinite(actual)) return 'Invalid';
-    return (Math.abs(actual) > 0 && Math.abs(actual) < 0.0001)
-      ? actual.toExponential(6)
-      : actual.toFixed(6);
-  };
-
-  const formatExportValue = (value, scale) => {
-    if (typeof value !== 'number' || !Number.isFinite(value)) return 'Invalid';
-    const actual = toActualValue(value, scale);
-    if (!Number.isFinite(actual)) return 'Invalid';
-    return actual.toFixed(6);
+    return value.toFixed(6);
   };
 
   const getExportMeta = () => {
@@ -42,10 +33,10 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false }) => {
       yScale: graphConfig.yScale || '',
       xUnitPrefix: graphConfig.xUnitPrefix || '',
       yUnitPrefix: graphConfig.yUnitPrefix || '',
-      xMin: Number.isFinite(xMin) ? formatExportValue(xMin, graphConfig.xScale) : '',
-      xMax: Number.isFinite(xMax) ? formatExportValue(xMax, graphConfig.xScale) : '',
-      yMin: Number.isFinite(yMin) ? formatExportValue(yMin, graphConfig.yScale) : '',
-      yMax: Number.isFinite(yMax) ? formatExportValue(yMax, graphConfig.yScale) : '',
+      xMin: Number.isFinite(xMin) ? formatExportValue(xMin) : '',
+      xMax: Number.isFinite(xMax) ? formatExportValue(xMax) : '',
+      yMin: Number.isFinite(yMin) ? formatExportValue(yMin) : '',
+      yMax: Number.isFinite(yMax) ? formatExportValue(yMax) : '',
       temperature: graphConfig.temperature || '',
       exportedAt: new Date().toISOString(),
     };
@@ -92,8 +83,8 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false }) => {
     const header = ['#', 'X', 'Y'];
     const rows = dataPoints.map((point, idx) => [
       (idx + 1).toString(),
-      formatExportValue(point.x, graphConfig.xScale),
-      formatExportValue(point.y, graphConfig.yScale),
+      formatExportValue(point.x),
+      formatExportValue(point.y),
     ]);
     const csvContent = [...metaRows, header, ...rows].map(row => row.join(',')).join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -118,8 +109,8 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false }) => {
       metadata: getExportMeta(),
       points: dataPoints.map((point, index) => ({
         index: index + 1,
-        x: formatExportValue(point.x, graphConfig.xScale),
-        y: formatExportValue(point.y, graphConfig.yScale),
+        x: formatExportValue(point.x),
+        y: formatExportValue(point.y),
       })),
     };
 
@@ -174,11 +165,9 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false }) => {
       return;
     }
     const point = dataPoints[index];
-    const actualX = toActualValue(point.x, graphConfig.xScale);
-    const actualY = toActualValue(point.y, graphConfig.yScale);
     setEditingIndex(index);
-    setEditX(Number.isFinite(actualX) ? String(actualX) : '');
-    setEditY(Number.isFinite(actualY) ? String(actualY) : '');
+    setEditX(Number.isFinite(point.x) ? String(point.x) : '');
+    setEditY(Number.isFinite(point.y) ? String(point.y) : '');
   };
 
   const handleSaveEdit = (index) => {
@@ -190,19 +179,7 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false }) => {
       return;
     }
 
-    if (graphConfig.xScale === 'Logarithmic' && newX <= 0) {
-      alert('X value must be greater than 0 for logarithmic scale');
-      return;
-    }
-    if (graphConfig.yScale === 'Logarithmic' && newY <= 0) {
-      alert('Y value must be greater than 0 for logarithmic scale');
-      return;
-    }
-
-    const storedX = graphConfig.xScale === 'Logarithmic' ? Math.log10(newX) : newX;
-    const storedY = graphConfig.yScale === 'Logarithmic' ? Math.log10(newY) : newY;
-
-    updateDataPoint(index, storedX, storedY);
+    updateDataPoint(index, newX, newY);
     setEditingIndex(null);
     setEditX('');
     setEditY('');
@@ -231,8 +208,8 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false }) => {
     const header = ['#', 'X', 'Y'];
     const rows = dataPoints.map((point, idx) => [
       (idx + 1).toString(),
-      formatExportValue(point.x, graphConfig.xScale),
-      formatExportValue(point.y, graphConfig.yScale),
+      formatExportValue(point.x),
+      formatExportValue(point.y),
     ]);
     const table = [header, ...rows].map(row => row.join(',')).join('\n');
     navigator.clipboard.writeText(table).then(() => {
@@ -364,10 +341,10 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false }) => {
                   ) : (
                     <>
                       <td className="text-right px-3 py-2 font-mono text-sm text-gray-900 bg-white border-r border-gray-300">
-                        {formatDisplayValue(point.x, graphConfig.xScale)}
+                        {formatDisplayValue(point.x)}
                       </td>
                       <td className="text-right px-3 py-2 font-mono text-sm text-gray-900 bg-white border-r border-gray-300">
-                        {formatDisplayValue(point.y, graphConfig.yScale)}
+                        {formatDisplayValue(point.y)}
                       </td>
                       <td className="text-center px-3 py-2">
                         {!isReadOnly && (
