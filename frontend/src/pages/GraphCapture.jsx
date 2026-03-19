@@ -1093,9 +1093,6 @@ const GraphCapture = () => {
     const graphTitle = searchParams.get('graph_title') || '';
     const tctjValue = searchParams.get('tctj') || '';
     const graphIdFromUrl = searchParams.get('graph_id') || '';
-    if (graphIdFromUrl) {
-      activeSessionGraphIdRef.current = graphIdFromUrl;
-    }
 
     setUrlParams({
       partno,
@@ -1709,11 +1706,7 @@ const GraphCapture = () => {
       };
 
       const searchParams = new URLSearchParams(window.location.search);
-      const existingGraphId =
-        activeSessionGraphIdRef.current ||
-        searchParams.get('graph_id') ||
-        urlParams.graph_id ||
-        (savedCurves[0]?.graphId ? String(savedCurves[0].graphId) : '');
+      const existingGraphId = activeSessionGraphIdRef.current || '';
       const existingGraphIdentifier =
         searchParams.get('identifier') ||
         urlParams.identifier ||
