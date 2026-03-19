@@ -94,10 +94,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
   const formatAxisDisplay = (value, scale) => {
     const num = parseFloat(value);
     if (!Number.isFinite(num)) return '?';
-    if (scale !== 'Logarithmic') return String(num);
-    const actual = Math.pow(10, num);
-    if (!Number.isFinite(actual)) return '?';
-    return formatActual(actual);
+    return String(num);
   };
 
   // Helper to get conversion display text
@@ -122,7 +119,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
   // Track input values separately to show user's typed value while converting
   const [logInputs, setLogInputs] = useState({ yMin: '', yMax: '', xMin: '', xMax: '' });
 
-  // Initialize input values from graphConfig exponents on mount
+  // Initialize input values from graphConfig on mount
   useEffect(() => {
     // Only synchronize on first mount, not on redraw
     const fields = ['yMin', 'yMax', 'xMin', 'xMax'];
@@ -130,29 +127,27 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
     setLogInputs((prev) => {
       const next = { ...prev };
       fields.forEach((field) => {
-        const expValue = graphConfig[field];
-        if (expValue && !isNaN(expValue) && next[field] === '') {
-          // Only populate if field is empty and graphConfig has a value
-          const actualValue = Math.pow(10, parseFloat(expValue));
-          next[field] = actualValue.toString();
+        const configValue = graphConfig[field];
+        if (configValue !== undefined && configValue !== null && String(configValue).trim() !== '' && next[field] === '') {
+          // Keep log inputs in exponent space to match capture mapping.
+          next[field] = String(configValue);
         }
       });
       return next;
     });
   }, []); // Empty dependency array - only run on mount
 
-  // When switching to logarithmic scale, ensure inputValuesRef is populated from graphConfig
+  // When switching to logarithmic scale, ensure input boxes mirror exponent values from graphConfig
   useEffect(() => {
     if (graphConfig.yScale === 'Logarithmic' || graphConfig.xScale === 'Logarithmic') {
       const fields = ['yMin', 'yMax', 'xMin', 'xMax'];
       setLogInputs((prev) => {
         const next = { ...prev };
         fields.forEach((field) => {
-          const expValue = graphConfig[field];
+          const configValue = graphConfig[field];
           // If graphConfig has a value but input is empty, populate it
-          if (expValue && !isNaN(expValue) && next[field] === '') {
-            const actualValue = Math.pow(10, parseFloat(expValue));
-            next[field] = actualValue.toString();
+          if (configValue !== undefined && configValue !== null && String(configValue).trim() !== '' && next[field] === '') {
+            next[field] = String(configValue);
           }
         });
         return next;
@@ -160,22 +155,18 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
     }
   }, [graphConfig.yScale, graphConfig.xScale]);
 
-  // Handler for logarithmic input - shows typed value, converts to exponent immediately
+  // Handler for logarithmic input in exponent space (supports negative values like -1)
   const handleLogValueChange = (field, value) => {
     // Store what user is typing
     setLogInputs((prev) => ({ ...prev, [field]: value }));
 
+    // Keep axis values directly as exponent values for log scale.
     const numValue = parseFloat(value);
-    if (isNaN(numValue) || numValue <= 0) return;
+    if (value === '' || Number.isNaN(numValue)) return;
 
-    // Convert actual value to exponent immediately
-    const exp = Math.log10(numValue);
-    const roundedExp = roundExponent(exp, 10);
-
-    // Update config with the exponent
     setGraphConfig((prevConfig) => ({
       ...prevConfig,
-      [field]: String(roundedExp),
+      [field]: String(roundExponent(numValue, 10)),
     }));
   };
 
@@ -247,7 +238,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             </select>
           </label>
           {graphConfig.yScale === 'Logarithmic' && (
-            <small className="block text-xs text-blue-600 font-medium mb-3 italic">Enter actual value (e.g., 100000 or 1e5)</small>
+            <small className="block text-xs text-blue-600 font-medium mb-3 italic">Enter exponent value (e.g., -1, 0, 2)</small>
           )}
           <label className="block mb-3">
             <span className="block text-sm font-medium text-gray-800 mb-1">Unit:</span>
@@ -275,9 +266,9 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
                   value={logInputs.yMin}
                   onChange={(e) => handleLogValueChange('yMin', e.target.value)}
                   disabled={isAxisMappingConfirmed || isEditingCurve}
-                  placeholder="e.g., 100000"
+                  placeholder="e.g., -1"
                   className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed"
-                  title="Enter actual value (e.g., 100000 or 1e5)"
+                  title="Enter exponent value"
                 />
                 {logError.y && <span className="block text-xs text-red-600 mt-1">{logError.y}</span>}
               </label>
@@ -289,9 +280,9 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
                   value={logInputs.yMax}
                   onChange={(e) => handleLogValueChange('yMax', e.target.value)}
                   disabled={isAxisMappingConfirmed || isEditingCurve}
-                  placeholder="e.g., 100000"
+                  placeholder="e.g., 2"
                   className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed"
-                  title="Enter actual value (e.g., 100000 or 1e5)"
+                  title="Enter exponent value"
                 />
                 {logError.y && <span className="block text-xs text-red-600 mt-1">{logError.y}</span>}
               </label>
@@ -335,7 +326,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             </select>
           </label>
           {graphConfig.xScale === 'Logarithmic' && (
-            <small className="block text-xs text-blue-600 font-medium mb-3 italic">Enter actual value (e.g., 100000 or 1e5)</small>
+            <small className="block text-xs text-blue-600 font-medium mb-3 italic">Enter exponent value (e.g., -1, 0, 2)</small>
           )}
           <label className="block mb-3">
             <span className="block text-sm font-medium text-gray-800 mb-1">Unit:</span>
@@ -363,9 +354,9 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
                   value={logInputs.xMin}
                   onChange={(e) => handleLogValueChange('xMin', e.target.value)}
                   disabled={isAxisMappingConfirmed || isEditingCurve}
-                  placeholder="e.g., 100000"
+                  placeholder="e.g., -1"
                   className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed"
-                  title="Enter actual value (e.g., 100000 or 1e5)"
+                  title="Enter exponent value"
                 />
                 {logError.x && <span className="block text-xs text-red-600 mt-1">{logError.x}</span>}
               </label>
@@ -377,9 +368,9 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
                   value={logInputs.xMax}
                   onChange={(e) => handleLogValueChange('xMax', e.target.value)}
                   disabled={isAxisMappingConfirmed || isEditingCurve}
-                  placeholder="e.g., 100000"
+                  placeholder="e.g., 2"
                   className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed"
-                  title="Enter actual value (e.g., 100000 or 1e5)"
+                  title="Enter exponent value"
                 />
                 {logError.x && <span className="block text-xs text-red-600 mt-1">{logError.x}</span>}
               </label>

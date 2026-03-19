@@ -604,13 +604,8 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       return; // Can't calculate without image loaded
     }
     
-    // Convert back from exponent to actual value for logarithmic scales
-    if (graphConfig.xScale === 'Logarithmic') {
-      graphX = Math.pow(10, graphX);
-    }
-    if (graphConfig.yScale === 'Logarithmic') {
-      graphY = Math.pow(10, graphY);
-    }
+    // Keep values in exponent space for logarithmic scales so hover/capture
+    // stays consistent with configured min/max (e.g., yMin=-1, yMax=2).
     
     // Throttle coordinate updates to reduce flickering
     if (coordinateUpdateTimeoutRef.current) {
