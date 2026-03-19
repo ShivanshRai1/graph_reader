@@ -334,6 +334,7 @@ const GraphCapture = () => {
   const savedGraphsSectionRef = useRef(null);
   const hasAutoScrolledToSavedGraphs = useRef(false);
   const autoLoadedGraphIdRef = useRef('');
+  const activeSessionGraphIdRef = useRef('');
 
   const selectedCurve = savedCurves.find((curve) => curve.id === selectedCurveId);
   const groupedCurves = useMemo(() => {
@@ -547,6 +548,10 @@ const GraphCapture = () => {
       if (prefix) return prefix;
     }
 
+    if (activeSessionGraphIdRef.current) {
+      return String(activeSessionGraphIdRef.current);
+    }
+
     return urlParams.graph_id ? String(urlParams.graph_id) : '';
   };
 
@@ -592,6 +597,7 @@ const GraphCapture = () => {
     setReturnGraphId('');
     setSelectedCurveId('');
     setCombinedGroupId('');
+    activeSessionGraphIdRef.current = '';
     autoLoadedGraphIdRef.current = '';
     hasAutoScrolledToSavedGraphs.current = false;
 
@@ -604,7 +610,9 @@ const GraphCapture = () => {
   const syncGraphIdContext = (nextGraphId) => {
     if (!nextGraphId) return;
     const nextId = String(nextGraphId);
+    activeSessionGraphIdRef.current = nextId;
     setUrlParams((prev) => ({ ...prev, graph_id: nextId }));
+    setReturnGraphId(nextId);
 
     const currentUrl = new URL(window.location.href);
     currentUrl.searchParams.set('graph_id', nextId);
@@ -1084,6 +1092,10 @@ const GraphCapture = () => {
     const curveTitle = searchParams.get('curve_title') || '';
     const graphTitle = searchParams.get('graph_title') || '';
     const tctjValue = searchParams.get('tctj') || '';
+    const graphIdFromUrl = searchParams.get('graph_id') || '';
+    if (graphIdFromUrl) {
+      activeSessionGraphIdRef.current = graphIdFromUrl;
+    }
 
     setUrlParams({
       partno,
@@ -1098,7 +1110,7 @@ const GraphCapture = () => {
       testuser_id: searchParams.get('testuser_id') || '',
       tctj: tctjValue,
       return_url: searchParams.get('return_url') || '',
-      graph_id: searchParams.get('graph_id') || '',
+      graph_id: graphIdFromUrl,
     });
 
     // Auto-populate graphConfig with URL parameters
@@ -1698,6 +1710,7 @@ const GraphCapture = () => {
 
       const searchParams = new URLSearchParams(window.location.search);
       const existingGraphId =
+        activeSessionGraphIdRef.current ||
         searchParams.get('graph_id') ||
         urlParams.graph_id ||
         (savedCurves[0]?.graphId ? String(savedCurves[0].graphId) : '');
