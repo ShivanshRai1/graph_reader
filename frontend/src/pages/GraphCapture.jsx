@@ -335,6 +335,10 @@ const GraphCapture = () => {
   const hasAutoScrolledToSavedGraphs = useRef(false);
   const autoLoadedGraphIdRef = useRef('');
   const activeSessionGraphIdRef = useRef('');
+  const hasActiveAppendSessionRef = useRef(false);
+  const activeSessionImageKeyRef = useRef('');
+  const previousUploadedImageRef = useRef(uploadedImage || '');
+  const suppressNextImageSessionResetRef = useRef(false);
 
   const selectedCurve = savedCurves.find((curve) => curve.id === selectedCurveId);
   const groupedCurves = useMemo(() => {
@@ -401,8 +405,9 @@ const GraphCapture = () => {
   const handleViewCurve = (curve) => {
     setSelectedCurveId(curve.id);
     if (curve.graphImageUrl) {
-      setUploadedImage(curve.graphImageUrl);
+      setUploadedImageFromExistingGraph(curve.graphImageUrl);
     }
+    activateAppendSession(curve.graphId || getGraphIdForCurve(curve), curve.graphImageUrl || uploadedImage || '', 'handleViewCurve');
 
     setGraphConfig((prev) => ({
       ...prev,
@@ -439,8 +444,9 @@ const GraphCapture = () => {
   const handleEditCurveStart = (curve) => {
     setSelectedCurveId('');
     if (curve.graphImageUrl) {
-      setUploadedImage(curve.graphImageUrl);
+      setUploadedImageFromExistingGraph(curve.graphImageUrl);
     }
+    activateAppendSession(curve.graphId || getGraphIdForCurve(curve), curve.graphImageUrl || uploadedImage || '', 'handleEditCurveStart');
 
     setGraphConfig((prev) => ({
       ...prev,
@@ -537,6 +543,29 @@ const GraphCapture = () => {
   const buildCompanyXyString = (points = []) =>
     points.map((point) => `{x:${point.x},y:${point.y}}`).join(',');
 
+  const setUploadedImageFromExistingGraph = (nextImage) => {
+    if (!nextImage) return;
+    suppressNextImageSessionResetRef.current = true;
+    setUploadedImage(nextImage);
+  };
+
+  const activateAppendSession = (graphId, imageUrl = '', reason = 'unknown') => {
+    if (graphId === undefined || graphId === null || String(graphId).trim() === '') {
+      return;
+    }
+
+    const nextGraphId = String(graphId);
+    hasActiveAppendSessionRef.current = true;
+    activeSessionGraphIdRef.current = nextGraphId;
+    activeSessionImageKeyRef.current = String(imageUrl || uploadedImage || activeSessionImageKeyRef.current || '');
+
+    console.log('[GRAPH SESSION] activated', {
+      reason,
+      graphId: nextGraphId,
+      hasImageContext: Boolean(activeSessionImageKeyRef.current),
+    });
+  };
+
   const getGraphIdForCurve = (curve) => {
     if (curve?.graphId !== undefined && curve?.graphId !== null && String(curve.graphId).trim() !== '') {
       return String(curve.graphId);
@@ -548,7 +577,7 @@ const GraphCapture = () => {
       if (prefix) return prefix;
     }
 
-    if (activeSessionGraphIdRef.current) {
+    if (hasActiveAppendSessionRef.current && activeSessionGraphIdRef.current) {
       return String(activeSessionGraphIdRef.current);
     }
 
@@ -597,7 +626,9 @@ const GraphCapture = () => {
     setReturnGraphId('');
     setSelectedCurveId('');
     setCombinedGroupId('');
+    hasActiveAppendSessionRef.current = false;
     activeSessionGraphIdRef.current = '';
+    activeSessionImageKeyRef.current = '';
     autoLoadedGraphIdRef.current = '';
     hasAutoScrolledToSavedGraphs.current = false;
 
@@ -610,7 +641,7 @@ const GraphCapture = () => {
   const syncGraphIdContext = (nextGraphId) => {
     if (!nextGraphId) return;
     const nextId = String(nextGraphId);
-    activeSessionGraphIdRef.current = nextId;
+    activateAppendSession(nextId, uploadedImage || activeSessionImageKeyRef.current || '', 'syncGraphIdContext');
     setUrlParams((prev) => ({ ...prev, graph_id: nextId }));
     setReturnGraphId(nextId);
 
@@ -618,6 +649,31 @@ const GraphCapture = () => {
     currentUrl.searchParams.set('graph_id', nextId);
     window.history.replaceState({}, '', currentUrl.toString());
   };
+
+  useEffect(() => {
+    const nextImage = uploadedImage || '';
+    const sessionImageKey = activeSessionImageKeyRef.current || previousUploadedImageRef.current || '';
+
+    if (suppressNextImageSessionResetRef.current) {
+      suppressNextImageSessionResetRef.current = false;
+      previousUploadedImageRef.current = nextImage;
+      return;
+    }
+
+    if (
+      hasActiveAppendSessionRef.current &&
+      nextImage &&
+      sessionImageKey &&
+      nextImage !== sessionImageKey
+    ) {
+      console.log('[GRAPH SESSION] resetting after user changed image', {
+        previousGraphId: activeSessionGraphIdRef.current,
+      });
+      clearGraphIdContext();
+    }
+
+    previousUploadedImageRef.current = nextImage;
+  }, [uploadedImage]);
 
   const pushEditedCurveToApi = async (curve, nextMeta, nextSymbols) => {
     const currentSymbolPayload = buildDynamicSymbolPayload(
@@ -1247,6 +1303,7 @@ const GraphCapture = () => {
             if (fetched.length > 0) {
               console.log('[DEBUG] Setting savedCurves...');
               setSavedCurves(fetched);
+              activateAppendSession(discovereeGraph.graph_id, graphImageUrl, 'fetchGraphById');
               
               // Auto-populate graph title from fetched data if not already set
               const firstCurve = fetched[0];
@@ -1342,8 +1399,9 @@ const GraphCapture = () => {
       // Set the graph image from DiscoverEE
       if (firstCurve.graphImageUrl) {
         console.log('[DEBUG] Setting graph image:', firstCurve.graphImageUrl);
-        setUploadedImage(firstCurve.graphImageUrl);
+        setUploadedImageFromExistingGraph(firstCurve.graphImageUrl);
       }
+      activateAppendSession(firstCurve.graphId || graphId, firstCurve.graphImageUrl || uploadedImage || '', 'autoLoadGraphContext');
       
       // Set graph config
       setGraphConfig((prev) => ({
@@ -1706,12 +1764,19 @@ const GraphCapture = () => {
       };
 
       const searchParams = new URLSearchParams(window.location.search);
-      const existingGraphId = activeSessionGraphIdRef.current || '';
+      const existingGraphId = hasActiveAppendSessionRef.current ? activeSessionGraphIdRef.current || '' : '';
       const existingGraphIdentifier =
         searchParams.get('identifier') ||
         urlParams.identifier ||
         (savedCurves[0]?.identifier ? String(savedCurves[0].identifier) : '');
       const isAppendingToExistingGraph = Boolean(existingGraphId);
+
+      console.log('=== GRAPH SESSION STATE BEFORE SAVE ===', {
+        sessionActive: hasActiveAppendSessionRef.current,
+        sessionGraphId: activeSessionGraphIdRef.current || '',
+        incomingUrlGraphId: searchParams.get('graph_id') || '',
+        isAppendingToExistingGraph,
+      });
 
       // Build the JSON payload for company's API
       const uniqueIdentifier = `usergraph_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
