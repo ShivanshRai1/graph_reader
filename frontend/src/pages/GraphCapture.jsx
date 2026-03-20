@@ -362,6 +362,14 @@ const GraphCapture = () => {
   }, [savedCurves]);
   const selectedGroup = groupedCurves.find((group) => group.id === combinedGroupId);
   const selectedCurvePoints = selectedCurve?.points ?? selectedCurve?.data_points ?? [];
+  const selectedCurveViewId = selectedCurve
+    ? (getDetailIdForCurve(selectedCurve) ||
+      (selectedCurve?.discoveree_cat_id && String(selectedCurve.discoveree_cat_id) !== '0'
+        ? String(selectedCurve.discoveree_cat_id)
+        : (selectedCurve?.id !== undefined && selectedCurve?.id !== null && String(selectedCurve.id) !== '0'
+          ? String(selectedCurve.id)
+          : '')))
+    : '';
 
   const unitOptions = [
     { value: '1e-12', label: 'pico (p) = 1e-12' },
@@ -2743,9 +2751,15 @@ const GraphCapture = () => {
             </div>
             <div className="mb-2 text-xs">Points: {selectedCurvePoints.length}</div>
             <a
-              href={`${window.location.origin}/?view=curve&curveId=${selectedCurve.discoveree_cat_id || selectedCurve.id}`}
+              href={`${window.location.origin}/?view=curve&curveId=${encodeURIComponent(selectedCurveViewId || '')}`}
               target="_blank"
               rel="noopener noreferrer"
+              onClick={(event) => {
+                if (!selectedCurveViewId) {
+                  event.preventDefault();
+                  alert('Curve view id is unavailable for this item.');
+                }
+              }}
               style={{ color: '#1d4ed8', textDecoration: 'underline', fontSize: 13 }}
             >
               View graph in new tab
