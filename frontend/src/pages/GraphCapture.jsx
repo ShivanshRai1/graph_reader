@@ -2762,13 +2762,13 @@ const GraphCapture = () => {
             </div>
             <div className="mb-2 text-xs">Points: {selectedCurvePoints.length}</div>
             <a
-              href={`${window.location.origin}/?view=curve&curveId=${encodeURIComponent(getCurveViewId(selectedCurve) || '')}`}
+              href={`https://www.discoveree.io/show_graph.php?graph_id=${encodeURIComponent(getGraphIdForCurve(selectedCurve) || '')}`}
               target="_blank"
               rel="noopener noreferrer"
               onClick={(event) => {
-                if (!getCurveViewId(selectedCurve)) {
+                if (!getGraphIdForCurve(selectedCurve)) {
                   event.preventDefault();
-                  alert('Curve view id is unavailable for this item.');
+                  alert('Graph id is unavailable for this item.');
                 }
               }}
               style={{ color: '#1d4ed8', textDecoration: 'underline', fontSize: 13 }}
