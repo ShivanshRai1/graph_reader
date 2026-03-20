@@ -1751,14 +1751,6 @@ const GraphCapture = () => {
     try {
       console.log('Before filtering - dataPoints length:', dataPoints ? dataPoints.length : 'dataPoints is null/undefined');
 
-      const unitFactor = (value) => {
-        const num = parseFloat(value);
-        return Number.isFinite(num) ? num : 1;
-      };
-
-      const xUnitFactor = unitFactor(graphConfig.xUnitPrefix);
-      const yUnitFactor = unitFactor(graphConfig.yUnitPrefix);
-
       const xyPoints = dataPoints
         .filter((point) => {
           console.log(
@@ -1769,8 +1761,8 @@ const GraphCapture = () => {
           return Number.isFinite(point.x) && Number.isFinite(point.y);
         })
         .map((point) => ({
-          x: String((graphConfig.xScale === 'Logarithmic' ? Math.pow(10, point.x) : point.x * xUnitFactor)),
-          y: String((graphConfig.yScale === 'Logarithmic' ? Math.pow(10, point.y) : point.y * yUnitFactor)),
+          x: String((graphConfig.xScale === 'Logarithmic' ? Math.pow(10, point.x) : point.x)),
+          y: String((graphConfig.yScale === 'Logarithmic' ? Math.pow(10, point.y) : point.y)),
         }));
 
       console.log('Raw data points count:', dataPoints.length);
