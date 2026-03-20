@@ -46,14 +46,16 @@ export const GraphProvider = ({ children }) => {
   // Saved curves
   const [savedCurves, setSavedCurves] = useState([]);
 
-  // Normalize logarithmic value - convert actual value to exponent if needed
-  const normalizeLogValue = (value) => {
-    const num = parseFloat(value);
-    if (isNaN(num)) return 0; // Return 0 for invalid input
-    
-    // For log scale, values entered are already exponents, so just return them
-    // (Users enter exponents like -2, 0, 2.8, etc.)
-    return num;
+  const getSafeLogBounds = (minValue, maxValue) => {
+    const safeMin = Number.isFinite(minValue) && minValue > 0 ? minValue : 1e-12;
+    const candidateMax = Number.isFinite(maxValue) && maxValue > 0 ? maxValue : safeMin * 10;
+    const safeMax = candidateMax > safeMin ? candidateMax : safeMin * 10;
+    return {
+      min: safeMin,
+      max: safeMax,
+      logMin: Math.log10(safeMin),
+      logMax: Math.log10(safeMax),
+    };
   };
 
   // Get normalized min/max for calculations
@@ -72,15 +74,6 @@ export const GraphProvider = ({ children }) => {
     // User enters min/max in display units (e.g., 0-100 μJ)
     // Do NOT multiply by unit prefix - keep values in display units
 
-    if (graphConfig.xScale === 'Logarithmic') {
-      xMin = normalizeLogValue(xMin);
-      xMax = normalizeLogValue(xMax);
-    }
-    if (graphConfig.yScale === 'Logarithmic') {
-      yMin = normalizeLogValue(yMin);
-      yMax = normalizeLogValue(yMax);
-    }
-
     return { xMin, xMax, yMin, yMax };
   };
 
@@ -92,14 +85,26 @@ export const GraphProvider = ({ children }) => {
 
     const { xMin, xMax, yMin, yMax } = getNormalizedMinMax();
 
-    let graphX = xMin + 
-      ((canvasX - graphArea.x) / graphArea.width) * (xMax - xMin);
-    
-    let graphY = yMax - 
-      ((canvasY - graphArea.y) / graphArea.height) * (yMax - yMin);
-    
-    // For logarithmic scales, keep the exponent value (don't convert to actual)
-    // This prevents database overflow and is the correct representation for log data
+    const xRatio = (canvasX - graphArea.x) / graphArea.width;
+    const yRatio = (canvasY - graphArea.y) / graphArea.height;
+
+    let graphX;
+    if (graphConfig.xScale === 'Logarithmic') {
+      const xBounds = getSafeLogBounds(xMin, xMax);
+      const exponent = xBounds.logMin + xRatio * (xBounds.logMax - xBounds.logMin);
+      graphX = Math.pow(10, exponent);
+    } else {
+      graphX = xMin + xRatio * (xMax - xMin);
+    }
+
+    let graphY;
+    if (graphConfig.yScale === 'Logarithmic') {
+      const yBounds = getSafeLogBounds(yMin, yMax);
+      const exponent = yBounds.logMax - yRatio * (yBounds.logMax - yBounds.logMin);
+      graphY = Math.pow(10, exponent);
+    } else {
+      graphY = yMax - yRatio * (yMax - yMin);
+    }
     
     return { x: graphX, y: graphY };
   };
@@ -113,24 +118,27 @@ export const GraphProvider = ({ children }) => {
 
     const { xMin, xMax, yMin, yMax } = boundsOverride || getNormalizedMinMax();
 
-    // Avoid divide-by-zero and handle edge cases
-    const dx = Math.max(xMax - xMin, 1e-9);
-    const dy = Math.max(yMax - yMin, 1e-9);
-    let x = graphX;
-    let y = graphY;
-
-    // For log scales, clamp to positive range and convert to exponent
+    let canvasX;
     if (graphConfig.xScale === 'Logarithmic') {
-      x = Math.max(x, 1e-12);
-      x = Math.log10(x);
-    }
-    if (graphConfig.yScale === 'Logarithmic') {
-      y = Math.max(y, 1e-12);
-      y = Math.log10(y);
+      const xBounds = getSafeLogBounds(xMin, xMax);
+      const xLog = Math.log10(Math.max(Number(graphX), 1e-12));
+      const xRange = Math.max(xBounds.logMax - xBounds.logMin, 1e-9);
+      canvasX = graphArea.x + ((xLog - xBounds.logMin) / xRange) * graphArea.width;
+    } else {
+      const dx = Math.max(xMax - xMin, 1e-9);
+      canvasX = graphArea.x + ((graphX - xMin) / dx) * graphArea.width;
     }
 
-    const canvasX = graphArea.x + ((x - xMin) / dx) * graphArea.width;
-    const canvasY = graphArea.y + ((yMax - y) / dy) * graphArea.height;
+    let canvasY;
+    if (graphConfig.yScale === 'Logarithmic') {
+      const yBounds = getSafeLogBounds(yMin, yMax);
+      const yLog = Math.log10(Math.max(Number(graphY), 1e-12));
+      const yRange = Math.max(yBounds.logMax - yBounds.logMin, 1e-9);
+      canvasY = graphArea.y + ((yBounds.logMax - yLog) / yRange) * graphArea.height;
+    } else {
+      const dy = Math.max(yMax - yMin, 1e-9);
+      canvasY = graphArea.y + ((yMax - graphY) / dy) * graphArea.height;
+    }
 
     return { canvasX, canvasY };
   };
@@ -146,7 +154,7 @@ export const GraphProvider = ({ children }) => {
       y: graphCoords.y,
       xScale: graphConfig.xScale,
       yScale: graphConfig.yScale,
-      note: graphConfig.yScale === 'Logarithmic' ? 'y value is log/exponent (prevents DB overflow)' : '',
+      note: graphConfig.yScale === 'Logarithmic' ? 'y value is real value mapped by logarithmic axis' : '',
     });
     const dataPoint = {
       canvasX: point.canvasX,

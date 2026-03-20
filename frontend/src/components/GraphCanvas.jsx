@@ -579,33 +579,55 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     let graphX, graphY;
     
     // Parse config values as numbers
-    // User enters min/max in display units (e.g., 0-100 for 0-100 μJ)
-    // We do NOT multiply by unit prefix here - values stay in display units
+    // User enters min/max in display units and hover shows real values.
     let xMin = parseFloat(graphConfig.xMin);
     let xMax = parseFloat(graphConfig.xMax);
     let yMin = parseFloat(graphConfig.yMin);
     let yMax = parseFloat(graphConfig.yMax);
-    
+
+    if (Number.isNaN(xMin)) xMin = graphConfig.xScale === 'Logarithmic' ? 1 : 0;
+    if (Number.isNaN(xMax)) xMax = 100;
+    if (Number.isNaN(yMin)) yMin = graphConfig.yScale === 'Logarithmic' ? 1 : 0;
+    if (Number.isNaN(yMax)) yMax = 100;
+
+    let xRatio;
+    let yRatio;
+
     if (graphArea.width > 0 && graphArea.height > 0) {
       // Use the drawn box for calculation
-      graphX = xMin + 
-        ((canvasX - graphArea.x) / graphArea.width) * (xMax - xMin);
-      
-      graphY = yMax - 
-        ((canvasY - graphArea.y) / graphArea.height) * (yMax - yMin);
+      xRatio = (canvasX - graphArea.x) / graphArea.width;
+      yRatio = (canvasY - graphArea.y) / graphArea.height;
     } else if (uploadedImage && imageSize.width > 0) {
       // If no box drawn yet, use full image dimensions as reference
-      graphX = xMin + 
-        (canvasX / imageSize.width) * (xMax - xMin);
-      
-      graphY = yMax - 
-        (canvasY / imageSize.height) * (yMax - yMin);
+      xRatio = canvasX / imageSize.width;
+      yRatio = canvasY / imageSize.height;
     } else {
       return; // Can't calculate without image loaded
     }
-    
-    // Keep values in exponent space for logarithmic scales so hover/capture
-    // stays consistent with configured min/max (e.g., yMin=-1, yMax=2).
+
+    if (graphConfig.xScale === 'Logarithmic') {
+      const safeXMin = xMin > 0 ? xMin : 1e-12;
+      const safeXMaxCandidate = xMax > 0 ? xMax : safeXMin * 10;
+      const safeXMax = safeXMaxCandidate > safeXMin ? safeXMaxCandidate : safeXMin * 10;
+      const logXMin = Math.log10(safeXMin);
+      const logXMax = Math.log10(safeXMax);
+      const xExponent = logXMin + xRatio * (logXMax - logXMin);
+      graphX = Math.pow(10, xExponent);
+    } else {
+      graphX = xMin + xRatio * (xMax - xMin);
+    }
+
+    if (graphConfig.yScale === 'Logarithmic') {
+      const safeYMin = yMin > 0 ? yMin : 1e-12;
+      const safeYMaxCandidate = yMax > 0 ? yMax : safeYMin * 10;
+      const safeYMax = safeYMaxCandidate > safeYMin ? safeYMaxCandidate : safeYMin * 10;
+      const logYMin = Math.log10(safeYMin);
+      const logYMax = Math.log10(safeYMax);
+      const yExponent = logYMax - yRatio * (logYMax - logYMin);
+      graphY = Math.pow(10, yExponent);
+    } else {
+      graphY = yMax - yRatio * (yMax - yMin);
+    }
     
     // Throttle coordinate updates to reduce flickering
     if (coordinateUpdateTimeoutRef.current) {
