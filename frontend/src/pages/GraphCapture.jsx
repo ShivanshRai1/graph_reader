@@ -1672,8 +1672,8 @@ const GraphCapture = () => {
           return Number.isFinite(point.x) && Number.isFinite(point.y);
         })
         .map((point) => ({
-          x: String((graphConfig.xScale === 'Logarithmic' ? point.x : point.x * xUnitFactor)),
-          y: String((graphConfig.yScale === 'Logarithmic' ? point.y : point.y * yUnitFactor)),
+          x: String((graphConfig.xScale === 'Logarithmic' ? Math.pow(10, point.x) : point.x * xUnitFactor)),
+          y: String((graphConfig.yScale === 'Logarithmic' ? Math.pow(10, point.y) : point.y * yUnitFactor)),
         }));
 
       console.log('Raw data points count:', dataPoints.length);
