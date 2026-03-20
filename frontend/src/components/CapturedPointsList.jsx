@@ -264,8 +264,9 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false }) => {
         </button>
         <button 
           onClick={exportToJSON} 
-          className="px-4 py-2 rounded bg-gray-700 text-white font-medium disabled:opacity-50"
+          className="hidden px-4 py-2 rounded bg-gray-700 text-white font-medium disabled:opacity-50"
           disabled={dataPoints.length === 0}
+          aria-hidden="true"
         >
           📋 Export JSON
         </button>
