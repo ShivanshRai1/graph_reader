@@ -8,6 +8,17 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false }) => {
   const [editX, setEditX] = useState('');
   const [editY, setEditY] = useState('');
 
+  const getUnitSymbol = (prefix) => {
+    const symbols = {
+      '1e-12': 'p', '1e-9': 'n', '1e-6': '\u03bc', '1e-3': 'm',
+      '1': '1', '1e3': 'k', '1e6': 'M', '1e9': 'G', '1e12': 'T',
+    };
+    return symbols[prefix] ?? '';
+  };
+
+  const xUnitLabel = graphConfig.xUnitPrefix ? `(${getUnitSymbol(graphConfig.xUnitPrefix)})` : '';
+  const yUnitLabel = graphConfig.yUnitPrefix ? `(${getUnitSymbol(graphConfig.yUnitPrefix)})` : '';
+
   const formatDisplayValue = (value) => {
     if (typeof value !== 'number' || !Number.isFinite(value)) return 'Invalid';
     return (Math.abs(value) > 0 && Math.abs(value) < 0.0001)
@@ -292,10 +303,10 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false }) => {
               <tr className="border-b-2 border-gray-300">
                 <th className="text-right px-3 py-2 text-sm font-semibold text-gray-900 bg-blue-50 border-r border-gray-300">#</th>
                 <th className="text-right px-3 py-2 text-sm font-semibold text-gray-900 bg-blue-50 border-r border-gray-300">
-                  X Value
+                  X Value {xUnitLabel && <span className="text-blue-600">{xUnitLabel}</span>}
                 </th>
                 <th className="text-right px-3 py-2 text-sm font-semibold text-gray-900 bg-blue-50 border-r border-gray-300">
-                  Y Value
+                  Y Value {yUnitLabel && <span className="text-blue-600">{yUnitLabel}</span>}
                 </th>
                 <th className="text-center px-3 py-2 text-sm font-semibold text-gray-900 bg-blue-50">Actions</th>
               </tr>

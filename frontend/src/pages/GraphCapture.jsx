@@ -1412,8 +1412,8 @@ const GraphCapture = () => {
               xMax: resolveAxisValue(curve.x_max),
               yMin: resolveAxisValue(curve.y_min),
               yMax: resolveAxisValue(curve.y_max),
-              logDataModeX: (curve.x_scale || 'Linear') === 'Logarithmic' ? 'exponent' : 'linear',
-              logDataModeY: (curve.y_scale || 'Linear') === 'Logarithmic' ? 'exponent' : 'linear',
+              logDataModeX: (curve.x_scale || 'Linear') === 'Logarithmic' ? 'actual' : 'linear',
+              logDataModeY: (curve.y_scale || 'Linear') === 'Logarithmic' ? 'actual' : 'linear',
               temperature: curve.temperature || '',
             },
             graphGroupId,
@@ -1666,8 +1666,8 @@ const GraphCapture = () => {
         symbolValues: { ...symbolValues },
         config: {
           ...graphConfig,
-          logDataModeX: graphConfig.xScale === 'Logarithmic' ? 'exponent' : 'linear',
-          logDataModeY: graphConfig.yScale === 'Logarithmic' ? 'exponent' : 'linear',
+          logDataModeX: graphConfig.xScale === 'Logarithmic' ? 'actual' : 'linear',
+          logDataModeY: graphConfig.yScale === 'Logarithmic' ? 'actual' : 'linear',
         },
         graphGroupId,
         graphImageUrl,
@@ -1782,8 +1782,8 @@ const GraphCapture = () => {
           return Number.isFinite(point.x) && Number.isFinite(point.y);
         })
         .map((point) => ({
-          x: String((graphConfig.xScale === 'Logarithmic' ? Math.pow(10, point.x) : point.x)),
-          y: String((graphConfig.yScale === 'Logarithmic' ? Math.pow(10, point.y) : point.y)),
+          x: String(point.x),
+          y: String(point.y),
         }));
 
       console.log('Raw data points count:', dataPoints.length);
