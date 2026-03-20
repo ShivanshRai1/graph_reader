@@ -1084,6 +1084,8 @@ const GraphCapture = () => {
     yScale: curve?.config?.yScale ?? curve?.y_scale,
     xUnit: curve?.config?.xUnitPrefix ?? curve?.x_unit,
     yUnit: curve?.config?.yUnitPrefix ?? curve?.y_unit,
+    logDataModeX: curve?.config?.logDataModeX ?? curve?.logDataModeX,
+    logDataModeY: curve?.config?.logDataModeY ?? curve?.logDataModeY,
     xLabel: curve?.config?.xLabel ?? curve?.x_label,
     yLabel: curve?.config?.yLabel ?? curve?.y_label,
     graphTitle: curve?.config?.graphTitle ?? curve?.graph_title ?? curve?.name,
@@ -1257,6 +1259,12 @@ const GraphCapture = () => {
 
             const fetched = discovereeDetails.map((detail, i) => {
               const points = parseXyString(detail.xy);
+              const resolvedXMin = resolveAxisValue(detail?.x_min ?? detail?.xmin, discovereeGraph?.x_min ?? discovereeGraph?.xmin, '');
+              const resolvedXMax = resolveAxisValue(detail?.x_max ?? detail?.xmax, discovereeGraph?.x_max ?? discovereeGraph?.xmax, '');
+              const resolvedYMin = resolveAxisValue(detail?.y_min ?? detail?.ymin, discovereeGraph?.y_min ?? discovereeGraph?.ymin, '');
+              const resolvedYMax = resolveAxisValue(detail?.y_max ?? detail?.ymax, discovereeGraph?.y_max ?? discovereeGraph?.ymax, '');
+              const resolvedXScale = detail.xscale === '1' ? 'Linear' : detail.xscale || 'Linear';
+              const resolvedYScale = detail.yscale === '1' ? 'Linear' : detail.yscale || 'Linear';
               const detailSymbolValues =
                 detail.tctj && typeof detail.tctj === 'object' && !Array.isArray(detail.tctj)
                   ? detail.tctj
@@ -1281,18 +1289,24 @@ const GraphCapture = () => {
                 testuser_id: searchParams.get('testuser_id') || '',
                 name: resolvedCurveTitle || resolvedGraphTitle || `Curve ${i + 1}`,
                 points,
+                x_min: resolvedXMin,
+                x_max: resolvedXMax,
+                y_min: resolvedYMin,
+                y_max: resolvedYMax,
                 symbolValues: mergedSymbolValues,
                 config: {
                   graphTitle: resolvedGraphTitle,
                   curveName: resolvedCurveTitle,
-                  xScale: detail.xscale === '1' ? 'Linear' : detail.xscale || 'Linear',
-                  yScale: detail.yscale === '1' ? 'Linear' : detail.yscale || 'Linear',
+                  xScale: resolvedXScale,
+                  yScale: resolvedYScale,
                   xUnitPrefix: detail.xunit || '1',
                   yUnitPrefix: detail.yunit || '1',
-                  xMin: '',
-                  xMax: '',
-                  yMin: '',
-                  yMax: '',
+                  xMin: resolvedXMin,
+                  xMax: resolvedXMax,
+                  yMin: resolvedYMin,
+                  yMax: resolvedYMax,
+                  logDataModeX: resolvedXScale === 'Logarithmic' ? 'actual' : 'linear',
+                  logDataModeY: resolvedYScale === 'Logarithmic' ? 'actual' : 'linear',
                   temperature: detail.tctj || '',
                 },
                 graphGroupId,
@@ -1357,6 +1371,8 @@ const GraphCapture = () => {
               xMax: resolveAxisValue(curve.x_max),
               yMin: resolveAxisValue(curve.y_min),
               yMax: resolveAxisValue(curve.y_max),
+              logDataModeX: (curve.x_scale || 'Linear') === 'Logarithmic' ? 'exponent' : 'linear',
+              logDataModeY: (curve.y_scale || 'Linear') === 'Logarithmic' ? 'exponent' : 'linear',
               temperature: curve.temperature || '',
             },
             graphGroupId,
@@ -1608,7 +1624,11 @@ const GraphCapture = () => {
         name: payload.curve_name,
         points: payload.data_points,
         symbolValues: { ...symbolValues },
-        config: { ...graphConfig },
+        config: {
+          ...graphConfig,
+          logDataModeX: graphConfig.xScale === 'Logarithmic' ? 'exponent' : 'linear',
+          logDataModeY: graphConfig.yScale === 'Logarithmic' ? 'exponent' : 'linear',
+        },
         graphGroupId,
         graphImageUrl,
       };
