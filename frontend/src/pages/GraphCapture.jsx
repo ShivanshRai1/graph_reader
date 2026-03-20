@@ -2765,6 +2765,7 @@ const GraphCapture = () => {
               href={`https://www.discoveree.io/show_graph.php?graph_id=${encodeURIComponent(getGraphIdForCurve(selectedCurve) || '')}`}
               target="_blank"
               rel="noopener noreferrer"
+              className="hidden"
               onClick={(event) => {
                 if (!getGraphIdForCurve(selectedCurve)) {
                   event.preventDefault();
