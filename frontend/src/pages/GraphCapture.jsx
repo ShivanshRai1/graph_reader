@@ -403,6 +403,12 @@ const GraphCapture = () => {
   };
 
   const handleViewCurve = (curve) => {
+    console.log('[GRAPH SESSION] handleViewCurve', {
+      curveId: curve.id,
+      curveGraphId: curve.graphId || '',
+      sessionActive: hasActiveAppendSessionRef.current,
+      sessionGraphId: activeSessionGraphIdRef.current || '',
+    });
     setSelectedCurveId(curve.id);
     if (curve.graphImageUrl) {
       setUploadedImageFromExistingGraph(curve.graphImageUrl);
@@ -441,6 +447,12 @@ const GraphCapture = () => {
   };
 
   const handleEditCurveStart = (curve) => {
+    console.log('[GRAPH SESSION] handleEditCurveStart', {
+      curveId: curve.id,
+      curveGraphId: curve.graphId || '',
+      sessionActive: hasActiveAppendSessionRef.current,
+      sessionGraphId: activeSessionGraphIdRef.current || '',
+    });
     setSelectedCurveId('');
     if (curve.graphImageUrl) {
       setUploadedImageFromExistingGraph(curve.graphImageUrl);
@@ -639,6 +651,10 @@ const GraphCapture = () => {
     });
 
   const clearGraphIdContext = () => {
+    console.log('[GRAPH SESSION] clearGraphIdContext', {
+      previousGraphId: activeSessionGraphIdRef.current || '',
+      previousSessionActive: hasActiveAppendSessionRef.current,
+    });
     setUrlParams((prev) => ({ ...prev, graph_id: '' }));
     setReturnGraphId('');
     setSelectedCurveId('');
@@ -656,8 +672,16 @@ const GraphCapture = () => {
   };
 
   const syncGraphIdContext = (nextGraphId) => {
-    if (!nextGraphId) return;
+    if (!nextGraphId) {
+      console.warn('[GRAPH SESSION] syncGraphIdContext called with empty graphId — skipped');
+      return;
+    }
     const nextId = String(nextGraphId);
+    console.log('[GRAPH SESSION] syncGraphIdContext', {
+      nextGraphId: nextId,
+      previousGraphId: activeSessionGraphIdRef.current || '',
+      isNewSession: !hasActiveAppendSessionRef.current,
+    });
     activateAppendSession(nextId, uploadedImage || activeSessionImageKeyRef.current || '', 'syncGraphIdContext');
     setUrlParams((prev) => ({ ...prev, graph_id: nextId }));
     setReturnGraphId(nextId);
