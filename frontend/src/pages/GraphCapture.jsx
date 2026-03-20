@@ -407,7 +407,6 @@ const GraphCapture = () => {
     if (curve.graphImageUrl) {
       setUploadedImageFromExistingGraph(curve.graphImageUrl);
     }
-    activateAppendSession(curve.graphId || getGraphIdForCurve(curve), curve.graphImageUrl || uploadedImage || '', 'handleViewCurve');
 
     setGraphConfig((prev) => ({
       ...prev,
@@ -446,7 +445,6 @@ const GraphCapture = () => {
     if (curve.graphImageUrl) {
       setUploadedImageFromExistingGraph(curve.graphImageUrl);
     }
-    activateAppendSession(curve.graphId || getGraphIdForCurve(curve), curve.graphImageUrl || uploadedImage || '', 'handleEditCurveStart');
 
     setGraphConfig((prev) => ({
       ...prev,
@@ -1436,8 +1434,7 @@ const GraphCapture = () => {
         console.log('[DEBUG] Setting graph image:', firstCurve.graphImageUrl);
         setUploadedImageFromExistingGraph(firstCurve.graphImageUrl);
       }
-      activateAppendSession(firstCurve.graphId || graphId, firstCurve.graphImageUrl || uploadedImage || '', 'autoLoadGraphContext');
-      
+
       // Set graph config
       setGraphConfig((prev) => ({
         ...prev,
