@@ -362,14 +362,6 @@ const GraphCapture = () => {
   }, [savedCurves]);
   const selectedGroup = groupedCurves.find((group) => group.id === combinedGroupId);
   const selectedCurvePoints = selectedCurve?.points ?? selectedCurve?.data_points ?? [];
-  const selectedCurveViewId = selectedCurve
-    ? (getDetailIdForCurve(selectedCurve) ||
-      (selectedCurve?.discoveree_cat_id && String(selectedCurve.discoveree_cat_id) !== '0'
-        ? String(selectedCurve.discoveree_cat_id)
-        : (selectedCurve?.id !== undefined && selectedCurve?.id !== null && String(selectedCurve.id) !== '0'
-          ? String(selectedCurve.id)
-          : '')))
-    : '';
 
   const unitOptions = [
     { value: '1e-12', label: 'pico (p) = 1e-12' },
@@ -615,6 +607,25 @@ const GraphCapture = () => {
       if (!graphId || String(graphId) !== rawId) {
         return rawId;
       }
+    }
+
+    return '';
+  };
+
+  const getCurveViewId = (curve) => {
+    if (!curve) return '';
+
+    const detailId = getDetailIdForCurve(curve);
+    if (detailId && String(detailId) !== '0') {
+      return String(detailId);
+    }
+
+    if (curve?.discoveree_cat_id !== undefined && curve?.discoveree_cat_id !== null && String(curve.discoveree_cat_id) !== '0') {
+      return String(curve.discoveree_cat_id);
+    }
+
+    if (curve?.id !== undefined && curve?.id !== null && String(curve.id) !== '0') {
+      return String(curve.id);
     }
 
     return '';
@@ -2751,11 +2762,11 @@ const GraphCapture = () => {
             </div>
             <div className="mb-2 text-xs">Points: {selectedCurvePoints.length}</div>
             <a
-              href={`${window.location.origin}/?view=curve&curveId=${encodeURIComponent(selectedCurveViewId || '')}`}
+              href={`${window.location.origin}/?view=curve&curveId=${encodeURIComponent(getCurveViewId(selectedCurve) || '')}`}
               target="_blank"
               rel="noopener noreferrer"
               onClick={(event) => {
-                if (!selectedCurveViewId) {
+                if (!getCurveViewId(selectedCurve)) {
                   event.preventDefault();
                   alert('Curve view id is unavailable for this item.');
                 }
@@ -2851,12 +2862,22 @@ const GraphCapture = () => {
               Combined curves ({selectedGroup.curves.length})
             </div>
             <div style={{ marginTop: 12 }}>
-              <SavedGraphCombinedPreview
-                curves={selectedGroup.curves}
-                config={normalizeCurveConfig(selectedGroup.curves[0])}
-                width={700}
-                height={280}
-              />
+              {selectedGroup.curves.length === 1 ? (
+                <SavedGraphPreview
+                  points={selectedGroup.curves[0]?.points ?? selectedGroup.curves[0]?.data_points ?? []}
+                  config={normalizeCurveConfig(selectedGroup.curves[0])}
+                  width={700}
+                  height={280}
+                  animate
+                />
+              ) : (
+                <SavedGraphCombinedPreview
+                  curves={selectedGroup.curves}
+                  config={normalizeCurveConfig(selectedGroup.curves[0])}
+                  width={700}
+                  height={280}
+                />
+              )}
             </div>
           </div>
         </div>
