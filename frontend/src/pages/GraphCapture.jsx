@@ -1374,10 +1374,24 @@ const GraphCapture = () => {
           }
 
           if (result.status === 'success' && discovereeGraph) {
-            console.log('[DEBUG] DiscoverEE graph found but details are empty. Skipping Netlify fallback.');
+            console.log('[DEBUG] DiscoverEE graph found but details are empty. Preserving graph context.');
+            const graphImageUrl = discovereeGraph.graph_img || '';
+            const resolvedGraphTitle = resolveGraphTitle(discovereeGraph, []);
+
             setSavedCurves([]);
             setSavedCurvesSource('company');
-            clearGraphIdContext();
+            activateAppendSession(discovereeGraph.graph_id, graphImageUrl, 'fetchGraphById-emptyDetails');
+
+            if (graphImageUrl) {
+              setUploadedImageFromExistingGraph(graphImageUrl);
+            }
+
+            if (resolvedGraphTitle && !urlParams.graph_title) {
+              setGraphConfig((prev) => ({
+                ...prev,
+                graphTitle: resolvedGraphTitle,
+              }));
+            }
             return;
           }
         }
@@ -1823,6 +1837,7 @@ const GraphCapture = () => {
         urlParams.identifier ||
         (savedCurves[0]?.identifier ? String(savedCurves[0].identifier) : '');
       const isAppendingToExistingGraph = Boolean(existingGraphId);
+      const appendIdentifier = String(existingGraphId || existingGraphIdentifier || '');
 
       console.log('=== GRAPH SESSION STATE BEFORE SAVE ===', {
         sessionActive: hasActiveAppendSessionRef.current,
@@ -1835,9 +1850,10 @@ const GraphCapture = () => {
       const uniqueIdentifier = `usergraph_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
       const companyApiPayload = {
         graph: {
-          graph_id: isAppendingToExistingGraph ? String(existingGraphId) : '',
+          // In append mode, graph_id must come from query param only to avoid API creating a new graph.
+          graph_id: '',
           discoveree_cat_id: urlParams.discoveree_cat_id ? String(urlParams.discoveree_cat_id) : '',
-          identifier: isAppendingToExistingGraph ? String(existingGraphIdentifier || existingGraphId || '') : uniqueIdentifier,
+          identifier: isAppendingToExistingGraph ? appendIdentifier : uniqueIdentifier,
           partno: urlParams.partno || '',
           manf: urlParams.manufacturer || '',
           graph_title: graphConfig.graphTitle || urlParams.graph_title || '',
@@ -1879,7 +1895,7 @@ const GraphCapture = () => {
 
       console.log('Company save mode:', isAppendingToExistingGraph ? 'append-existing-graph' : 'create-new-graph', {
         existingGraphId,
-        existingGraphIdentifier,
+        existingGraphIdentifier: appendIdentifier,
       });
 
       console.log('Making request to Company API:', COMPANY_API_SAVE_URL);
