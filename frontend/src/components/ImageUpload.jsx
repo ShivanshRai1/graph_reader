@@ -1,7 +1,7 @@
-import { useState, useRef } from 'react';
+import { useRef } from 'react';
 import { useGraph } from '../context/GraphContext';
 
-const ImageUpload = () => {
+const ImageUpload = ({ onImageLoaded }) => {
   const { setUploadedImage, clearDataPoints, setGraphConfig, setGraphArea } = useGraph();
   const fileInputRef = useRef(null);
 
@@ -27,6 +27,7 @@ const ImageUpload = () => {
         const reader = new FileReader();
         reader.onload = (ev) => {
           setUploadedImage(ev.target.result);
+          onImageLoaded?.();
         };
         reader.readAsDataURL(blob);
         break;
@@ -52,6 +53,7 @@ const ImageUpload = () => {
       const reader = new FileReader();
       reader.onload = (ev) => {
         setUploadedImage(ev.target.result);
+        onImageLoaded?.();
       };
       reader.readAsDataURL(file);
     }

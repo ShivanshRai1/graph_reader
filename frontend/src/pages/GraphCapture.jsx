@@ -142,6 +142,7 @@ const GraphCapture = () => {
   const [returnParams, setReturnParams] = useState({});
   const [returnGraphId, setReturnGraphId] = useState('');
   const [editingCurveId, setEditingCurveId] = useState('');
+  const graphWorkspaceRef = useRef(null);
   // Helper function to convert friendly label to return parameter name
   const convertLabelToReturnParam = (label) => {
     const trimmed = (label || '').trim();
@@ -2149,6 +2150,12 @@ const GraphCapture = () => {
     window.open(COMPANY_API_VIEW_URL, '_blank');
   };
 
+  const scrollToGraphWorkspace = () => {
+    requestAnimationFrame(() => {
+      graphWorkspaceRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  };
+
   return (
     <div className="w-full min-h-screen p-8" style={{ backgroundColor: '#ffffff', color: '#213547' }}>
       <header className="mb-8 flex items-start justify-between gap-4">
@@ -2167,9 +2174,9 @@ const GraphCapture = () => {
       </header>
 
       <div className="flex flex-col gap-8">
-        <ImageUpload />
+        <ImageUpload onImageLoaded={scrollToGraphWorkspace} />
         {uploadedImage && (
-          <div className="flex flex-col lg:flex-row gap-8">
+          <div ref={graphWorkspaceRef} className="flex flex-col lg:flex-row gap-8">
             <div className="w-full lg:w-2/5 flex flex-col gap-4">
               <GraphCanvas isReadOnly={isReadOnly} partNumber={urlParams.partno} manufacturer={urlParams.manufacturer} isAxisMappingConfirmed={isAxisMappingConfirmed} hasReturnUrl={!!urlParams.return_url} />
               <CapturedPointsList isReadOnly={isReadOnly} hasReturnUrl={!!urlParams.return_url} />
