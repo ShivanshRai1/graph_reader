@@ -403,6 +403,32 @@ const GraphCapture = () => {
     return '';
   };
 
+  const resolveGraphImageUrl = (graph = {}, details = []) => {
+    const detailList = Array.isArray(details) ? details : [];
+    const firstDetail = detailList[0] || {};
+
+    const candidates = [
+      graph?.graph_img,
+      graph?.graph_image,
+      graph?.graphImage,
+      graph?.image,
+      firstDetail?.graph_img,
+      firstDetail?.graph_image,
+      firstDetail?.graphImage,
+      firstDetail?.image,
+      activeSessionImageKeyRef.current,
+      uploadedImage,
+    ];
+
+    for (const candidate of candidates) {
+      if (candidate !== undefined && candidate !== null && String(candidate).trim() !== '') {
+        return String(candidate);
+      }
+    }
+
+    return '';
+  };
+
   const handleViewCurve = (curve) => {
     console.log('[GRAPH SESSION] handleViewCurve', {
       curveId: curve.id,
@@ -1308,7 +1334,7 @@ const GraphCapture = () => {
           if (result.status === 'success' && discovereeGraph && discovereeDetails.length > 0) {
             console.log('[DEBUG] Successfully parsed DiscoverEE data, details count:', discovereeDetails.length);
             console.log('[DEBUG] discovereeGraph all fields:', JSON.stringify(discovereeGraph, null, 2));
-            const graphImageUrl = discovereeGraph.graph_img || '';
+            const graphImageUrl = resolveGraphImageUrl(discovereeGraph, discovereeDetails);
             const graphGroupId = buildGraphGroupId(graphImageUrl || String(discovereeGraph.graph_id));
             const resolvedGraphTitle = resolveGraphTitle(discovereeGraph, discovereeDetails);
             const graphLevelSymbolValues = symbolNames.reduce((accumulator, key) => {
@@ -1380,6 +1406,10 @@ const GraphCapture = () => {
               console.log('[DEBUG] Setting savedCurves...');
               setSavedCurves(fetched);
               activateAppendSession(discovereeGraph.graph_id, graphImageUrl, 'fetchGraphById');
+
+              if (graphImageUrl) {
+                setUploadedImageFromExistingGraph(graphImageUrl);
+              }
               
               // Auto-populate graph title from fetched data if not already set
               const firstCurve = fetched[0];
@@ -1395,7 +1425,7 @@ const GraphCapture = () => {
 
           if (result.status === 'success' && discovereeGraph) {
             console.log('[DEBUG] DiscoverEE graph found but details are empty. Preserving graph context.');
-            const graphImageUrl = discovereeGraph.graph_img || '';
+            const graphImageUrl = resolveGraphImageUrl(discovereeGraph, discovereeDetails);
             const resolvedGraphTitle = resolveGraphTitle(discovereeGraph, []);
 
             setSavedCurves([]);
@@ -1487,11 +1517,18 @@ const GraphCapture = () => {
 
       const firstCurve = savedCurves[0];
       console.log('[DEBUG] Auto-loading graph context without points:', firstCurve.id);
+
+      const resolvedSavedImage =
+        firstCurve.graphImageUrl ||
+        firstCurve.graph_img ||
+        (savedCurves.find((curve) => curve?.graphImageUrl || curve?.graph_img)?.graphImageUrl ||
+          savedCurves.find((curve) => curve?.graphImageUrl || curve?.graph_img)?.graph_img ||
+          '');
       
       // Set the graph image from DiscoverEE
-      if (firstCurve.graphImageUrl) {
-        console.log('[DEBUG] Setting graph image:', firstCurve.graphImageUrl);
-        setUploadedImageFromExistingGraph(firstCurve.graphImageUrl);
+      if (resolvedSavedImage) {
+        console.log('[DEBUG] Setting graph image:', resolvedSavedImage);
+        setUploadedImageFromExistingGraph(resolvedSavedImage);
       }
 
       // Set graph config
