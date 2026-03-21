@@ -525,8 +525,28 @@ const GraphCapture = () => {
       return {};
     }
 
+    // Never allow runtime symbol keys to override core graph API fields.
+    const reservedGraphKeys = new Set([
+      'graph_id',
+      'discoveree_cat_id',
+      'identifier',
+      'partno',
+      'manf',
+      'graph_title',
+      'curve_title',
+      'x_title',
+      'y_title',
+      'graph_img',
+      'mark_review',
+      'testuser_id',
+    ]);
+
     const entries = Object.entries(symbolPayload.symbolValues || {}).filter(
-      ([, value]) => value !== undefined && value !== null && String(value).trim() !== ''
+      ([key, value]) =>
+        !reservedGraphKeys.has(String(key).trim().toLowerCase()) &&
+        value !== undefined &&
+        value !== null &&
+        String(value).trim() !== ''
     );
 
     return Object.fromEntries(entries.map(([key, value]) => [key, String(value).trim()]));
