@@ -403,7 +403,32 @@ const GraphCapture = () => {
     return '';
   };
 
-  const resolveGraphImageUrl = (graph = {}, details = []) => {
+  const getPersistedGraphImage = (graphId) => {
+    const normalizedGraphId = String(graphId || '').trim();
+    if (!normalizedGraphId) return '';
+
+    try {
+      return String(localStorage.getItem(`graph_image_${normalizedGraphId}`) || '');
+    } catch (error) {
+      console.warn('[DEBUG] Failed to read persisted graph image:', error);
+      return '';
+    }
+  };
+
+  const persistGraphImage = (graphId, imageUrl) => {
+    const normalizedGraphId = String(graphId || '').trim();
+    const normalizedImage = String(imageUrl || '').trim();
+    if (!normalizedGraphId || !normalizedImage) return;
+
+    try {
+      localStorage.setItem(`graph_image_${normalizedGraphId}`, normalizedImage);
+      console.log('[DEBUG] Persisted graph image for graph_id:', normalizedGraphId);
+    } catch (error) {
+      console.warn('[DEBUG] Failed to persist graph image:', error);
+    }
+  };
+
+  const resolveGraphImageUrl = (graph = {}, details = [], graphId = '') => {
     const detailList = Array.isArray(details) ? details : [];
     const firstDetail = detailList[0] || {};
 
@@ -416,6 +441,7 @@ const GraphCapture = () => {
       firstDetail?.graph_image,
       firstDetail?.graphImage,
       firstDetail?.image,
+      getPersistedGraphImage(graphId || graph?.graph_id || ''),
       activeSessionImageKeyRef.current,
       uploadedImage,
     ];
@@ -1334,9 +1360,13 @@ const GraphCapture = () => {
           if (result.status === 'success' && discovereeGraph && discovereeDetails.length > 0) {
             console.log('[DEBUG] Successfully parsed DiscoverEE data, details count:', discovereeDetails.length);
             console.log('[DEBUG] discovereeGraph all fields:', JSON.stringify(discovereeGraph, null, 2));
-            const graphImageUrl = resolveGraphImageUrl(discovereeGraph, discovereeDetails);
+            const graphImageUrl = resolveGraphImageUrl(discovereeGraph, discovereeDetails, graphId);
             const graphGroupId = buildGraphGroupId(graphImageUrl || String(discovereeGraph.graph_id));
             const resolvedGraphTitle = resolveGraphTitle(discovereeGraph, discovereeDetails);
+
+            if (graphImageUrl) {
+              persistGraphImage(discovereeGraph.graph_id || graphId, graphImageUrl);
+            }
             const graphLevelSymbolValues = symbolNames.reduce((accumulator, key) => {
               const value = discovereeGraph?.[key];
               if (value !== undefined && value !== null && String(value).trim() !== '') {
@@ -1425,8 +1455,12 @@ const GraphCapture = () => {
 
           if (result.status === 'success' && discovereeGraph) {
             console.log('[DEBUG] DiscoverEE graph found but details are empty. Preserving graph context.');
-            const graphImageUrl = resolveGraphImageUrl(discovereeGraph, discovereeDetails);
+            const graphImageUrl = resolveGraphImageUrl(discovereeGraph, discovereeDetails, graphId);
             const resolvedGraphTitle = resolveGraphTitle(discovereeGraph, []);
+
+            if (graphImageUrl) {
+              persistGraphImage(discovereeGraph.graph_id || graphId, graphImageUrl);
+            }
 
             setSavedCurves([]);
             setSavedCurvesSource('company');
@@ -1455,11 +1489,12 @@ const GraphCapture = () => {
         if (localResponse.ok) {
           const curve = await localResponse.json();
           console.log('[DEBUG] Netlify response:', curve);
-          const graphGroupId = buildGraphGroupId('');
+          const persistedImage = getPersistedGraphImage(graphId);
+          const graphGroupId = buildGraphGroupId(persistedImage || '');
           const savedCurve = {
             id: curve.id,
             detailId: '',
-            graphId: '',
+            graphId: String(graphId || ''),
             discoveree_cat_id: curve.discoveree_cat_id || null,
             name: curve.curve_name || `Curve ${curve.id}`,
             points: Array.isArray(curve.data_points)
@@ -1482,7 +1517,7 @@ const GraphCapture = () => {
               temperature: curve.temperature || '',
             },
             graphGroupId,
-            graphImageUrl: '',
+            graphImageUrl: persistedImage,
           };
           console.log('[DEBUG] Setting savedCurves from Netlify...');
           setSavedCurves([savedCurve]);
@@ -1523,7 +1558,8 @@ const GraphCapture = () => {
         firstCurve.graph_img ||
         (savedCurves.find((curve) => curve?.graphImageUrl || curve?.graph_img)?.graphImageUrl ||
           savedCurves.find((curve) => curve?.graphImageUrl || curve?.graph_img)?.graph_img ||
-          '');
+          '') ||
+        getPersistedGraphImage(graphId || firstCurve.graphId || getGraphIdForCurve(firstCurve) || '');
       
       // Set the graph image from DiscoverEE
       if (resolvedSavedImage) {
@@ -1983,6 +2019,10 @@ const GraphCapture = () => {
         ? String(existingGraphId || '')
         : (returnedGraphId || null);
       const companyDetailId = result?.detail_id || result?.details?.[0]?.id || '';
+
+      if (companyGraphId && graphImageUrl) {
+        persistGraphImage(companyGraphId, graphImageUrl);
+      }
       console.log('Company Detail ID from API:', companyDetailId);
       const requestedGraphId = isAppendingToExistingGraph ? String(existingGraphId || '') : '';
       console.log('=== GRAPH ID CONSISTENCY CHECK (SAVE) ===', {
