@@ -235,9 +235,6 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false }) => {
       <div className="flex justify-between items-center mb-4 pb-4 border-b-2 border-gray-100">
         <div>
           <h3 className="text-gray-800 text-lg font-semibold m-0">Captured Points: {dataPoints.length}</h3>
-          {hasReturnUrl && dataPoints.length < 5 && dataPoints.length > 0 && (
-            <p className="text-xs text-orange-600 mt-1">⚠️ Need at least 5 points for a meaningful fit (currently {dataPoints.length})</p>
-          )}
           {dataPoints.length === 0 && (
             <p className="text-xs text-gray-500 mt-1">No points captured yet. Confirm axis mapping first, then click on the graph.</p>
           )}
