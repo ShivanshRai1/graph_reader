@@ -452,9 +452,6 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
               <option value="Logarithmic">Logarithmic</option>
             </select>
           </label>
-          {graphConfig.yScale === 'Logarithmic' && (
-            <small className="block text-xs text-blue-600 font-medium mb-3 italic">Choose exponent mode or real-value mode. Validation is based on the resolved real value.</small>
-          )}
           <label className="block mb-3">
             <span className="block text-sm font-medium text-gray-800 mb-1">Unit:</span>
             <select name="yUnitPrefix" value={graphConfig.yUnitPrefix} onChange={handleChange} disabled={isAxisMappingConfirmed || isEditingCurve} className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed">
@@ -514,9 +511,6 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
               <option value="Logarithmic">Logarithmic</option>
             </select>
           </label>
-          {graphConfig.xScale === 'Logarithmic' && (
-            <small className="block text-xs text-blue-600 font-medium mb-3 italic">Choose exponent mode or real-value mode. Validation is based on the resolved real value.</small>
-          )}
           <label className="block mb-3">
             <span className="block text-sm font-medium text-gray-800 mb-1">Unit:</span>
             <select name="xUnitPrefix" value={graphConfig.xUnitPrefix} onChange={handleChange} disabled={isAxisMappingConfirmed || isEditingCurve} className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed">
