@@ -163,6 +163,12 @@ const GraphCapture = () => {
     clearDataPoints,
     setUploadedImage,
   } = useGraph();
+  const graphWorkspaceRef = useRef(null);
+  const handleUserImageLoaded = () => {
+    // A user-uploaded image starts a fresh capture context.
+    clearGraphIdContext();
+    scrollToGraphWorkspace();
+  };
   const [isSaving, setIsSaving] = useState(false);
   const [isReadOnly, setIsReadOnly] = useState(false);
   const [savedCurves, setSavedCurves] = useState([]);
@@ -197,7 +203,6 @@ const GraphCapture = () => {
   const [returnParams, setReturnParams] = useState({});
   const [returnGraphId, setReturnGraphId] = useState('');
   const [editingCurveId, setEditingCurveId] = useState('');
-  const graphWorkspaceRef = useRef(null);
   // Helper function to convert friendly label to return parameter name
   const convertLabelToReturnParam = (label) => {
     const trimmed = (label || '').trim();
@@ -838,11 +843,11 @@ const GraphCapture = () => {
     if (
       hasActiveAppendSessionRef.current &&
       nextImage &&
-      sessionImageKey &&
-      nextImage !== sessionImageKey
+      (!sessionImageKey || nextImage !== sessionImageKey)
     ) {
       console.log('[GRAPH SESSION] resetting after user changed image', {
         previousGraphId: activeSessionGraphIdRef.current,
+        sessionImageKey: sessionImageKey || '(none — old graph had no image)',
       });
       clearGraphIdContext();
     }
@@ -1984,10 +1989,26 @@ const GraphCapture = () => {
         yscale: graphConfig.yScale || '1',
         xunit: graphConfig.xUnitPrefix || '1',
         yunit: graphConfig.yUnitPrefix || '1',
+        x_min: Number.isFinite(Number.parseFloat(graphConfig.xMin)) ? Number.parseFloat(graphConfig.xMin) : undefined,
+        x_max: Number.isFinite(Number.parseFloat(graphConfig.xMax)) ? Number.parseFloat(graphConfig.xMax) : undefined,
+        y_min: Number.isFinite(Number.parseFloat(graphConfig.yMin)) ? Number.parseFloat(graphConfig.yMin) : undefined,
+        y_max: Number.isFinite(Number.parseFloat(graphConfig.yMax)) ? Number.parseFloat(graphConfig.yMax) : undefined,
+        // Include legacy key variants for upstream parsers that expect compact names.
+        xmin: Number.isFinite(Number.parseFloat(graphConfig.xMin)) ? Number.parseFloat(graphConfig.xMin) : undefined,
+        xmax: Number.isFinite(Number.parseFloat(graphConfig.xMax)) ? Number.parseFloat(graphConfig.xMax) : undefined,
+        ymin: Number.isFinite(Number.parseFloat(graphConfig.yMin)) ? Number.parseFloat(graphConfig.yMin) : undefined,
+        ymax: Number.isFinite(Number.parseFloat(graphConfig.yMax)) ? Number.parseFloat(graphConfig.yMax) : undefined,
       };
 
       const searchParams = new URLSearchParams(window.location.search);
-      const existingGraphId = hasActiveAppendSessionRef.current ? activeSessionGraphIdRef.current || '' : '';
+      const incomingUrlGraphId = String(searchParams.get('graph_id') || urlParams.graph_id || '').trim();
+      const existingGraphId =
+        hasActiveAppendSessionRef.current &&
+        activeSessionGraphIdRef.current &&
+        incomingUrlGraphId &&
+        String(activeSessionGraphIdRef.current) === incomingUrlGraphId
+          ? String(activeSessionGraphIdRef.current)
+          : '';
       const existingGraphIdentifier =
         searchParams.get('identifier') ||
         urlParams.identifier ||
@@ -1998,7 +2019,9 @@ const GraphCapture = () => {
       console.log('=== GRAPH SESSION STATE BEFORE SAVE ===', {
         sessionActive: hasActiveAppendSessionRef.current,
         sessionGraphId: activeSessionGraphIdRef.current || '',
-        incomingUrlGraphId: searchParams.get('graph_id') || '',
+        incomingUrlGraphId,
+        staleSessionIgnored:
+          Boolean(hasActiveAppendSessionRef.current && activeSessionGraphIdRef.current) && !Boolean(existingGraphId),
         isAppendingToExistingGraph,
       });
 
