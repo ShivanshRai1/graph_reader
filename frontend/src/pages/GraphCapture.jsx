@@ -800,40 +800,49 @@ const GraphCapture = () => {
       previousGraphId: activeSessionGraphIdRef.current || '',
       previousSessionActive: hasActiveAppendSessionRef.current,
     });
-    setUrlParams((prev) => ({ ...prev, graph_id: '' }));
+    setUrlParams((prev) => ({ ...prev, graph_id: '', identifier: '' }));
     setReturnGraphId('');
     setSelectedCurveId('');
     setCombinedGroupId('');
     hasActiveAppendSessionRef.current = false;
     activeSessionGraphIdRef.current = '';
+    activeSessionIdentifierRef.current = '';
     activeSessionImageKeyRef.current = '';
     autoLoadedGraphIdRef.current = '';
     hasAutoScrolledToSavedGraphs.current = false;
 
     const currentUrl = new URL(window.location.href);
     currentUrl.searchParams.delete('graph_id');
+    currentUrl.searchParams.delete('identifier');
     currentUrl.searchParams.delete('return_graph_id');
     window.history.replaceState({}, '', currentUrl.toString());
   };
 
-  const syncGraphIdContext = (nextGraphId) => {
+  const syncGraphIdContext = (nextGraphId, nextIdentifier = '') => {
     if (!nextGraphId) {
       console.warn('[GRAPH SESSION] syncGraphIdContext called with empty graphId — skipped');
       return;
     }
     const nextId = String(nextGraphId);
+    const normalizedIdentifier = String(nextIdentifier || activeSessionIdentifierRef.current || '').trim();
     console.log('[GRAPH SESSION] syncGraphIdContext', {
       nextGraphId: nextId,
+      nextIdentifier: normalizedIdentifier || '(none)',
       previousGraphId: activeSessionGraphIdRef.current || '',
       isNewSession: !hasActiveAppendSessionRef.current,
     });
     activateAppendSession(nextId, uploadedImage || activeSessionImageKeyRef.current || '', 'syncGraphIdContext');
-    setUrlParams((prev) => ({ ...prev, graph_id: nextId }));
+    if (normalizedIdentifier) {
+      activeSessionIdentifierRef.current = normalizedIdentifier;
+    }
+    setUrlParams((prev) => ({ ...prev, graph_id: nextId, identifier: normalizedIdentifier || prev.identifier || '' }));
     setReturnGraphId(nextId);
 
-    activeSessionIdentifierRef.current = '';
     const currentUrl = new URL(window.location.href);
     currentUrl.searchParams.set('graph_id', nextId);
+    if (normalizedIdentifier) {
+      currentUrl.searchParams.set('identifier', normalizedIdentifier);
+    }
     window.history.replaceState({}, '', currentUrl.toString());
   };
 
@@ -2025,7 +2034,7 @@ const GraphCapture = () => {
       // clearGraphIdContext() always removes graph_id from the URL when starting fresh.
       const existingGraphId = incomingUrlGraphId;
       const existingGraphIdentifier =
-        searchParams.get('identifier') ||
+        getLastNonEmptyQueryValue(searchParams, 'identifier') ||
         urlParams.identifier ||
         (savedCurves[0]?.identifier ? String(savedCurves[0].identifier) : '');
       const isAppendingToExistingGraph = Boolean(existingGraphId);
@@ -2043,12 +2052,13 @@ const GraphCapture = () => {
 
       // Build the JSON payload for company's API
       const uniqueIdentifier = `usergraph_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+      const resolvedOutgoingIdentifier = isAppendingToExistingGraph ? appendIdentifier : uniqueIdentifier;
       const companyApiPayload = {
         graph: {
           // In append mode, graph_id must come from query param only to avoid API creating a new graph.
           graph_id: '',
           discoveree_cat_id: urlParams.discoveree_cat_id ? String(urlParams.discoveree_cat_id) : '',
-          identifier: isAppendingToExistingGraph ? appendIdentifier : uniqueIdentifier,
+          identifier: resolvedOutgoingIdentifier,
           partno: urlParams.partno || '',
           manf: urlParams.manufacturer || '',
           graph_title: graphConfig.graphTitle || urlParams.graph_title || '',
@@ -2130,8 +2140,8 @@ const GraphCapture = () => {
       }
 
       // Store the identifier used for this create-new save so subsequent appends use the same one.
-      if (!isAppendingToExistingGraph && companyGraphId) {
-        activeSessionIdentifierRef.current = uniqueIdentifier;
+      if (companyGraphId) {
+        activeSessionIdentifierRef.current = resolvedOutgoingIdentifier;
       }
       if (companyGraphId && graphImageUrl) {
         persistGraphImage(companyGraphId, graphImageUrl);
@@ -2148,7 +2158,7 @@ const GraphCapture = () => {
         note: 'If matchesRequested is false during append-existing-graph, API is returning a different graph_id than requested.',
       });
       if (companyGraphId) {
-        syncGraphIdContext(companyGraphId);
+        syncGraphIdContext(companyGraphId, resolvedOutgoingIdentifier);
       }
 
       // Update local backend with the real discoveree_cat_id
