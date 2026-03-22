@@ -98,6 +98,61 @@ const resolveGraphTitle = (graph = {}, details = []) => {
   return candidates.find((value) => String(value || '').trim() !== '') || '';
 };
 
+const formatTemperatureCelsius = (value) => {
+  if (!Number.isFinite(value)) return '';
+  return String(Math.round(value * 1000) / 1000).replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1');
+};
+
+const parseTemperatureToCelsius = (rawValue, fallbackUnit = 'C') => {
+  const text = String(rawValue || '').trim();
+  if (!text) {
+    return { celsiusText: '', unit: String(fallbackUnit || 'C').toUpperCase() };
+  }
+
+  const match = text.match(/^\s*(-?\d+(?:\.\d+)?)\s*(?:deg\s*)?(c|f|k)?\s*$/i);
+  if (!match) {
+    return { celsiusText: '', unit: String(fallbackUnit || 'C').toUpperCase() };
+  }
+
+  const numericValue = Number.parseFloat(match[1]);
+  const unit = String(match[2] || fallbackUnit || 'C').toUpperCase();
+  if (!Number.isFinite(numericValue)) {
+    return { celsiusText: '', unit };
+  }
+
+  if (unit === 'F') {
+    return { celsiusText: formatTemperatureCelsius((numericValue - 32) * (5 / 9)), unit };
+  }
+
+  if (unit === 'K') {
+    return { celsiusText: formatTemperatureCelsius(numericValue - 273.15), unit };
+  }
+
+  return { celsiusText: formatTemperatureCelsius(numericValue), unit };
+};
+
+const hasImplicitTemperatureContext = (...values) => {
+  const combined = values
+    .flat()
+    .filter(Boolean)
+    .map((value) => String(value))
+    .join(' ')
+    .toLowerCase();
+
+  if (!combined) return false;
+
+  return /(temperature|temp\b|tc\b|tj\b)/i.test(combined);
+};
+
+const resolveTemperatureForSave = (rawTemperature, shouldDefaultRoomTemperature) => {
+  const parsedTemperature = parseTemperatureToCelsius(rawTemperature);
+  if (parsedTemperature.celsiusText) {
+    return parsedTemperature.celsiusText;
+  }
+
+  return shouldDefaultRoomTemperature ? '25' : '';
+};
+
 const GraphCapture = () => {
   const {
     uploadedImage,
@@ -363,6 +418,12 @@ const GraphCapture = () => {
   }, [savedCurves]);
   const selectedGroup = groupedCurves.find((group) => group.id === combinedGroupId);
   const selectedCurvePoints = selectedCurve?.points ?? selectedCurve?.data_points ?? [];
+  const shouldShowTemperatureInput = urlParams.tctj !== '0' && !hasImplicitTemperatureContext(
+    urlParams.x_label,
+    urlParams.y_label,
+    graphConfig.curveName,
+    urlParams.curve_title,
+  );
 
   const unitOptions = [
     { value: '1e-12', label: 'pico (p) = 1e-12' },
@@ -794,13 +855,13 @@ const GraphCapture = () => {
       normalizeCurveSymbolValues(curve),
       symbolLabels,
       symbolNames,
-      curve?.config?.temperature || curve?.temperature || ''
+      resolveTemperatureForSave(curve?.config?.temperature || curve?.temperature || '', false)
     );
     const nextSymbolPayload = buildDynamicSymbolPayload(
       nextSymbols,
       symbolLabels,
       symbolNames,
-      curve?.config?.temperature || curve?.temperature || ''
+      resolveTemperatureForSave(curve?.config?.temperature || curve?.temperature || '', false)
     );
     const tctjValue = nextSymbolPayload.legacyTctjValue;
     const currentPoints = normalizePointsForComparison(curve?.points);
@@ -1203,6 +1264,7 @@ const GraphCapture = () => {
     xLabel: curve?.config?.xLabel ?? curve?.x_label,
     yLabel: curve?.config?.yLabel ?? curve?.y_label,
     graphTitle: curve?.config?.graphTitle ?? curve?.graph_title ?? curve?.name,
+    curveName: curve?.config?.curveName ?? curve?.curve_name ?? curve?.name,
   });
 
   const formatDisplayValue = (value) => {
@@ -1673,7 +1735,7 @@ const GraphCapture = () => {
         x_max: parseFloat(graphConfig.xMax),
         y_min: parseFloat(graphConfig.yMin),
         y_max: parseFloat(graphConfig.yMax),
-        temperature: graphConfig.temperature,
+        temperature: resolveTemperatureForSave(graphConfig.temperature, shouldShowTemperatureInput),
         manufacturer: urlParams.manufacturer || null,
         graph_title: graphConfig.graphTitle || urlParams.graph_title || null,
         x_label: urlParams.x_label || null,
@@ -1774,6 +1836,7 @@ const GraphCapture = () => {
         symbolValues: { ...symbolValues },
         config: {
           ...graphConfig,
+          temperature: resolveTemperatureForSave(graphConfig.temperature, shouldShowTemperatureInput),
           logDataModeX: graphConfig.xScale === 'Logarithmic' ? 'actual' : 'linear',
           logDataModeY: graphConfig.yScale === 'Logarithmic' ? 'actual' : 'linear',
         },
@@ -1909,7 +1972,7 @@ const GraphCapture = () => {
         symbolValues,
         symbolLabels,
         symbolNames,
-        graphConfig.temperature || ''
+        resolveTemperatureForSave(graphConfig.temperature, shouldShowTemperatureInput)
       );
       const tctjValue = dynamicSymbolPayload.legacyTctjValue;
       console.log('TCTJ Value (plain string):', tctjValue);
@@ -2296,7 +2359,7 @@ const GraphCapture = () => {
             </div>
             <div className="w-full lg:w-3/5">
               <GraphConfig 
-                showTctj={urlParams.tctj !== '0'} 
+                showTctj={shouldShowTemperatureInput} 
                 isGraphTitleReadOnly={Boolean(urlParams.graph_id || urlParams.graph_title)} 
                 isCurveNameReadOnly={false} 
                 initialCurveName={urlParams.curve_title} 

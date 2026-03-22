@@ -1,5 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+const formatUnitLabel = (value) => {
+  const unitLabels = {
+    '1e-12': 'pico (p)',
+    '1e-9': 'nano (n)',
+    '1e-6': 'micro (u)',
+    '1e-3': 'milli (m)',
+    '1': '1',
+    '1e3': 'kilo (k)',
+    '1e6': 'mega (M)',
+    '1e9': 'giga (G)',
+    '1e12': 'tera (T)',
+  };
+
+  return unitLabels[String(value || '')] || String(value || '-');
+};
+
 const normalizeNumber = (value, fallback) => {
   const num = parseFloat(value);
   return Number.isFinite(num) ? num : fallback;
@@ -68,6 +84,21 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260 }
   const baseConfig = config || {};
   const xScale = baseConfig.xScale ?? baseConfig.x_scale ?? 'Linear';
   const yScale = baseConfig.yScale ?? baseConfig.y_scale ?? 'Linear';
+  const metadata = useMemo(() => {
+    const firstCurve = safeCurves[0] || {};
+    const firstConfig = firstCurve.config || {};
+
+    return {
+      graphTitle: baseConfig.graphTitle ?? firstConfig.graphTitle ?? firstCurve.graph_title ?? firstCurve.name ?? '-',
+      xLabel: baseConfig.xLabel ?? firstConfig.xLabel ?? firstCurve.x_label ?? 'X Axis',
+      yLabel: baseConfig.yLabel ?? firstConfig.yLabel ?? firstCurve.y_label ?? 'Y Axis',
+      xUnit: formatUnitLabel(baseConfig.xUnit ?? firstConfig.xUnitPrefix ?? firstCurve.x_unit),
+      yUnit: formatUnitLabel(baseConfig.yUnit ?? firstConfig.yUnitPrefix ?? firstCurve.y_unit),
+      curveNames: safeCurves
+        .map((curve, curveIndex) => curve?.config?.curveName || curve?.curve_name || curve?.name || `Curve ${curveIndex + 1}`)
+        .filter(Boolean),
+    };
+  }, [safeCurves, baseConfig]);
   const baseLogModeX = xScale !== 'Logarithmic'
     ? 'linear'
     : (baseConfig.logDataModeX === 'actual' || baseConfig.logDataModeX === 'exponent'
@@ -252,34 +283,71 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260 }
 
   if (curveSvgData.length === 0 || curveSvgData.every((curve) => curve.points.length === 0)) {
     return (
-      <div
-        style={{
-          width,
-          height,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          border: '1px solid var(--color-border)',
-          borderRadius: 8,
-          background: '#ffffff',
-          color: '#6b7280',
-          fontSize: 12,
-        }}
-      >
-        No points to display
+      <div style={{ width }}>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+            gap: 8,
+            marginBottom: 12,
+            fontSize: 12,
+            color: '#334155',
+          }}
+        >
+          <div><strong>Graph Title:</strong> {metadata.graphTitle}</div>
+          <div><strong>X-label:</strong> {metadata.xLabel}</div>
+          <div><strong>X-Unit:</strong> {metadata.xUnit}</div>
+          <div><strong>Y-label:</strong> {metadata.yLabel}</div>
+          <div><strong>Y-Unit:</strong> {metadata.yUnit}</div>
+          <div><strong>Curve or Line Name:</strong> {metadata.curveNames.join(', ') || '-'}</div>
+        </div>
+        <div
+          style={{
+            width,
+            height,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            border: '1px solid var(--color-border)',
+            borderRadius: 8,
+            background: '#ffffff',
+            color: '#6b7280',
+            fontSize: 12,
+          }}
+        >
+          No points to display
+        </div>
       </div>
     );
   }
 
   return (
-    <svg
-      width={width}
-      height={height}
-      viewBox={`0 0 ${width} ${height}`}
-      style={{ border: '1px solid var(--color-border)', borderRadius: 8, background: '#ffffff' }}
-      onMouseMove={handleMouseMove}
-      onMouseLeave={() => setHoveredPoint(null)}
-    >
+    <div style={{ width }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+          gap: 8,
+          marginBottom: 12,
+          fontSize: 12,
+          color: '#334155',
+        }}
+      >
+        <div><strong>Graph Title:</strong> {metadata.graphTitle}</div>
+        <div><strong>X-label:</strong> {metadata.xLabel}</div>
+        <div><strong>X-Unit:</strong> {metadata.xUnit}</div>
+        <div><strong>Y-label:</strong> {metadata.yLabel}</div>
+        <div><strong>Y-Unit:</strong> {metadata.yUnit}</div>
+        <div><strong>Curve or Line Name:</strong> {metadata.curveNames.join(', ') || '-'}</div>
+      </div>
+      <svg
+        width={width}
+        height={height}
+        viewBox={`0 0 ${width} ${height}`}
+        style={{ border: '1px solid var(--color-border)', borderRadius: 8, background: '#ffffff' }}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={() => setHoveredPoint(null)}
+      >
       <rect x={0} y={0} width={width} height={height} fill="#ffffff" />
       {/* Grid lines */}
       {/* Vertical grid lines */}
@@ -411,7 +479,8 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260 }
           </text>
         </g>
       ) : null}
-    </svg>
+      </svg>
+    </div>
   );
 };
 
