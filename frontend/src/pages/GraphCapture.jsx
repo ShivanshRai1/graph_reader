@@ -1680,6 +1680,11 @@ const GraphCapture = () => {
   }, [savedCurves.length, uploadedImage]);
 
   const saveCurveToBackend = async ({ allowRedirect }) => {
+    if (isSaving) {
+      console.warn('Save ignored: request already in progress.');
+      return null;
+    }
+
     console.log('=== SAVE CURVE STARTED ===');
     console.log('GraphConfig:', graphConfig);
     console.log('DataPoints count:', dataPoints.length);
@@ -2101,26 +2106,35 @@ const GraphCapture = () => {
       console.log('Company API Response received:', result);
       console.log('Company Graph ID from API:', result?.graph_id);
       const returnedGraphId = result?.graph_id ? String(result.graph_id) : '';
-      const companyGraphId = isAppendingToExistingGraph
-        ? String(existingGraphId || '')
-        : (returnedGraphId || null);
+      const requestedGraphId = isAppendingToExistingGraph ? String(existingGraphId || '') : '';
+      const effectiveGraphId = returnedGraphId || requestedGraphId;
+      const companyGraphId = effectiveGraphId || null;
       const companyDetailId = result?.detail_id || result?.details?.[0]?.id || '';
+
+      if (requestedGraphId && returnedGraphId && returnedGraphId !== requestedGraphId) {
+        console.warn('Graph ID changed by API during append; switching session to returned graph_id.', {
+          requestedGraphId,
+          returnedGraphId,
+        });
+      }
 
       if (companyGraphId && graphImageUrl) {
         persistGraphImage(companyGraphId, graphImageUrl);
       }
       console.log('Company Detail ID from API:', companyDetailId);
-      const requestedGraphId = isAppendingToExistingGraph ? String(existingGraphId || '') : '';
       console.log('=== GRAPH ID CONSISTENCY CHECK (SAVE) ===', {
         mode: isAppendingToExistingGraph ? 'append-existing-graph' : 'create-new-graph',
         requestedGraphId,
         sentGraphId: String(companyApiPayload?.graph?.graph_id || ''),
         sentIdentifier: String(companyApiPayload?.graph?.identifier || ''),
         returnedGraphId,
+        effectiveGraphId,
         matchesRequested: !requestedGraphId || requestedGraphId === returnedGraphId,
         note: 'If matchesRequested is false during append-existing-graph, API is returning a different graph_id than requested.',
       });
-      syncGraphIdContext(companyGraphId);
+      if (companyGraphId) {
+        syncGraphIdContext(companyGraphId);
+      }
 
       // Update local backend with the real discoveree_cat_id
       if (companyGraphId && graphId) {
