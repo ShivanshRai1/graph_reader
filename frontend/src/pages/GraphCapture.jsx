@@ -400,6 +400,7 @@ const GraphCapture = () => {
   const activeSessionImageKeyRef = useRef('');
   const previousUploadedImageRef = useRef(uploadedImage || '');
   const suppressNextImageSessionResetRef = useRef(false);
+    const activeSessionIdentifierRef = useRef('');
 
   const selectedCurve = savedCurves.find((curve) => curve.id === selectedCurveId);
   const groupedCurves = useMemo(() => {
@@ -825,6 +826,7 @@ const GraphCapture = () => {
     setUrlParams((prev) => ({ ...prev, graph_id: nextId }));
     setReturnGraphId(nextId);
 
+    activeSessionIdentifierRef.current = '';
     const currentUrl = new URL(window.location.href);
     currentUrl.searchParams.set('graph_id', nextId);
     window.history.replaceState({}, '', currentUrl.toString());
@@ -2007,26 +2009,23 @@ const GraphCapture = () => {
 
       const searchParams = new URLSearchParams(window.location.search);
       const incomingUrlGraphId = String(searchParams.get('graph_id') || urlParams.graph_id || '').trim();
-      const existingGraphId =
-        hasActiveAppendSessionRef.current &&
-        activeSessionGraphIdRef.current &&
-        incomingUrlGraphId &&
-        String(activeSessionGraphIdRef.current) === incomingUrlGraphId
-          ? String(activeSessionGraphIdRef.current)
-          : '';
+      // Use URL graph_id as the single source of truth for append mode.
+      // clearGraphIdContext() always removes graph_id from the URL when starting fresh.
+      const existingGraphId = incomingUrlGraphId;
       const existingGraphIdentifier =
         searchParams.get('identifier') ||
         urlParams.identifier ||
         (savedCurves[0]?.identifier ? String(savedCurves[0].identifier) : '');
       const isAppendingToExistingGraph = Boolean(existingGraphId);
-      const appendIdentifier = String(existingGraphId || existingGraphIdentifier || '');
+      // Use the stored session identifier (from original create-new save) to avoid API creating a new graph.
+      // Falls back to API-provided identifier, then to graph_id as last resort.
+      const appendIdentifier = String(activeSessionIdentifierRef.current || existingGraphIdentifier || existingGraphId || '');
 
       console.log('=== GRAPH SESSION STATE BEFORE SAVE ===', {
         sessionActive: hasActiveAppendSessionRef.current,
         sessionGraphId: activeSessionGraphIdRef.current || '',
         incomingUrlGraphId,
-        staleSessionIgnored:
-          Boolean(hasActiveAppendSessionRef.current && activeSessionGraphIdRef.current) && !Boolean(existingGraphId),
+        storedIdentifier: activeSessionIdentifierRef.current || '(none)',
         isAppendingToExistingGraph,
       });
 
@@ -2118,6 +2117,10 @@ const GraphCapture = () => {
         });
       }
 
+      // Store the identifier used for this create-new save so subsequent appends use the same one.
+      if (!isAppendingToExistingGraph && companyGraphId) {
+        activeSessionIdentifierRef.current = uniqueIdentifier;
+      }
       if (companyGraphId && graphImageUrl) {
         persistGraphImage(companyGraphId, graphImageUrl);
       }
