@@ -337,44 +337,19 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
     return (
       <label className="block mb-3">
         <span className="block text-sm font-medium text-gray-800 mb-1">{label}:</span>
-        <div className="flex gap-2 mb-2">
-          <button
-            type="button"
-            onClick={() => handleLogInputModeChange(field, 'exponent')}
-            disabled={isAxisMappingConfirmed || isEditingCurve}
-            className={`px-3 py-1 rounded text-xs font-medium border ${
-              activeMode === 'exponent'
-                ? 'bg-blue-600 text-white border-blue-600'
-                : 'bg-white text-gray-700 border-gray-300'
-            } disabled:opacity-60 disabled:cursor-not-allowed`}
-          >
-            Exponent
-          </button>
-          <button
-            type="button"
-            onClick={() => handleLogInputModeChange(field, 'value')}
-            disabled={isAxisMappingConfirmed || isEditingCurve}
-            className={`px-3 py-1 rounded text-xs font-medium border ${
-              activeMode === 'value'
-                ? 'bg-blue-600 text-white border-blue-600'
-                : 'bg-white text-gray-700 border-gray-300'
-            } disabled:opacity-60 disabled:cursor-not-allowed`}
-          >
-            Real value
-          </button>
-        </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center flex-1">
-            <span className="px-3 py-2 border border-r-0 border-gray-300 rounded-l text-sm text-gray-700 bg-gray-50">10^</span>
+            <span className={`px-3 py-2 border border-r-0 rounded-l text-sm text-gray-700 ${activeMode === 'exponent' ? 'border-blue-500 bg-blue-50' : 'border-gray-300 bg-gray-50'}`}>10^</span>
             <input
               type="text"
               inputMode="decimal"
               value={logPairInputs[field].exponent}
               onChange={(e) => handleLogExponentChange(field, e.target.value)}
-              disabled={isAxisMappingConfirmed || isEditingCurve || activeMode !== 'exponent'}
+              onFocus={() => !isAxisMappingConfirmed && !isEditingCurve && handleLogInputModeChange(field, 'exponent')}
+              disabled={isAxisMappingConfirmed || isEditingCurve}
               placeholder={placeholderExponent}
-              className="w-full px-3 py-2 border border-gray-300 rounded-r text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed"
-              title="Exponent"
+              className={`w-full px-3 py-2 border rounded-r text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed ${activeMode === 'exponent' ? 'border-blue-500 ring-1 ring-blue-400' : 'border-gray-300 opacity-50'}`}
+              title="Exponent (click to use)"
             />
           </div>
           <span className="text-sm font-semibold text-gray-700">=</span>
@@ -383,10 +358,11 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             inputMode="decimal"
             value={logPairInputs[field].value}
             onChange={(e) => handleLogActualValueChange(field, e.target.value)}
-            disabled={isAxisMappingConfirmed || isEditingCurve || activeMode !== 'value'}
+            onFocus={() => !isAxisMappingConfirmed && !isEditingCurve && handleLogInputModeChange(field, 'value')}
+            disabled={isAxisMappingConfirmed || isEditingCurve}
             placeholder={placeholderValue}
-            className="flex-1 px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed"
-            title="Real value"
+            className={`flex-1 px-3 py-2 border rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed ${activeMode === 'value' ? 'border-blue-500 ring-1 ring-blue-400' : 'border-gray-300 opacity-50'}`}
+            title="Real value (click to use)"
           />
         </div>
         {error && <span className="block text-xs text-red-600 mt-1">{error}</span>}
