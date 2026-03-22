@@ -153,6 +153,11 @@ const resolveTemperatureForSave = (rawTemperature, shouldDefaultRoomTemperature)
   return shouldDefaultRoomTemperature ? '25' : '';
 };
 
+const getLastNonEmptyQueryValue = (searchParams, key) => {
+  const values = searchParams.getAll(key).map((value) => String(value || '').trim()).filter(Boolean);
+  return values.length > 0 ? values[values.length - 1] : '';
+};
+
 const GraphCapture = () => {
   const {
     uploadedImage,
@@ -1333,7 +1338,10 @@ const GraphCapture = () => {
     const curveTitle = searchParams.get('curve_title') || '';
     const graphTitle = searchParams.get('graph_title') || '';
     const tctjValue = searchParams.get('tctj') || '';
-    const graphIdFromUrl = searchParams.get('graph_id') || '';
+    const graphIdFromUrl =
+      getLastNonEmptyQueryValue(searchParams, 'graph_id') ||
+      getLastNonEmptyQueryValue(searchParams, 'return_graph_id') ||
+      '';
 
     setUrlParams({
       partno,
@@ -1344,7 +1352,7 @@ const GraphCapture = () => {
       y_label: searchParams.get('y_label') || searchParams.get('y_title') || searchParams.get('ylabel') || '',
       other_symbols: otherSymbols,
       discoveree_cat_id: searchParams.get('discoveree_cat_id') || '',
-      identifier: searchParams.get('identifier') || '',
+      identifier: getLastNonEmptyQueryValue(searchParams, 'identifier') || searchParams.get('identifier') || '',
       testuser_id: searchParams.get('testuser_id') || '',
       tctj: tctjValue,
       return_url: searchParams.get('return_url') || '',
@@ -2008,7 +2016,11 @@ const GraphCapture = () => {
       };
 
       const searchParams = new URLSearchParams(window.location.search);
-      const incomingUrlGraphId = String(searchParams.get('graph_id') || urlParams.graph_id || '').trim();
+      const incomingUrlGraphId =
+        getLastNonEmptyQueryValue(searchParams, 'graph_id') ||
+        String(urlParams.graph_id || '').trim() ||
+        getLastNonEmptyQueryValue(searchParams, 'return_graph_id') ||
+        '';
       // Use URL graph_id as the single source of truth for append mode.
       // clearGraphIdContext() always removes graph_id from the URL when starting fresh.
       const existingGraphId = incomingUrlGraphId;
