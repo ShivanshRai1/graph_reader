@@ -1832,57 +1832,88 @@ const GraphCapture = () => {
       let realDetailId = '';
       if (companyGraphId) {
         try {
+          console.log('[RE-FETCH] Fetching details for graph_id:', companyGraphId);
           const refetchResp = await fetch(
             `https://www.discoveree.io/graph_capture_api.php?graph_id=${encodeURIComponent(companyGraphId)}`
           );
           if (refetchResp.ok) {
             const refetchResult = await refetchResp.json();
-            const refetchDetails = Array.isArray(refetchResult?.details)
-              ? refetchResult.details
-              : Array.isArray(refetchResult?.graph?.details)
-                ? refetchResult.graph.details
-                : [];
+            console.log('[RE-FETCH] Full API response:', refetchResult);
             
-            console.log('[RE-FETCH DETAILS] Retrieved details from Company API:', {
-              totalDetailsReturned: refetchDetails.length,
-              details: refetchDetails.map((d, idx) => ({ index: idx, id: d.id, curveTitle: d.curve_title })),
-            });
-            
-            // Find matching detail by xy data (most reliable match)
-            const savedPoints = payload?.data_points || [];
-            const savedXyStr = savedPoints.map((p) => `{x:${p.x_value},y:${p.y_value}}`).join(',');
-            console.log('[RE-FETCH DETAILS] Searching for XY match with:', {
-              pointCount: savedPoints.length,
-              xyStringLength: savedXyStr.length,
-              xyString: savedXyStr.substring(0, 100) + (savedXyStr.length > 100 ? '...' : ''),
-            });
-            
-            let matchedDetail = refetchDetails.find((d) => {
-              if (savedXyStr && d.xy && d.xy.replace(/\s/g, '') === savedXyStr.replace(/\s/g, '')) return true;
-              return false;
-            });
-            
-            if (!matchedDetail && refetchDetails.length > 0) {
-              // Fallback: Use the last (newest) detail, but log a warning
-              console.warn('[RE-FETCH DETAILS] XY matching failed, using fallback to last detail', {
-                reasonCouldNotMatch: 'No XY data matched, treating last detail as newest',
-                lastDetail: { id: refetchDetails[refetchDetails.length - 1]?.id, curveTitle: refetchDetails[refetchDetails.length - 1]?.curve_title },
-              });
-              matchedDetail = refetchDetails[refetchDetails.length - 1];
+            // Company API can return details in different structures
+            let refetchDetails = [];
+            if (Array.isArray(refetchResult?.details)) {
+              refetchDetails = refetchResult.details;
+            } else if (Array.isArray(refetchResult?.graph?.details)) {
+              refetchDetails = refetchResult.graph.details;
+            } else if (refetchResult?.details && typeof refetchResult.details === 'object') {
+              // Sometimes it's an object with numeric keys, convert to array
+              refetchDetails = Object.values(refetchResult.details);
             }
             
-            if (matchedDetail?.id) {
-              realDetailId = String(matchedDetail.id);
-              console.log('[RE-FETCH DETAILS] Matched detail_id for this curve:', {
-                matchedDetailId: realDetailId,
-                matchedCurveTitle: matchedDetail.curve_title,
-                assumedMatchMethod: savedXyStr ? 'XY data match' : 'Fallback to last',
+            console.log('[RE-FETCH] Parsed details array:', {
+              totalDetails: refetchDetails.length,
+              details: refetchDetails.map((d, idx) => ({ 
+                idx, 
+                id: d?.id, 
+                curve_title: d?.curve_title,
+                xy: d?.xy ? d.xy.substring(0, 50) + '...' : 'no xy'
+              })),
+            });
+            
+            if (refetchDetails.length > 0) {
+              // Try to match by XY data first
+              const savedPoints = payload?.data_points || [];
+              const savedXyStr = savedPoints.map((p) => `{x:${p.x_value},y:${p.y_value}}`).join(',');
+              
+              console.log('[RE-FETCH] Attempting XY match with:', {
+                pointCount: savedPoints.length,
+                xyLength: savedXyStr.length,
               });
+              
+              let matchedDetail = refetchDetails.find((d) => {
+                if (!savedXyStr || !d?.xy) return false;
+                const normalizedSavedXy = savedXyStr.replace(/\s/g, '').toLowerCase();
+                const normalizedApiXy = d.xy.replace(/\s/g, '').toLowerCase();
+                const matches = normalizedSavedXy === normalizedApiXy;
+                if (matches) {
+                  console.log('[RE-FETCH] XY MATCH FOUND for detail:', d?.id);
+                }
+                return matches;
+              });
+              
+              // If no XY match, use the LAST detail (most recently added)
+              if (!matchedDetail && refetchDetails.length > 0) {
+                matchedDetail = refetchDetails[refetchDetails.length - 1];
+                console.log('[RE-FETCH] No XY match, using last (newest) detail:', {
+                  id: matchedDetail?.id,
+                  curve_title: matchedDetail?.curve_title,
+                });
+              }
+              
+              // Extract the detail_id
+              if (matchedDetail && matchedDetail.id) {
+                realDetailId = String(matchedDetail.id);
+                console.log('[RE-FETCH] ✓ Successfully extracted detail_id:', realDetailId);
+              } else {
+                console.warn('[RE-FETCH] Matched detail has no id field', {
+                  matchedDetail,
+                  keys: matchedDetail ? Object.keys(matchedDetail) : 'null',
+                });
+              }
+            } else {
+              console.warn('[RE-FETCH] No details returned from API');
             }
+          } else {
+            console.warn('[RE-FETCH] API returned non-OK status:', refetchResp.status);
           }
         } catch (refetchErr) {
-          console.warn('Could not re-fetch detail ID from company API:', refetchErr);
+          console.error('[RE-FETCH] Error fetching details:', refetchErr.message);
         }
+      }
+      
+      if (!realDetailId) {
+        console.warn('[DETAIL_ID] Could not extract detail_id from Company API. Will store empty value.');
       }
 
       const savedCurve = {
@@ -2214,15 +2245,30 @@ const GraphCapture = () => {
       const requestedGraphId = isAppendingToExistingGraph ? String(existingGraphId || '') : '';
       const effectiveGraphId = returnedGraphId || requestedGraphId;
       const companyGraphId = effectiveGraphId || null;
-      const companyDetailId = result?.detail_id || result?.details?.[0]?.id || '';
       
-      // CRITICAL: Log the detail_id returned by Company API immediately after save
-      console.log('[DETAIL_ID_FROM_API] Company API returned:', {
+      // Extract detail_id from multiple possible locations in API response
+      let companyDetailId = '';
+      if (result?.detail_id) {
+        companyDetailId = result.detail_id;
+        console.log('[DETAIL_ID] Found in result.detail_id:', companyDetailId);
+      } else if (result?.details && Array.isArray(result.details) && result.details.length > 0) {
+        companyDetailId = result.details[0]?.id;
+        console.log('[DETAIL_ID] Found in result.details[0].id:', companyDetailId);
+      } else if (result?.graph?.detail_id) {
+        companyDetailId = result.graph.detail_id;
+        console.log('[DETAIL_ID] Found in result.graph.detail_id:', companyDetailId);
+      } else if (result?.graph?.details && Array.isArray(result.graph.details) && result.graph.details.length > 0) {
+        companyDetailId = result.graph.details[0]?.id;
+        console.log('[DETAIL_ID] Found in result.graph.details[0].id:', companyDetailId);
+      } else {
+        console.warn('[DETAIL_ID] Not found in immediate API response - will attempt re-fetch');
+      }
+      
+      console.log('[DETAIL_ID_FROM_API] Company API response analysis:', {
+        hasDetailId: Boolean(companyDetailId),
+        foundDetailId: companyDetailId || '(will re-fetch)',
         graphId: companyGraphId,
-        detailIdFromResponse: companyDetailId,
-        detailIdFromFirstDetailArray: result?.details?.[0]?.id,
-        allDetails: result?.details,
-        isDifferentFromRequested: companyDetailId !== 'expected (this is first save)',
+        responseKeys: Object.keys(result || {}),
       });
 
       if (requestedGraphId && returnedGraphId && returnedGraphId !== requestedGraphId) {
