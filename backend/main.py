@@ -8,10 +8,27 @@ from schemas import CurveCreate, CurveResponse, CurveUpdate, DataPointCreate, Da
 import os
 import threading
 import time
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 
 # Create tables
 Base.metadata.create_all(bind=engine)
+
+
+def ensure_optional_curve_columns():
+    try:
+        inspector = inspect(engine)
+        existing_columns = {column["name"] for column in inspector.get_columns("curves")}
+
+        if "graph_image" in existing_columns:
+            return
+
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE curves ADD COLUMN graph_image TEXT"))
+    except Exception as error:
+        print(f"[SchemaMigration] Optional curve column migration skipped: {error}")
+
+
+ensure_optional_curve_columns()
 
 app = FastAPI(
     title="Graph Data Capture API",
@@ -80,6 +97,7 @@ def create_curve(curve: CurveCreate, db: Session = Depends(get_db)):
             y_label=curve.y_label,
             other_symbols=curve.other_symbols,
             discoveree_cat_id=curve.discoveree_cat_id,
+            graph_image=curve.graph_image,
         )
         # Add data points
         for point in curve.data_points:

@@ -34,6 +34,7 @@ class CurveCreate(BaseModel):
     y_label: Optional[str] = None
     other_symbols: Optional[str] = None
     discoveree_cat_id: Optional[int] = None
+    graph_image: Optional[str] = None
     data_points: List[DataPointCreate] = []
 
 class CurveUpdate(BaseModel):
@@ -54,6 +55,7 @@ class CurveUpdate(BaseModel):
     y_label: Optional[str] = None
     other_symbols: Optional[str] = None
     discoveree_cat_id: Optional[int] = None
+    graph_image: Optional[str] = None
 
 class CurveResponse(BaseModel):
     id: int
@@ -74,6 +76,7 @@ class CurveResponse(BaseModel):
     y_label: Optional[str]
     other_symbols: Optional[str]
     discoveree_cat_id: Optional[int]
+    graph_image: Optional[str]
     created_at: Optional[datetime] = None
     data_points: List[DataPointResponse] = []
 

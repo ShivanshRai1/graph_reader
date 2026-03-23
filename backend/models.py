@@ -24,6 +24,7 @@ class Curve(Base):
     y_label = Column(String(255))
     other_symbols = Column(Text)
     discoveree_cat_id = Column(Integer)
+    graph_image = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -50,6 +51,7 @@ class Curve(Base):
             "x_label": self.x_label,
             "y_label": self.y_label,
             "other_symbols": self.other_symbols,
+            "graph_image": self.graph_image,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
             "data_points": [point.to_dict() for point in self.data_points],

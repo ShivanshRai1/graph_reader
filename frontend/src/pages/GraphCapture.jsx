@@ -797,6 +797,28 @@ const GraphCapture = () => {
     setUploadedImage(nextImage);
   };
 
+  const fetchLocalCurveByDiscovereeId = async (graphId) => {
+    const normalizedGraphId = String(graphId || '').trim();
+    if (!normalizedGraphId) {
+      return null;
+    }
+
+    try {
+      const response = await fetch(
+        `${window.location.origin}/api/curves/by-discoveree/${encodeURIComponent(normalizedGraphId)}`
+      );
+
+      if (!response.ok) {
+        return null;
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.warn('[DEBUG] Local by-discoveree fallback failed:', error);
+      return null;
+    }
+  };
+
   const activateAppendSession = (graphId, imageUrl = '', reason = 'unknown') => {
     if (graphId === undefined || graphId === null || String(graphId).trim() === '') {
       return;
@@ -1539,7 +1561,10 @@ const GraphCapture = () => {
           if (result.status === 'success' && discovereeGraph && discovereeDetails.length > 0) {
             console.log('[DEBUG] Successfully parsed DiscoverEE data, details count:', discovereeDetails.length);
             console.log('[DEBUG] discovereeGraph all fields:', JSON.stringify(discovereeGraph, null, 2));
-            const graphImageUrl = resolveGraphImageUrl(discovereeGraph, discovereeDetails, graphId);
+            const localFallbackCurve = await fetchLocalCurveByDiscovereeId(graphId);
+            const graphImageUrl =
+              resolveGraphImageUrl(discovereeGraph, discovereeDetails, graphId) ||
+              normalizeImageCandidate(localFallbackCurve?.graph_image);
             const graphGroupId = buildGraphGroupId(graphImageUrl || String(discovereeGraph.graph_id));
             const resolvedGraphTitle = resolveGraphTitle(discovereeGraph, discovereeDetails);
 
@@ -1635,7 +1660,10 @@ const GraphCapture = () => {
 
           if (result.status === 'success' && discovereeGraph) {
             console.log('[DEBUG] DiscoverEE graph found but details are empty. Preserving graph context.');
-            const graphImageUrl = resolveGraphImageUrl(discovereeGraph, discovereeDetails, graphId);
+            const localFallbackCurve = await fetchLocalCurveByDiscovereeId(graphId);
+            const graphImageUrl =
+              resolveGraphImageUrl(discovereeGraph, discovereeDetails, graphId) ||
+              normalizeImageCandidate(localFallbackCurve?.graph_image);
             const resolvedGraphTitle = resolveGraphTitle(discovereeGraph, []);
 
             if (graphImageUrl) {
@@ -1662,15 +1690,23 @@ const GraphCapture = () => {
 
         // Fallback: Try Netlify deployed backend (same domain)
         console.log('[DEBUG] DiscoverEE failed or returned no data, trying Netlify fallback...');
-        const netlifyBackendUrl = `${window.location.origin}/api/curves/${graphId}`;
-        console.log('[DEBUG] Netlify URL:', netlifyBackendUrl);
-        const localResponse = await fetch(netlifyBackendUrl);
-        console.log('[DEBUG] Netlify response status:', localResponse.status);
-        if (localResponse.ok) {
-          const curve = await localResponse.json();
+        let curve = await fetchLocalCurveByDiscovereeId(graphId);
+
+        if (!curve) {
+          const netlifyBackendUrl = `${window.location.origin}/api/curves/${graphId}`;
+          console.log('[DEBUG] Netlify URL:', netlifyBackendUrl);
+          const localResponse = await fetch(netlifyBackendUrl);
+          console.log('[DEBUG] Netlify response status:', localResponse.status);
+          if (localResponse.ok) {
+            curve = await localResponse.json();
+          }
+        }
+
+        if (curve) {
           console.log('[DEBUG] Netlify response:', curve);
           const persistedImage = getPersistedGraphImage(graphId);
-          const graphGroupId = buildGraphGroupId(persistedImage || '');
+          const resolvedLocalImage = normalizeImageCandidate(curve.graph_image) || persistedImage;
+          const graphGroupId = buildGraphGroupId(resolvedLocalImage || '');
           const savedCurve = {
             id: curve.id,
             detailId: '',
@@ -1697,10 +1733,15 @@ const GraphCapture = () => {
               temperature: curve.temperature || '',
             },
             graphGroupId,
-            graphImageUrl: persistedImage,
+            graphImageUrl: resolvedLocalImage,
           };
           console.log('[DEBUG] Setting savedCurves from Netlify...');
           setSavedCurves([savedCurve]);
+
+          if (graphId && resolvedLocalImage) {
+            persistGraphImage(graphId, resolvedLocalImage);
+            setUploadedImageFromExistingGraph(resolvedLocalImage);
+          }
           
           // Auto-populate graph title from fetched data if not already set
           if (savedCurve?.config?.graphTitle && !urlParams.graph_title) {
@@ -1865,6 +1906,7 @@ const GraphCapture = () => {
         y_label: urlParams.y_label || null,
         other_symbols: urlParams.other_symbols || null,
         discoveree_cat_id: urlParams.discoveree_cat_id ? parseInt(urlParams.discoveree_cat_id) : null,
+        graph_image: uploadedImage || null,
         data_points: dataPoints.map((point) => ({
           x_value: point.x,
           y_value: point.y,
