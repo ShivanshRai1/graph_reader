@@ -142,6 +142,8 @@ const SavedGraphPreview = ({ points, config, width = 520, height = 220, animate 
   }, [parsedPoints, config, xScale, yScale, logModeX, logModeY]);
 
   const { plottedPoints, xMin, xMax, yMin, yMax } = plotData;
+  const xAxisLabel = (config?.xLabel ?? config?.x_label ?? '').toString().trim() || 'X';
+  const yAxisLabel = (config?.yLabel ?? config?.y_label ?? '').toString().trim() || 'Y';
 
   const padding = {
     left: 52,
@@ -385,6 +387,27 @@ const SavedGraphPreview = ({ points, config, width = 520, height = 220, animate 
           </g>
         );
       })}
+      <text
+        x={padding.left + drawableWidth / 2}
+        y={height - 4}
+        textAnchor="middle"
+        fontSize="11"
+        fontWeight="600"
+        fill="#4b5563"
+      >
+        {xAxisLabel}
+      </text>
+      <text
+        x={14}
+        y={padding.top + drawableHeight / 2}
+        textAnchor="middle"
+        fontSize="11"
+        fontWeight="600"
+        fill="#4b5563"
+        transform={`rotate(-90 14 ${padding.top + drawableHeight / 2})`}
+      >
+        {yAxisLabel}
+      </text>
       <polyline
         key={svgPoints}
         ref={polylineRef}

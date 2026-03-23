@@ -103,6 +103,8 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260 }
         .filter(Boolean),
     };
   }, [safeCurves, baseConfig]);
+  const xAxisLabel = (baseConfig.xLabel ?? baseConfig.x_label ?? safeCurves[0]?.x_label ?? '').toString().trim() || 'X';
+  const yAxisLabel = (baseConfig.yLabel ?? baseConfig.y_label ?? safeCurves[0]?.y_label ?? '').toString().trim() || 'Y';
   const baseLogModeX = xScale !== 'Logarithmic'
     ? 'linear'
     : (baseConfig.logDataModeX === 'actual' || baseConfig.logDataModeX === 'exponent'
@@ -427,6 +429,27 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260 }
           </g>
         );
       })}
+      <text
+        x={padding.left + drawableWidth / 2}
+        y={height - 4}
+        textAnchor="middle"
+        fontSize="11"
+        fontWeight="600"
+        fill="#4b5563"
+      >
+        {xAxisLabel}
+      </text>
+      <text
+        x={14}
+        y={padding.top + drawableHeight / 2}
+        textAnchor="middle"
+        fontSize="11"
+        fontWeight="600"
+        fill="#4b5563"
+        transform={`rotate(-90 14 ${padding.top + drawableHeight / 2})`}
+      >
+        {yAxisLabel}
+      </text>
 
       {curveSvgData.map((curve, index) => (
         <polyline
