@@ -805,7 +805,7 @@ const GraphCapture = () => {
 
     try {
       const response = await fetch(
-        `${window.location.origin}/api/curves/by-discoveree/${encodeURIComponent(normalizedGraphId)}`
+        `${apiUrl}/api/curves/by-discoveree/${encodeURIComponent(normalizedGraphId)}`
       );
 
       if (!response.ok) {
@@ -1693,9 +1693,9 @@ const GraphCapture = () => {
         let curve = await fetchLocalCurveByDiscovereeId(graphId);
 
         if (!curve) {
-          const netlifyBackendUrl = `${window.location.origin}/api/curves/${graphId}`;
-          console.log('[DEBUG] Netlify URL:', netlifyBackendUrl);
-          const localResponse = await fetch(netlifyBackendUrl);
+          const backendFallbackUrl = `${apiUrl}/api/curves/${graphId}`;
+          console.log('[DEBUG] Backend fallback URL:', backendFallbackUrl);
+          const localResponse = await fetch(backendFallbackUrl);
           console.log('[DEBUG] Netlify response status:', localResponse.status);
           if (localResponse.ok) {
             curve = await localResponse.json();
