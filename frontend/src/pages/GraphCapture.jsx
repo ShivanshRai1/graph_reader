@@ -1477,6 +1477,54 @@ const GraphCapture = () => {
     curveName: curve?.config?.curveName ?? curve?.curve_name ?? curve?.name,
   });
 
+  // Returns axis bounds with 3-tier priority:
+  // 1. Stored config value (from local backend or original save), if valid and non-zero
+  // 2. Computed from actual captured points
+  // 3. Raw stored value even if zero (last resort)
+  const resolveAxisBoundsWithFallback = (curves) => {
+    const curveList = Array.isArray(curves) ? curves : (curves ? [curves] : []);
+    if (curveList.length === 0) return { xMin: '', xMax: '', yMin: '', yMax: '', source: 'none' };
+
+    const cfg = normalizeCurveConfig(curveList[0]);
+    const storedXMin = Number(cfg.xMin);
+    const storedXMax = Number(cfg.xMax);
+    const storedYMin = Number(cfg.yMin);
+    const storedYMax = Number(cfg.yMax);
+
+    const storedValid =
+      Number.isFinite(storedXMin) && Number.isFinite(storedXMax) &&
+      Number.isFinite(storedYMin) && Number.isFinite(storedYMax) &&
+      storedXMax > storedXMin && storedYMax > storedYMin;
+
+    if (storedValid) {
+      return { xMin: storedXMin, xMax: storedXMax, yMin: storedYMin, yMax: storedYMax, source: 'stored' };
+    }
+
+    // Collect all points across all curves
+    const allPoints = curveList.flatMap((curve) => {
+      const pts = curve?.points ?? curve?.data_points ?? [];
+      return pts.map((pt) => ({
+        x: Number(pt.x_value ?? pt.x),
+        y: Number(pt.y_value ?? pt.y),
+      })).filter((pt) => Number.isFinite(pt.x) && Number.isFinite(pt.y));
+    });
+
+    if (allPoints.length > 0) {
+      const xs = allPoints.map((pt) => pt.x);
+      const ys = allPoints.map((pt) => pt.y);
+      return {
+        xMin: Math.min(...xs),
+        xMax: Math.max(...xs),
+        yMin: Math.min(...ys),
+        yMax: Math.max(...ys),
+        source: 'computed',
+      };
+    }
+
+    // Last resort: return stored values even if they are zero
+    return { xMin: storedXMin, xMax: storedXMax, yMin: storedYMin, yMax: storedYMax, source: 'fallback' };
+  };
+
   const formatDisplayValue = (value) => {
     const num = Number(value);
     if (!Number.isFinite(num)) return '';
@@ -3301,6 +3349,7 @@ const GraphCapture = () => {
             </div>
             {(() => {
               const cfg = normalizeCurveConfig(selectedCurve);
+              const bounds = resolveAxisBoundsWithFallback([selectedCurve]);
               return (
                 <div style={{ fontSize: 12, color: '#444', background: '#f5f5f5', borderRadius: 5, padding: '8px 12px', marginBottom: 8, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px 24px' }}>
                   {cfg.graphTitle && (
@@ -3313,10 +3362,10 @@ const GraphCapture = () => {
                       <span style={{ fontWeight: 600 }}>Curve Name:</span> {cfg.curveName}
                     </div>
                   )}
-                  <div><span style={{ fontWeight: 600 }}>X Min:</span> {formatDisplayValue(cfg.xMin)}</div>
-                  <div><span style={{ fontWeight: 600 }}>Y Min:</span> {formatDisplayValue(cfg.yMin)}</div>
-                  <div><span style={{ fontWeight: 600 }}>X Max:</span> {formatDisplayValue(cfg.xMax)}</div>
-                  <div><span style={{ fontWeight: 600 }}>Y Max:</span> {formatDisplayValue(cfg.yMax)}</div>
+                  <div><span style={{ fontWeight: 600 }}>X Min:</span> {formatDisplayValue(bounds.xMin)}</div>
+                  <div><span style={{ fontWeight: 600 }}>Y Min:</span> {formatDisplayValue(bounds.yMin)}</div>
+                  <div><span style={{ fontWeight: 600 }}>X Max:</span> {formatDisplayValue(bounds.xMax)}</div>
+                  <div><span style={{ fontWeight: 600 }}>Y Max:</span> {formatDisplayValue(bounds.yMax)}</div>
                   <div><span style={{ fontWeight: 600 }}>X Scale:</span> {cfg.xScale || '—'}</div>
                   <div><span style={{ fontWeight: 600 }}>Y Scale:</span> {cfg.yScale || '—'}</div>
                   {urlParams.x_label && <div><span style={{ fontWeight: 600 }}>X Title:</span> {urlParams.x_label}</div>}
@@ -3428,6 +3477,7 @@ const GraphCapture = () => {
             </div>
             {(() => {
               const cfg = normalizeCurveConfig(selectedGroup.curves[0]);
+              const bounds = resolveAxisBoundsWithFallback(selectedGroup.curves);
               return (
                 <div style={{ fontSize: 12, color: '#444', background: '#f5f5f5', borderRadius: 5, padding: '8px 12px', marginBottom: 8, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px 24px' }}>
                   {cfg.graphTitle && (
@@ -3441,10 +3491,10 @@ const GraphCapture = () => {
                       <span key={i}>{i > 0 ? ', ' : ''}{c.config?.curveName || c.curve_name || c.name || `Curve ${i + 1}`}</span>
                     ))}
                   </div>
-                  <div><span style={{ fontWeight: 600 }}>X Min:</span> {formatDisplayValue(cfg.xMin)}</div>
-                  <div><span style={{ fontWeight: 600 }}>Y Min:</span> {formatDisplayValue(cfg.yMin)}</div>
-                  <div><span style={{ fontWeight: 600 }}>X Max:</span> {formatDisplayValue(cfg.xMax)}</div>
-                  <div><span style={{ fontWeight: 600 }}>Y Max:</span> {formatDisplayValue(cfg.yMax)}</div>
+                  <div><span style={{ fontWeight: 600 }}>X Min:</span> {formatDisplayValue(bounds.xMin)}</div>
+                  <div><span style={{ fontWeight: 600 }}>Y Min:</span> {formatDisplayValue(bounds.yMin)}</div>
+                  <div><span style={{ fontWeight: 600 }}>X Max:</span> {formatDisplayValue(bounds.xMax)}</div>
+                  <div><span style={{ fontWeight: 600 }}>Y Max:</span> {formatDisplayValue(bounds.yMax)}</div>
                   <div><span style={{ fontWeight: 600 }}>X Scale:</span> {cfg.xScale || '—'}</div>
                   <div><span style={{ fontWeight: 600 }}>Y Scale:</span> {cfg.yScale || '—'}</div>
                   {urlParams.x_label && <div><span style={{ fontWeight: 600 }}>X Title:</span> {urlParams.x_label}</div>}
