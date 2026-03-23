@@ -797,6 +797,29 @@ const GraphCapture = () => {
     setUploadedImage(nextImage);
   };
 
+  const logGraphImageAvailability = (graphId, imageUrl, source, meta = {}) => {
+    const normalizedImage = String(imageUrl || '').trim();
+    const hasImage = normalizedImage.length > 0;
+    const imagePreview = hasImage
+      ? `${normalizedImage.slice(0, 60)}${normalizedImage.length > 60 ? '...' : ''}`
+      : '(none)';
+
+    const payload = {
+      graphId: String(graphId || '').trim() || '(none)',
+      source,
+      hasImage,
+      imageLength: normalizedImage.length,
+      imagePreview,
+      ...meta,
+    };
+
+    if (hasImage) {
+      console.log('[GRAPH_IMAGE] AVAILABLE', payload);
+    } else {
+      console.warn('[GRAPH_IMAGE] MISSING', payload);
+    }
+  };
+
   const fetchLocalCurveByDiscovereeId = async (graphId) => {
     const normalizedGraphId = String(graphId || '').trim();
     if (!normalizedGraphId) {
@@ -1565,6 +1588,11 @@ const GraphCapture = () => {
             const graphImageUrl =
               resolveGraphImageUrl(discovereeGraph, discovereeDetails, graphId) ||
               normalizeImageCandidate(localFallbackCurve?.graph_image);
+            logGraphImageAvailability(discovereeGraph.graph_id || graphId, graphImageUrl, 'discoveree-success-with-details', {
+              detailsCount: discovereeDetails.length,
+              companyGraphImgPresent: Boolean(String(discovereeGraph?.graph_img || '').trim()),
+              localFallbackImagePresent: Boolean(String(localFallbackCurve?.graph_image || '').trim()),
+            });
             const graphGroupId = buildGraphGroupId(graphImageUrl || String(discovereeGraph.graph_id));
             const resolvedGraphTitle = resolveGraphTitle(discovereeGraph, discovereeDetails);
 
@@ -1664,6 +1692,11 @@ const GraphCapture = () => {
             const graphImageUrl =
               resolveGraphImageUrl(discovereeGraph, discovereeDetails, graphId) ||
               normalizeImageCandidate(localFallbackCurve?.graph_image);
+            logGraphImageAvailability(discovereeGraph.graph_id || graphId, graphImageUrl, 'discoveree-success-empty-details', {
+              detailsCount: discovereeDetails.length,
+              companyGraphImgPresent: Boolean(String(discovereeGraph?.graph_img || '').trim()),
+              localFallbackImagePresent: Boolean(String(localFallbackCurve?.graph_image || '').trim()),
+            });
             const resolvedGraphTitle = resolveGraphTitle(discovereeGraph, []);
 
             if (graphImageUrl) {
@@ -1706,6 +1739,11 @@ const GraphCapture = () => {
           console.log('[DEBUG] Netlify response:', curve);
           const persistedImage = getPersistedGraphImage(graphId);
           const resolvedLocalImage = normalizeImageCandidate(curve.graph_image) || persistedImage;
+          logGraphImageAvailability(graphId, resolvedLocalImage, 'local-backend-fallback', {
+            localCurveId: curve.id || '',
+            localGraphImagePresent: Boolean(String(curve.graph_image || '').trim()),
+            persistedImagePresent: Boolean(String(persistedImage || '').trim()),
+          });
           const graphGroupId = buildGraphGroupId(resolvedLocalImage || '');
           const savedCurve = {
             id: curve.id,
@@ -1751,6 +1789,9 @@ const GraphCapture = () => {
             }));
           }
         } else {
+          logGraphImageAvailability(graphId, '', 'all-fallbacks-failed', {
+            discovereeResponse: 'failed-or-empty',
+          });
           console.log('[DEBUG] Netlify also failed');
         }
       } catch (error) {
@@ -1781,6 +1822,10 @@ const GraphCapture = () => {
           savedCurves.find((curve) => curve?.graphImageUrl || curve?.graph_img)?.graph_img ||
           '') ||
         getPersistedGraphImage(graphId || firstCurve.graphId || getGraphIdForCurve(firstCurve) || '');
+
+      logGraphImageAvailability(graphId || firstCurve.graphId || getGraphIdForCurve(firstCurve), resolvedSavedImage, 'auto-load-graph-context', {
+        firstCurveId: firstCurve.id,
+      });
       
       // Set the graph image from DiscoverEE
       if (resolvedSavedImage) {
