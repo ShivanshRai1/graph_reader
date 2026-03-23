@@ -16,14 +16,22 @@ Base.metadata.create_all(bind=engine)
 
 def ensure_optional_curve_columns():
     try:
+        dialect_name = engine.dialect.name
         inspector = inspect(engine)
         existing_columns = {column["name"] for column in inspector.get_columns("curves")}
 
-        if "graph_image" in existing_columns:
+        # This project runs on MySQL in production; enforce LONGTEXT for base64 screenshots.
+        if dialect_name == "mysql":
+            with engine.begin() as connection:
+                if "graph_image" not in existing_columns:
+                    connection.execute(text("ALTER TABLE curves ADD COLUMN graph_image LONGTEXT"))
+                else:
+                    connection.execute(text("ALTER TABLE curves MODIFY COLUMN graph_image LONGTEXT"))
             return
 
-        with engine.begin() as connection:
-            connection.execute(text("ALTER TABLE curves ADD COLUMN graph_image TEXT"))
+        if "graph_image" not in existing_columns:
+            with engine.begin() as connection:
+                connection.execute(text("ALTER TABLE curves ADD COLUMN graph_image TEXT"))
     except Exception as error:
         print(f"[SchemaMigration] Optional curve column migration skipped: {error}")
 

@@ -1,5 +1,6 @@
 from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text, JSON
 from sqlalchemy.orm import relationship
+from sqlalchemy.dialects import mysql
 from datetime import datetime
 from database import Base
 
@@ -24,7 +25,7 @@ class Curve(Base):
     y_label = Column(String(255))
     other_symbols = Column(Text)
     discoveree_cat_id = Column(Integer)
-    graph_image = Column(Text)
+    graph_image = Column(Text().with_variant(mysql.LONGTEXT, "mysql"))
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
