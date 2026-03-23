@@ -2444,7 +2444,12 @@ const GraphCapture = () => {
       console.log('Company Graph ID from API:', result?.graph_id);
       const returnedGraphId = result?.graph_id ? String(result.graph_id) : '';
       const requestedGraphId = isAppendingToExistingGraph ? String(existingGraphId || '') : '';
-      const effectiveGraphId = returnedGraphId || requestedGraphId;
+      const appendGraphMismatch = Boolean(
+        isAppendingToExistingGraph && requestedGraphId && returnedGraphId && returnedGraphId !== requestedGraphId
+      );
+      const effectiveGraphId = appendGraphMismatch
+        ? requestedGraphId
+        : (returnedGraphId || requestedGraphId);
       const companyGraphId = effectiveGraphId || null;
       
       // Extract detail_id from multiple possible locations in API response
@@ -2472,15 +2477,16 @@ const GraphCapture = () => {
         responseKeys: Object.keys(result || {}),
       });
 
-      if (requestedGraphId && returnedGraphId && returnedGraphId !== requestedGraphId) {
-        console.warn('Graph ID changed by API during append; switching session to returned graph_id.', {
+      if (appendGraphMismatch) {
+        console.error('Graph ID mismatch during append. Keeping current session pinned to requested graph_id.', {
           requestedGraphId,
           returnedGraphId,
+          pinnedGraphId: requestedGraphId,
         });
       }
 
       // Store the identifier used for this create-new save so subsequent appends use the same one.
-      if (companyGraphId) {
+      if (companyGraphId && resolvedOutgoingIdentifier) {
         activeSessionIdentifierRef.current = resolvedOutgoingIdentifier;
       }
       if (companyGraphId && graphImageUrl) {
@@ -2513,7 +2519,7 @@ const GraphCapture = () => {
       const otherGraphIds = savedCurves.map(curve => curve.graphId || getGraphIdForCurve(curve)).filter(id => id !== String(companyGraphId));
       
       if (otherGraphIds.length > 0) {
-        console.error('[CRITICAL] GRAPH_ID MISMATCH DETECTED!', {
+        console.warn('[GRAPH_ID_WARNING] Multiple graph_ids found in local savedCurves state.', {
           currentCurveGraphId: String(companyGraphId),
           otherGraphIdsInSavedCurves: [...new Set(otherGraphIds)],
           issue: 'Multiple different graph_ids in same session - curves may have been split across graphs',
@@ -2524,7 +2530,6 @@ const GraphCapture = () => {
             detailId: c.detailId,
           })),
         });
-        alert('ERROR: Curves in this session have different graph_ids! Data may be inconsistent.\n\nPlease refresh and try again.');
       } else {
         console.log('[GRAPH_ID_VALIDATION] All curves in session share same graph_id ✓', {
           graphId: companyGraphId,
