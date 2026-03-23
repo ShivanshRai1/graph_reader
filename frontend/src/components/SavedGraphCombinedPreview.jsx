@@ -94,8 +94,8 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260 }
 
     return {
       graphTitle: baseConfig.graphTitle ?? firstConfig.graphTitle ?? firstCurve.graph_title ?? firstCurve.name ?? '-',
-      xLabel: baseConfig.xLabel ?? firstConfig.xLabel ?? firstCurve.x_label ?? 'X Axis',
-      yLabel: baseConfig.yLabel ?? firstConfig.yLabel ?? firstCurve.y_label ?? 'Y Axis',
+      xLabel: baseConfig.xLabel ?? baseConfig.xTitle ?? firstConfig.xLabel ?? firstConfig.xTitle ?? firstCurve.x_label ?? firstCurve.x_title ?? '-',
+      yLabel: baseConfig.yLabel ?? baseConfig.yTitle ?? firstConfig.yLabel ?? firstConfig.yTitle ?? firstCurve.y_label ?? firstCurve.y_title ?? '-',
       xUnit: formatUnitLabel(baseConfig.xUnit ?? firstConfig.xUnitPrefix ?? firstCurve.x_unit),
       yUnit: formatUnitLabel(baseConfig.yUnit ?? firstConfig.yUnitPrefix ?? firstCurve.y_unit),
       curveNames: safeCurves
@@ -103,8 +103,8 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260 }
         .filter(Boolean),
     };
   }, [safeCurves, baseConfig]);
-  const xAxisTitle = (baseConfig.xLabel ?? baseConfig.x_label ?? safeCurves[0]?.x_label ?? '').toString().trim();
-  const yAxisTitle = (baseConfig.yLabel ?? baseConfig.y_label ?? safeCurves[0]?.y_label ?? '').toString().trim();
+  const xAxisTitle = (baseConfig.xLabel ?? baseConfig.xTitle ?? baseConfig.x_label ?? baseConfig.x_title ?? safeCurves[0]?.x_label ?? safeCurves[0]?.x_title ?? '').toString().trim();
+  const yAxisTitle = (baseConfig.yLabel ?? baseConfig.yTitle ?? baseConfig.y_label ?? baseConfig.y_title ?? safeCurves[0]?.y_label ?? safeCurves[0]?.y_title ?? '').toString().trim();
   const xAxisLabel = xAxisTitle && !/^x(\s+axis)?$/i.test(xAxisTitle) ? `X (${xAxisTitle})` : 'X';
   const yAxisLabel = yAxisTitle && !/^y(\s+axis)?$/i.test(yAxisTitle) ? `Y (${yAxisTitle})` : 'Y';
   const baseLogModeX = xScale !== 'Logarithmic'

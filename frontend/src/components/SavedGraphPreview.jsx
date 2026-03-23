@@ -142,8 +142,8 @@ const SavedGraphPreview = ({ points, config, width = 520, height = 220, animate 
   }, [parsedPoints, config, xScale, yScale, logModeX, logModeY]);
 
   const { plottedPoints, xMin, xMax, yMin, yMax } = plotData;
-  const xAxisTitle = (config?.xLabel ?? config?.x_label ?? '').toString().trim();
-  const yAxisTitle = (config?.yLabel ?? config?.y_label ?? '').toString().trim();
+  const xAxisTitle = (config?.xLabel ?? config?.xTitle ?? config?.x_label ?? config?.x_title ?? '').toString().trim();
+  const yAxisTitle = (config?.yLabel ?? config?.yTitle ?? config?.y_label ?? config?.y_title ?? '').toString().trim();
   const xAxisLabel = xAxisTitle && !/^x(\s+axis)?$/i.test(xAxisTitle) ? `X (${xAxisTitle})` : 'X';
   const yAxisLabel = yAxisTitle && !/^y(\s+axis)?$/i.test(yAxisTitle) ? `Y (${yAxisTitle})` : 'Y';
 
