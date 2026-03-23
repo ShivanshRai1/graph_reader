@@ -528,6 +528,12 @@ const GraphCapture = () => {
   const previousUploadedImageRef = useRef(uploadedImage || '');
   const suppressNextImageSessionResetRef = useRef(false);
     const activeSessionIdentifierRef = useRef('');
+  const [singleModalPos, setSingleModalPos] = useState(null);
+  const [combinedModalPos, setCombinedModalPos] = useState(null);
+  const singleModalRef = useRef(null);
+  const combinedModalRef = useRef(null);
+  const singleDragRef = useRef({ wasDragged: false });
+  const combinedDragRef = useRef({ wasDragged: false });
 
   const selectedCurve = savedCurves.find((curve) => curve.id === selectedCurveId);
   const groupedCurves = useMemo(() => {
@@ -3307,11 +3313,13 @@ const GraphCapture = () => {
             height: '100vh',
             background: 'rgba(0,0,0,0.35)',
             zIndex: 1000,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
           }}
-          onClick={() => setSelectedCurveId('')}
+          onClick={() => {
+            if (singleDragRef.current.wasDragged) { singleDragRef.current.wasDragged = false; return; }
+            setSingleModalPos(null);
+            setSelectedCurveId('');
+          }}
+                    ref={singleModalRef}
         >
           <div
             style={{
@@ -3324,7 +3332,10 @@ const GraphCapture = () => {
               overflowY: 'auto',
               boxShadow: '0 4px 32px rgba(0,0,0,0.18)',
               padding: 24,
-              position: 'relative',
+              position: 'fixed',
+              ...(singleModalPos
+                ? { top: singleModalPos.y, left: singleModalPos.x, transform: 'none' }
+                : { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }),
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -3339,12 +3350,31 @@ const GraphCapture = () => {
                 color: '#888',
                 cursor: 'pointer',
               }}
-              onClick={() => setSelectedCurveId('')}
+              onClick={() => { setSingleModalPos(null); setSelectedCurveId(''); }}
               aria-label="Close"
             >
               ×
             </button>
-            <div className="font-semibold mb-2" style={{ color: '#213547', fontSize: 18 }}>
+            <div
+              className="font-semibold mb-2"
+              style={{ color: '#213547', fontSize: 18, cursor: 'move', userSelect: 'none' }}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                const rect = singleModalRef.current.getBoundingClientRect();
+                const startX = e.clientX, startY = e.clientY;
+                const startLeft = rect.left, startTop = rect.top;
+                const onMove = (me) => {
+                  singleDragRef.current.wasDragged = true;
+                  setSingleModalPos({ x: startLeft + (me.clientX - startX), y: startTop + (me.clientY - startY) });
+                };
+                const onUp = () => {
+                  window.removeEventListener('mousemove', onMove);
+                  window.removeEventListener('mouseup', onUp);
+                };
+                window.addEventListener('mousemove', onMove);
+                window.addEventListener('mouseup', onUp);
+              }}
+            >
               {selectedCurve.name || `Curve #${selectedCurve.id}`}
             </div>
             {(() => {
@@ -3435,11 +3465,13 @@ const GraphCapture = () => {
             height: '100vh',
             background: 'rgba(0,0,0,0.35)',
             zIndex: 1000,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
           }}
-          onClick={() => setCombinedGroupId('')}
+          onClick={() => {
+            if (combinedDragRef.current.wasDragged) { combinedDragRef.current.wasDragged = false; return; }
+            setCombinedModalPos(null);
+            setCombinedGroupId('');
+          }}
+                    ref={combinedModalRef}
         >
           <div
             style={{
@@ -3452,7 +3484,10 @@ const GraphCapture = () => {
               overflowY: 'auto',
               boxShadow: '0 4px 32px rgba(0,0,0,0.18)',
               padding: 24,
-              position: 'relative',
+              position: 'fixed',
+              ...(combinedModalPos
+                ? { top: combinedModalPos.y, left: combinedModalPos.x, transform: 'none' }
+                : { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }),
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -3467,12 +3502,31 @@ const GraphCapture = () => {
                 color: '#888',
                 cursor: 'pointer',
               }}
-              onClick={() => setCombinedGroupId('')}
+              onClick={() => { setCombinedModalPos(null); setCombinedGroupId(''); }}
               aria-label="Close"
             >
               ×
             </button>
-            <div className="font-semibold mb-2" style={{ color: '#213547', fontSize: 18 }}>
+            <div
+              className="font-semibold mb-2"
+              style={{ color: '#213547', fontSize: 18, cursor: 'move', userSelect: 'none' }}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                const rect = combinedModalRef.current.getBoundingClientRect();
+                const startX = e.clientX, startY = e.clientY;
+                const startLeft = rect.left, startTop = rect.top;
+                const onMove = (me) => {
+                  combinedDragRef.current.wasDragged = true;
+                  setCombinedModalPos({ x: startLeft + (me.clientX - startX), y: startTop + (me.clientY - startY) });
+                };
+                const onUp = () => {
+                  window.removeEventListener('mousemove', onMove);
+                  window.removeEventListener('mouseup', onUp);
+                };
+                window.addEventListener('mousemove', onMove);
+                window.addEventListener('mouseup', onUp);
+              }}
+            >
               Combined curves ({selectedGroup.curves.length})
             </div>
             {(() => {
