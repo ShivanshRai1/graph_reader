@@ -2,7 +2,7 @@ import { useRef, useState, useEffect } from 'react';
 import { useGraph } from '../context/GraphContext';
 
 const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', isAxisMappingConfirmed = false, hasReturnUrl = false }) => {
-  const { uploadedImage, graphArea, setGraphArea, dataPoints, addDataPoint, clearDataPoints, clearAnnotationsOnly, graphConfig, deleteDataPoint } = useGraph();
+  const { uploadedImage, graphArea, setGraphArea, dataPoints, addDataPoint, clearDataPoints, graphConfig, deleteDataPoint } = useGraph();
   const [showRedrawMsg, setShowRedrawMsg] = useState(false);
   const canvasRef = useRef(null);
   const magnifierRef = useRef(null);
@@ -869,13 +869,6 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
           title="Clear all captured data points (keeps axis mapping)"
         >
           Retake Points
-        </button>
-        <button
-          className="px-4 py-2 rounded bg-orange-600 text-white font-medium"
-          onClick={clearAnnotationsOnly}
-          title="Clear only your annotations (yellow points) - keeps imported data (red points)"
-        >
-          Clear Annotations
         </button>
         {showRedrawMsg && (
           <div className="text-red-600 font-bold mt-2">
