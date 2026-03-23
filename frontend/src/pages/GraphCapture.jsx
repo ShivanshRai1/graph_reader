@@ -5,6 +5,7 @@ import CapturedPointsList from '../components/CapturedPointsList';
 import SavedGraphPreview from '../components/SavedGraphPreview';
 import SavedGraphCombinedPreview from '../components/SavedGraphCombinedPreview';
 import { useGraph } from '../context/GraphContext';
+import { clearAnnotationsForCurve } from '../utils/annotationStorage';
 import { useState, useEffect, useMemo, useRef } from 'react';
 
 const MiniGraphCanvas = ({ points }) => {
@@ -80,6 +81,77 @@ const buildGraphGroupId = (imageUrl) => {
     hash = (hash * 31 + imageUrl.charCodeAt(i)) >>> 0;
   }
   return `graph_${hash.toString(36)}`;
+};
+
+const normalizeImageCandidate = (rawValue) => {
+  const value = String(rawValue || '').trim();
+  if (!value) return '';
+
+  const lower = value.toLowerCase();
+  if (
+    lower.startsWith('data:') ||
+    lower.startsWith('blob:') ||
+    lower.startsWith('http://') ||
+    lower.startsWith('https://')
+  ) {
+    return value;
+  }
+
+  // Some API rows store relative upload paths. Normalize them so image loading is reliable.
+  if (value.startsWith('/')) {
+    return `https://www.discoveree.io${value}`;
+  }
+
+  if (lower.startsWith('uploads/') || lower.startsWith('images/') || lower.startsWith('assets/')) {
+    return `https://www.discoveree.io/${value.replace(/^\/+/, '')}`;
+  }
+
+  return value;
+};
+
+const buildCurveDedupKey = (curve = {}) => {
+  const graphId = String(curve?.graphId || curve?.graph_id || '');
+  const detailId = String(curve?.detailId || curve?.detail_id || '');
+  if (graphId && detailId) {
+    return `${graphId}::${detailId}`;
+  }
+
+  const points = Array.isArray(curve?.points) ? curve.points : [];
+  const pointSignature = points
+    .map((point) => {
+      const x = Number(point?.x_value ?? point?.x);
+      const y = Number(point?.y_value ?? point?.y);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) {
+        return '';
+      }
+      return `${x}:${y}`;
+    })
+    .filter(Boolean)
+    .join('|');
+
+  return [
+    String(curve?.id || ''),
+    graphId,
+    String(curve?.name || curve?.curve_name || ''),
+    pointSignature,
+  ].join('::');
+};
+
+const dedupeCurves = (curves = []) => {
+  const list = Array.isArray(curves) ? curves : [];
+  const seen = new Set();
+  const deduped = [];
+
+  list.forEach((curve) => {
+    const key = buildCurveDedupKey(curve);
+    if (seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    deduped.push(curve);
+  });
+
+  return deduped;
 };
 
 const resolveGraphTitle = (graph = {}, details = []) => {
@@ -167,6 +239,7 @@ const GraphCapture = () => {
     replaceDataPoints,
     clearDataPoints,
     setUploadedImage,
+    loadAnnotationsForCurve,
   } = useGraph();
   const graphWorkspaceRef = useRef(null);
   const handleUserImageLoaded = () => {
@@ -410,9 +483,10 @@ const GraphCapture = () => {
   const selectedCurve = savedCurves.find((curve) => curve.id === selectedCurveId);
   const groupedCurves = useMemo(() => {
     if (!Array.isArray(savedCurves)) return [];
+    const uniqueCurves = dedupeCurves(savedCurves);
     const groups = new Map();
 
-    savedCurves.forEach((curve, index) => {
+    uniqueCurves.forEach((curve, index) => {
       const imageUrl = curve.graphImageUrl ?? curve.graph_img ?? '';
       const graphIdKey = curve.graphId ? `graphId_${String(curve.graphId)}` : '';
       const groupId = graphIdKey || curve.graphGroupId || buildGraphGroupId(imageUrl) || `graph_${index}`;
@@ -502,25 +576,38 @@ const GraphCapture = () => {
 
   const resolveGraphImageUrl = (graph = {}, details = [], graphId = '') => {
     const detailList = Array.isArray(details) ? details : [];
-    const firstDetail = detailList[0] || {};
+    const detailImageCandidates = detailList.flatMap((detail) => [
+      detail?.graph_img,
+      detail?.graph_image,
+      detail?.graphImage,
+      detail?.graph_image_url,
+      detail?.image_url,
+      detail?.img_url,
+      detail?.image,
+    ]);
 
-    const candidates = [
+    const graphImageCandidates = [
       graph?.graph_img,
       graph?.graph_image,
       graph?.graphImage,
+      graph?.graph_image_url,
+      graph?.image_url,
+      graph?.img_url,
       graph?.image,
-      firstDetail?.graph_img,
-      firstDetail?.graph_image,
-      firstDetail?.graphImage,
-      firstDetail?.image,
-      getPersistedGraphImage(graphId || graph?.graph_id || ''),
+    ];
+
+    const candidates = [
+      ...graphImageCandidates,
+      ...detailImageCandidates,
+      getPersistedGraphImage(graphId || graph?.graph_id || graph?.identifier || ''),
       activeSessionImageKeyRef.current,
       uploadedImage,
     ];
 
     for (const candidate of candidates) {
-      if (candidate !== undefined && candidate !== null && String(candidate).trim() !== '') {
-        return String(candidate);
+      const normalized = normalizeImageCandidate(candidate);
+      if (normalized) {
+        return normalized;
       }
     }
 
@@ -569,6 +656,9 @@ const GraphCapture = () => {
     if (Object.keys(curveSymbols).length > 0) {
       setSymbolValues((prev) => ({ ...prev, ...curveSymbols }));
     }
+    
+    // Load saved annotations for this curve
+    loadAnnotationsForCurve(curve.id);
   };
 
   const handleEditCurveStart = (curve) => {
@@ -617,6 +707,9 @@ const GraphCapture = () => {
       yUnitPrefix: curve.config?.yUnitPrefix || curve.y_unit || '1',
     });
     setEditCurveSymbolValues(normalizeCurveSymbolValues(curve));
+    
+    // Load saved annotations for this curve
+    loadAnnotationsForCurve(curve.id);
   };
 
   const handleEditCurveCancel = () => {
@@ -1517,10 +1610,11 @@ const GraphCapture = () => {
                 graphImageUrl,
               };
             });
-            console.log('[DEBUG] Total fetched curves:', fetched.length);
-            if (fetched.length > 0) {
+            const dedupedFetched = dedupeCurves(fetched);
+            console.log('[DEBUG] Total fetched curves:', fetched.length, 'after dedupe:', dedupedFetched.length);
+            if (dedupedFetched.length > 0) {
               console.log('[DEBUG] Setting savedCurves...');
-              setSavedCurves(fetched);
+              setSavedCurves(dedupedFetched);
               activateAppendSession(discovereeGraph.graph_id, graphImageUrl, 'fetchGraphById');
 
               if (graphImageUrl) {
@@ -1528,7 +1622,7 @@ const GraphCapture = () => {
               }
               
               // Auto-populate graph title from fetched data if not already set
-              const firstCurve = fetched[0];
+              const firstCurve = dedupedFetched[0];
               if (resolvedGraphTitle && !urlParams.graph_title) {
                 setGraphConfig((prev) => ({
                   ...prev,

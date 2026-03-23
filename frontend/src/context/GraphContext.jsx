@@ -1,4 +1,10 @@
 import { createContext, useContext, useState, useEffect } from 'react';
+import { 
+  getAnnotationsForCurve, 
+  saveAnnotationsForCurve, 
+  clearAnnotationsForCurve,
+  convertAnnotationsToPoints 
+} from '../utils/annotationStorage';
 
 const GraphContext = createContext();
 
@@ -45,6 +51,9 @@ export const GraphProvider = ({ children }) => {
   
   // Saved curves
   const [savedCurves, setSavedCurves] = useState([]);
+  
+  // Track current curve being viewed (for annotation persistence)
+  const [currentCurveId, setCurrentCurveId] = useState(null);
 
   const getSafeLogBounds = (minValue, maxValue) => {
     const safeMin = Number.isFinite(minValue) && minValue > 0 ? minValue : 1e-12;
@@ -143,7 +152,7 @@ export const GraphProvider = ({ children }) => {
     return { canvasX, canvasY };
   };
 
-  const addDataPoint = (point) => {
+  const addDataPoint = (point, curveId = null) => {
     // Convert canvas coordinates to graph coordinates
     const graphCoords = convertCanvasToGraphCoordinates(point.canvasX, point.canvasY);
     // Debug: Log the captured graph coordinates
@@ -156,17 +165,45 @@ export const GraphProvider = ({ children }) => {
       yScale: graphConfig.yScale,
       note: graphConfig.yScale === 'Logarithmic' ? 'y value is real value mapped by logarithmic axis' : '',
     });
+    
+    const targetCurveId = curveId || currentCurveId;
     const dataPoint = {
       canvasX: point.canvasX,
       canvasY: point.canvasY,
       x: graphCoords.x,
       y: graphCoords.y,
+      // Mark this as an annotation if we know which curve we're working on
+      isAnnotation: !!targetCurveId,
     };
-    setDataPoints([...dataPoints, dataPoint]);
+    const newDataPoints = [...dataPoints, dataPoint];
+    setDataPoints(newDataPoints);
+    
+    // Auto-save annotation if we know which curve we're working on
+    if (targetCurveId) {
+      saveAnnotationsForCurve(targetCurveId, newDataPoints);
+      console.log(`[ANNOTATIONS] Auto-saved annotation for curve ${targetCurveId}`);
+    }
   };
 
   const clearDataPoints = () => {
     setDataPoints([]);
+    // Also clear saved annotations for this curve
+    if (currentCurveId) {
+      clearAnnotationsForCurve(currentCurveId);
+      console.log(`[ANNOTATIONS] Cleared annotations for curve ${currentCurveId}`);
+    }
+  };
+
+  const clearAnnotationsOnly = () => {
+    // Remove only annotation points, keep imported points
+    const importedPointsOnly = dataPoints.filter(p => p.imported === true);
+    setDataPoints(importedPointsOnly);
+    
+    // Clear saved annotations from storage
+    if (currentCurveId) {
+      clearAnnotationsForCurve(currentCurveId);
+      console.log(`[ANNOTATIONS] Cleared annotations only for curve ${currentCurveId}`);
+    }
   };
 
   const replaceDataPoints = (points) => {
@@ -260,6 +297,39 @@ export const GraphProvider = ({ children }) => {
     setDataPoints(updatedPoints);
   }, [graphConfig.xScale, graphConfig.yScale, graphConfig.xUnitPrefix, graphConfig.yUnitPrefix, graphConfig.xMin, graphConfig.xMax, graphConfig.yMin, graphConfig.yMax, graphArea.width, graphArea.height]);
 
+  /**
+   * Load saved annotations for a curve and add them to current data points
+   * Used when user views a saved curve to restore their annotations
+   */
+  const loadAnnotationsForCurve = (curveId) => {
+    if (!curveId) return;
+    
+    setCurrentCurveId(curveId);
+    const savedAnnotations = getAnnotationsForCurve(curveId);
+    
+    if (savedAnnotations.length > 0) {
+      const annotationPoints = convertAnnotationsToPoints(savedAnnotations);
+      // Add annotations to current data points (they already have canvas coordinates)
+      setDataPoints(prevPoints => {
+        // Only add annotations that aren't already there (avoid duplicates on rescale)
+        const existingCoords = new Set();
+        prevPoints.forEach(p => {
+          existingCoords.add(`${p.x.toFixed(10)},${p.y.toFixed(10)}`);
+        });
+        
+        const newAnnotations = annotationPoints.filter(ann => {
+          const key = `${ann.x.toFixed(10)},${ann.y.toFixed(10)}`;
+          return !existingCoords.has(key);
+        });
+        
+        console.log(`[ANNOTATIONS] Loaded ${newAnnotations.length} saved annotations for curve ${curveId}`);
+        return [...prevPoints, ...newAnnotations];
+      });
+    } else {
+      console.log(`[ANNOTATIONS] No saved annotations found for curve ${curveId}`);
+    }
+  };
+
   const saveCurve = async () => {
     // TODO: Call API to save curve
     const newCurve = {
@@ -283,6 +353,7 @@ export const GraphProvider = ({ children }) => {
     dataPoints,
     addDataPoint,
     clearDataPoints,
+    clearAnnotationsOnly,
     replaceDataPoints,
     importDataPoints,
     updateDataPoint,
@@ -290,6 +361,9 @@ export const GraphProvider = ({ children }) => {
     savedCurves,
     setSavedCurves,
     saveCurve,
+    currentCurveId,
+    setCurrentCurveId,
+    loadAnnotationsForCurve,
   };
 
   return (

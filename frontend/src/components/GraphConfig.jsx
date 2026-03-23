@@ -647,7 +647,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
                     }`}
                     title={isDisabled ? 'All axis values must be set and valid' : 'Review axis configuration before locking'}
                   >
-                    ✓ Confirm Final Axis Mapping
+                    Final Check
                   </button>
                 </>
               );
