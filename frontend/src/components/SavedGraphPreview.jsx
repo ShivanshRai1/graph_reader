@@ -142,14 +142,16 @@ const SavedGraphPreview = ({ points, config, width = 520, height = 220, animate 
   }, [parsedPoints, config, xScale, yScale, logModeX, logModeY]);
 
   const { plottedPoints, xMin, xMax, yMin, yMax } = plotData;
-  const xAxisLabel = (config?.xLabel ?? config?.x_label ?? '').toString().trim() || 'X';
-  const yAxisLabel = (config?.yLabel ?? config?.y_label ?? '').toString().trim() || 'Y';
+  const xAxisTitle = (config?.xLabel ?? config?.x_label ?? '').toString().trim();
+  const yAxisTitle = (config?.yLabel ?? config?.y_label ?? '').toString().trim();
+  const xAxisLabel = xAxisTitle && !/^x(\s+axis)?$/i.test(xAxisTitle) ? `X (${xAxisTitle})` : 'X';
+  const yAxisLabel = yAxisTitle && !/^y(\s+axis)?$/i.test(yAxisTitle) ? `Y (${yAxisTitle})` : 'Y';
 
   const padding = {
-    left: 52,
+    left: 58,
     right: 20,
     top: 16,
-    bottom: 32,
+    bottom: 40,
   };
   const drawableWidth = Math.max(width - padding.left - padding.right, 1);
   const drawableHeight = Math.max(height - padding.top - padding.bottom, 1);
@@ -389,22 +391,22 @@ const SavedGraphPreview = ({ points, config, width = 520, height = 220, animate 
       })}
       <text
         x={padding.left + drawableWidth / 2}
-        y={height - 4}
+        y={height - 8}
         textAnchor="middle"
-        fontSize="11"
-        fontWeight="600"
+        fontSize="12"
+        fontWeight="700"
         fill="#4b5563"
       >
         {xAxisLabel}
       </text>
       <text
-        x={14}
+        x={18}
         y={padding.top + drawableHeight / 2}
         textAnchor="middle"
-        fontSize="11"
-        fontWeight="600"
+        fontSize="12"
+        fontWeight="700"
         fill="#4b5563"
-        transform={`rotate(-90 14 ${padding.top + drawableHeight / 2})`}
+        transform={`rotate(-90 18 ${padding.top + drawableHeight / 2})`}
       >
         {yAxisLabel}
       </text>
