@@ -3346,7 +3346,10 @@ const GraphCapture = () => {
                 right: 12,
                 background: 'none',
                 border: 'none',
-                fontSize: 22,
+                fontSize: 30,
+                width: 36,
+                height: 36,
+                lineHeight: 1,
                 color: '#888',
                 cursor: 'pointer',
               }}
@@ -3498,7 +3501,10 @@ const GraphCapture = () => {
                 right: 12,
                 background: 'none',
                 border: 'none',
-                fontSize: 22,
+                fontSize: 30,
+                width: 36,
+                height: 36,
+                lineHeight: 1,
                 color: '#888',
                 cursor: 'pointer',
               }}
