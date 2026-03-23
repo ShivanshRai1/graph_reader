@@ -230,6 +230,18 @@ const getLastNonEmptyQueryValue = (searchParams, key) => {
   return values.length > 0 ? values[values.length - 1] : '';
 };
 
+const normalizeSessionIdentifier = (rawValue) => {
+  const value = String(rawValue || '').trim();
+  if (!value) return '';
+
+  const lower = value.toLowerCase();
+  if (['0', 'null', 'undefined', 'nan', 'false'].includes(lower)) {
+    return '';
+  }
+
+  return value;
+};
+
 const GraphCapture = () => {
   const {
     uploadedImage,
@@ -962,7 +974,7 @@ const GraphCapture = () => {
       return;
     }
     const nextId = String(nextGraphId);
-    const normalizedIdentifier = String(nextIdentifier || activeSessionIdentifierRef.current || '').trim();
+    const normalizedIdentifier = normalizeSessionIdentifier(nextIdentifier || activeSessionIdentifierRef.current || '');
     console.log('[GRAPH SESSION] syncGraphIdContext', {
       nextGraphId: nextId,
       nextIdentifier: normalizedIdentifier || '(none)',
@@ -980,6 +992,8 @@ const GraphCapture = () => {
     currentUrl.searchParams.set('graph_id', nextId);
     if (normalizedIdentifier) {
       currentUrl.searchParams.set('identifier', normalizedIdentifier);
+    } else {
+      currentUrl.searchParams.delete('identifier');
     }
     window.history.replaceState({}, '', currentUrl.toString());
   };
@@ -1499,7 +1513,9 @@ const GraphCapture = () => {
       y_label: searchParams.get('y_label') || searchParams.get('y_title') || searchParams.get('ylabel') || '',
       other_symbols: otherSymbols,
       discoveree_cat_id: searchParams.get('discoveree_cat_id') || '',
-      identifier: getLastNonEmptyQueryValue(searchParams, 'identifier') || searchParams.get('identifier') || '',
+      identifier: normalizeSessionIdentifier(
+        getLastNonEmptyQueryValue(searchParams, 'identifier') || searchParams.get('identifier') || ''
+      ),
       testuser_id: searchParams.get('testuser_id') || '',
       tctj: tctjValue,
       return_url: searchParams.get('return_url') || '',
@@ -2324,15 +2340,16 @@ const GraphCapture = () => {
       // Use URL graph_id as the single source of truth for append mode.
       // clearGraphIdContext() always removes graph_id from the URL when starting fresh.
       const existingGraphId = incomingUrlGraphId;
-      const existingGraphIdentifier =
+      const existingGraphIdentifier = normalizeSessionIdentifier(
         getLastNonEmptyQueryValue(searchParams, 'identifier') ||
         urlParams.identifier ||
-        (savedCurves[0]?.identifier ? String(savedCurves[0].identifier) : '');
+        (savedCurves[0]?.identifier ? String(savedCurves[0].identifier) : '')
+      );
       const isAppendingToExistingGraph = Boolean(existingGraphId);
       // Use the stored session identifier (from original create-new save) to avoid API creating a new graph.
       // Falls back to URL identifier param, then to stored identifier from response.
       // CRITICAL: Never use graph_id as identifier fallback - this causes Company API to create new graphs!
-      const appendIdentifier = String(activeSessionIdentifierRef.current || existingGraphIdentifier || '');
+      const appendIdentifier = normalizeSessionIdentifier(activeSessionIdentifierRef.current || existingGraphIdentifier || '');
 
       console.log('=== GRAPH SESSION STATE BEFORE SAVE ===', {
         sessionActive: hasActiveAppendSessionRef.current,
@@ -2343,16 +2360,17 @@ const GraphCapture = () => {
         currentUrlFull: window.location.href,
         allGraphIdParamsInUrl: searchParams.getAll('graph_id'),
         allIdentifierParamsInUrl: searchParams.getAll('identifier'),
+        effectiveIdentifierForAppend: appendIdentifier || '(none)',
       });
 
       // Build the JSON payload for company's API
       const uniqueIdentifier = `usergraph_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
-      // CRITICAL: If appending and identifier is empty, use unique ID as fallback to prevent new graph creation
-      const resolvedOutgoingIdentifier = isAppendingToExistingGraph ? (appendIdentifier || uniqueIdentifier) : uniqueIdentifier;
+      // Keep append identifier stable. If identifier is invalid (e.g. "0"), leave it empty and rely on graph_id.
+      const resolvedOutgoingIdentifier = isAppendingToExistingGraph ? appendIdentifier : uniqueIdentifier;
       const companyApiPayload = {
         graph: {
-          // In append mode, graph_id must come from query param only to avoid API creating a new graph.
-          graph_id: '',
+          // Include graph_id explicitly during append to reduce graph split risk.
+          graph_id: isAppendingToExistingGraph ? String(existingGraphId) : '',
           discoveree_cat_id: urlParams.discoveree_cat_id ? String(urlParams.discoveree_cat_id) : '',
           identifier: resolvedOutgoingIdentifier,
           partno: urlParams.partno || '',
@@ -2397,6 +2415,8 @@ const GraphCapture = () => {
       console.log('Company save mode:', isAppendingToExistingGraph ? 'append-existing-graph' : 'create-new-graph', {
         existingGraphId,
         existingGraphIdentifier: appendIdentifier,
+        sentGraphId: companyApiPayload?.graph?.graph_id || '',
+        sentIdentifier: companyApiPayload?.graph?.identifier || '(none)',
       });
 
       console.log('Making request to Company API:', COMPANY_API_SAVE_URL);
