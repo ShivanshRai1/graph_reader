@@ -154,6 +154,43 @@ const dedupeCurves = (curves = []) => {
   return deduped;
 };
 
+const buildXYDedupKey = (x, y, precision = 6) => {
+  const xNum = Number(x);
+  const yNum = Number(y);
+  if (!Number.isFinite(xNum) || !Number.isFinite(yNum)) return '';
+  return `${xNum.toFixed(precision)}|${yNum.toFixed(precision)}`;
+};
+
+const dedupePointsByXY = (points = [], precision = 6) => {
+  const list = Array.isArray(points) ? points : [];
+  const seen = new Set();
+  const unique = [];
+  let removed = 0;
+
+  list.forEach((point) => {
+    const x = Number(point?.x);
+    const y = Number(point?.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+      return;
+    }
+
+    const key = buildXYDedupKey(x, y, precision);
+    if (!key) {
+      return;
+    }
+
+    if (seen.has(key)) {
+      removed += 1;
+      return;
+    }
+
+    seen.add(key);
+    unique.push({ ...point, x, y });
+  });
+
+  return { unique, removed };
+};
+
 const resolveGraphTitle = (graph = {}, details = []) => {
   const detailList = Array.isArray(details) ? details : [];
   const candidates = [
@@ -1948,6 +1985,10 @@ const GraphCapture = () => {
     setIsSaving(true);
     try {
       const startTime = Date.now();
+      const { unique: uniquePoints, removed: removedDuplicatePoints } = dedupePointsByXY(dataPoints, 6);
+      if (removedDuplicatePoints > 0) {
+        console.warn(`[POINT_DEDUP] Removed ${removedDuplicatePoints} duplicate XY point(s) before saving.`);
+      }
 
       const payload = {
         part_number: urlParams.partno || graphConfig.partNumber || null,
@@ -1968,7 +2009,7 @@ const GraphCapture = () => {
         other_symbols: urlParams.other_symbols || null,
         discoveree_cat_id: urlParams.discoveree_cat_id ? parseInt(urlParams.discoveree_cat_id) : null,
         graph_image: uploadedImage || null,
-        data_points: dataPoints.map((point) => ({
+        data_points: uniquePoints.map((point) => ({
           x_value: point.x,
           y_value: point.y,
         })),
@@ -2279,7 +2320,12 @@ const GraphCapture = () => {
     try {
       console.log('Before filtering - dataPoints length:', dataPoints ? dataPoints.length : 'dataPoints is null/undefined');
 
-      const xyPoints = dataPoints
+      const { unique: uniquePointsForCompanyApi, removed: removedDuplicatesForCompanyApi } = dedupePointsByXY(dataPoints, 6);
+      if (removedDuplicatesForCompanyApi > 0) {
+        console.warn(`[POINT_DEDUP] Removed ${removedDuplicatesForCompanyApi} duplicate XY point(s) before company API send.`);
+      }
+
+      const xyPoints = uniquePointsForCompanyApi
         .filter((point) => {
           console.log(
             `  Checking point:`,

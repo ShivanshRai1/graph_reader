@@ -47,6 +47,10 @@ const formatNumber = (value) => {
   if (absValue >= 100) return value.toFixed(1);
   if (absValue >= 10) return value.toFixed(2);
   if (absValue >= 1) return value.toFixed(3);
+  if (absValue >= 0.001) {
+    const decimals = Math.min(6, Math.max(3, Math.ceil(-Math.log10(absValue)) + 1));
+    return parseFloat(value.toFixed(decimals)).toString();
+  }
   return value.toExponential(2);
 };
 

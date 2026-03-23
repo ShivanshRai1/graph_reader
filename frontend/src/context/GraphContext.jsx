@@ -311,14 +311,15 @@ export const GraphProvider = ({ children }) => {
       const annotationPoints = convertAnnotationsToPoints(savedAnnotations);
       // Add annotations to current data points (they already have canvas coordinates)
       setDataPoints(prevPoints => {
+        const dedupPrecision = 6;
         // Only add annotations that aren't already there (avoid duplicates on rescale)
         const existingCoords = new Set();
         prevPoints.forEach(p => {
-          existingCoords.add(`${p.x.toFixed(10)},${p.y.toFixed(10)}`);
+          existingCoords.add(`${p.x.toFixed(dedupPrecision)},${p.y.toFixed(dedupPrecision)}`);
         });
         
         const newAnnotations = annotationPoints.filter(ann => {
-          const key = `${ann.x.toFixed(10)},${ann.y.toFixed(10)}`;
+          const key = `${ann.x.toFixed(dedupPrecision)},${ann.y.toFixed(dedupPrecision)}`;
           return !existingCoords.has(key);
         });
         
