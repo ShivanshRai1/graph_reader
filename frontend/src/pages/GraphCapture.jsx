@@ -3306,6 +3306,31 @@ const GraphCapture = () => {
             <div className="font-semibold mb-2" style={{ color: '#213547', fontSize: 18 }}>
               {selectedCurve.name || `Curve #${selectedCurve.id}`}
             </div>
+            {(() => {
+              const cfg = normalizeCurveConfig(selectedCurve);
+              return (
+                <div style={{ fontSize: 12, color: '#444', background: '#f5f5f5', borderRadius: 5, padding: '8px 12px', marginBottom: 8, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px 24px' }}>
+                  {cfg.graphTitle && (
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <span style={{ fontWeight: 600 }}>Graph Title:</span> {cfg.graphTitle}
+                    </div>
+                  )}
+                  {cfg.curveName && (
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <span style={{ fontWeight: 600 }}>Curve Name:</span> {cfg.curveName}
+                    </div>
+                  )}
+                  <div><span style={{ fontWeight: 600 }}>X Min:</span> {formatDisplayValue(cfg.xMin)}</div>
+                  <div><span style={{ fontWeight: 600 }}>Y Min:</span> {formatDisplayValue(cfg.yMin)}</div>
+                  <div><span style={{ fontWeight: 600 }}>X Max:</span> {formatDisplayValue(cfg.xMax)}</div>
+                  <div><span style={{ fontWeight: 600 }}>Y Max:</span> {formatDisplayValue(cfg.yMax)}</div>
+                  <div><span style={{ fontWeight: 600 }}>X Scale:</span> {cfg.xScale || '—'}</div>
+                  <div><span style={{ fontWeight: 600 }}>Y Scale:</span> {cfg.yScale || '—'}</div>
+                  {urlParams.x_label && <div><span style={{ fontWeight: 600 }}>X Title:</span> {urlParams.x_label}</div>}
+                  {urlParams.y_label && <div><span style={{ fontWeight: 600 }}>Y Title:</span> {urlParams.y_label}</div>}
+                </div>
+              );
+            })()}
             <div className="mb-2 text-xs">Points: {selectedCurvePoints.length}</div>
             <a
               href={`https://www.discoveree.io/show_graph.php?graph_id=${encodeURIComponent(getGraphIdForCurve(selectedCurve) || '')}`}
@@ -3408,6 +3433,32 @@ const GraphCapture = () => {
             <div className="font-semibold mb-2" style={{ color: '#213547', fontSize: 18 }}>
               Combined curves ({selectedGroup.curves.length})
             </div>
+            {(() => {
+              const cfg = normalizeCurveConfig(selectedGroup.curves[0]);
+              return (
+                <div style={{ fontSize: 12, color: '#444', background: '#f5f5f5', borderRadius: 5, padding: '8px 12px', marginBottom: 8, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px 24px' }}>
+                  {cfg.graphTitle && (
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <span style={{ fontWeight: 600 }}>Graph Title:</span> {cfg.graphTitle}
+                    </div>
+                  )}
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <span style={{ fontWeight: 600 }}>Curves:</span>{' '}
+                    {selectedGroup.curves.map((c, i) => (
+                      <span key={i}>{i > 0 ? ', ' : ''}{c.config?.curveName || c.curve_name || c.name || `Curve ${i + 1}`}</span>
+                    ))}
+                  </div>
+                  <div><span style={{ fontWeight: 600 }}>X Min:</span> {formatDisplayValue(cfg.xMin)}</div>
+                  <div><span style={{ fontWeight: 600 }}>Y Min:</span> {formatDisplayValue(cfg.yMin)}</div>
+                  <div><span style={{ fontWeight: 600 }}>X Max:</span> {formatDisplayValue(cfg.xMax)}</div>
+                  <div><span style={{ fontWeight: 600 }}>Y Max:</span> {formatDisplayValue(cfg.yMax)}</div>
+                  <div><span style={{ fontWeight: 600 }}>X Scale:</span> {cfg.xScale || '—'}</div>
+                  <div><span style={{ fontWeight: 600 }}>Y Scale:</span> {cfg.yScale || '—'}</div>
+                  {urlParams.x_label && <div><span style={{ fontWeight: 600 }}>X Title:</span> {urlParams.x_label}</div>}
+                  {urlParams.y_label && <div><span style={{ fontWeight: 600 }}>Y Title:</span> {urlParams.y_label}</div>}
+                </div>
+              );
+            })()}
             <div style={{ marginTop: 12 }}>
               {selectedGroup.curves.length === 1 ? (
                 <SavedGraphPreview

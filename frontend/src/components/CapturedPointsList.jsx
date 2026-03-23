@@ -19,6 +19,12 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false }) => {
   const xUnitLabel = graphConfig.xUnitPrefix ? `(${getUnitSymbol(graphConfig.xUnitPrefix)})` : '';
   const yUnitLabel = graphConfig.yUnitPrefix ? `(${getUnitSymbol(graphConfig.yUnitPrefix)})` : '';
 
+  const urlParams = new URLSearchParams(window.location.search);
+  const xTitle = urlParams.get('x_title') || '';
+  const yTitle = urlParams.get('y_title') || '';
+  const xHeaderLabel = xTitle ? `(${xTitle})` : xUnitLabel;
+  const yHeaderLabel = yTitle ? `(${yTitle})` : yUnitLabel;
+
   const formatDisplayValue = (value) => {
     if (typeof value !== 'number' || !Number.isFinite(value)) return 'Invalid';
     return (Math.abs(value) > 0 && Math.abs(value) < 0.0001)
@@ -238,9 +244,7 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false }) => {
           {dataPoints.length === 0 && (
             <p className="text-xs text-gray-500 mt-1">No points captured yet. Confirm axis mapping first, then click on the graph.</p>
           )}
-          {hasReturnUrl && dataPoints.length >= 5 && (
-            <p className="text-xs text-green-600 mt-1">✓ Ready to fit/export ({dataPoints.length} points)</p>
-          )}
+
         </div>
         {isReadOnly && (
           <span className="px-3 py-1 bg-gray-100 text-blue-700 text-xs rounded-full font-medium">Read-only (saved)</span>
@@ -300,10 +304,10 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false }) => {
               <tr className="border-b-2 border-gray-300">
                 <th className="text-right px-3 py-2 text-sm font-semibold text-gray-900 bg-blue-50 border-r border-gray-300">#</th>
                 <th className="text-right px-3 py-2 text-sm font-semibold text-gray-900 bg-blue-50 border-r border-gray-300">
-                  X Value {xUnitLabel && <span className="text-blue-600">{xUnitLabel}</span>}
+                  X Value {xHeaderLabel && <span className="text-blue-600">{xHeaderLabel}</span>}
                 </th>
                 <th className="text-right px-3 py-2 text-sm font-semibold text-gray-900 bg-blue-50 border-r border-gray-300">
-                  Y Value {yUnitLabel && <span className="text-blue-600">{yUnitLabel}</span>}
+                  Y Value {yHeaderLabel && <span className="text-blue-600">{yHeaderLabel}</span>}
                 </th>
                 <th className="text-center px-3 py-2 text-sm font-semibold text-gray-900 bg-blue-50">Actions</th>
               </tr>
