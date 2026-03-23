@@ -1618,6 +1618,8 @@ const GraphCapture = () => {
       ...prevConfig,
       curveName: curveTitle || prevConfig.curveName,
       graphTitle: graphTitle || prevConfig.graphTitle,
+      xLabel: (searchParams.get('x_label') || searchParams.get('x_title') || searchParams.get('xlabel') || '').trim() || prevConfig.xLabel,
+      yLabel: (searchParams.get('y_label') || searchParams.get('y_title') || searchParams.get('ylabel') || '').trim() || prevConfig.yLabel,
       partNumber: partno || prevConfig.partNumber,
       temperature: tctjValue && tctjValue !== '0' ? tctjValue : prevConfig.temperature,
     }));
@@ -1996,14 +1998,18 @@ const GraphCapture = () => {
     console.log('DataPoints count:', dataPoints.length);
     console.log('DataPoints:', dataPoints);
 
-    if (!graphConfig.graphTitle || !graphConfig.curveName) {
-      if (!graphConfig.graphTitle && !graphConfig.curveName) {
-        alert('Please enter both a graph title and a curve name');
-      } else if (!graphConfig.graphTitle) {
-        alert('Please enter a graph title');
-      } else {
-        alert('Please enter a curve name');
-      }
+    const graphTitle = String(graphConfig.graphTitle || '').trim();
+    const curveName = String(graphConfig.curveName || '').trim();
+    const xTitle = String(graphConfig.xLabel || '').trim();
+    const yTitle = String(graphConfig.yLabel || '').trim();
+
+    if (!graphTitle || !curveName || !xTitle || !yTitle) {
+      const missingFields = [];
+      if (!graphTitle) missingFields.push('Graph Title');
+      if (!curveName) missingFields.push('Curve or Line Name');
+      if (!xTitle) missingFields.push('X Title');
+      if (!yTitle) missingFields.push('Y Title');
+      alert(`Please enter required fields: ${missingFields.join(', ')}`);
       return null;
     }
     if (dataPoints.length === 0) {
@@ -2058,8 +2064,8 @@ const GraphCapture = () => {
         temperature: resolveTemperatureForSave(graphConfig.temperature, shouldShowTemperatureInput),
         manufacturer: urlParams.manufacturer || null,
         graph_title: graphConfig.graphTitle || urlParams.graph_title || null,
-        x_label: urlParams.x_label || null,
-        y_label: urlParams.y_label || null,
+        x_label: graphConfig.xLabel || urlParams.x_label || null,
+        y_label: graphConfig.yLabel || urlParams.y_label || null,
         other_symbols: urlParams.other_symbols || null,
         discoveree_cat_id: urlParams.discoveree_cat_id ? parseInt(urlParams.discoveree_cat_id) : null,
         graph_image: uploadedImage || null,
@@ -2477,8 +2483,8 @@ const GraphCapture = () => {
           manf: urlParams.manufacturer || '',
           graph_title: graphConfig.graphTitle || urlParams.graph_title || '',
           curve_title: urlParams.curve_title || graphConfig.curveName || '',
-          x_title: urlParams.x_label || '',
-          y_title: urlParams.y_label || '',
+          x_title: graphConfig.xLabel || urlParams.x_label || '',
+          y_title: graphConfig.yLabel || urlParams.y_label || '',
           graph_img: graphImageUrl || '',
           mark_review: '1',
           testuser_id: urlParams.testuser_id || '',
@@ -2813,6 +2819,8 @@ const GraphCapture = () => {
         ...graphConfig,
         partNumber: curve.part_number ?? '',
         curveName: curve.curve_name ?? '',
+        xLabel: curve.x_label ?? '',
+        yLabel: curve.y_label ?? '',
         xScale: curve.x_scale ?? 'Linear',
         yScale: curve.y_scale ?? 'Linear',
         xUnitPrefix: curve.x_unit ?? '',
@@ -2926,6 +2934,8 @@ const GraphCapture = () => {
                 isCurveNameReadOnly={false} 
                 initialCurveName={urlParams.curve_title} 
                 initialGraphTitle={urlParams.graph_title}
+                initialXTitle={urlParams.x_label}
+                initialYTitle={urlParams.y_label}
                 isAxisMappingConfirmed={isAxisMappingConfirmed}
                 isEditingCurve={Boolean(editingCurveId)}
                 onConfirmAxisMapping={() => {
@@ -3401,8 +3411,8 @@ const GraphCapture = () => {
                   <div><span style={{ fontWeight: 600 }}>Y Max:</span> {formatDisplayValue(bounds.yMax)}</div>
                   <div><span style={{ fontWeight: 600 }}>X Scale:</span> {cfg.xScale || '—'}</div>
                   <div><span style={{ fontWeight: 600 }}>Y Scale:</span> {cfg.yScale || '—'}</div>
-                  {urlParams.x_label && <div><span style={{ fontWeight: 600 }}>X Title:</span> {urlParams.x_label}</div>}
-                  {urlParams.y_label && <div><span style={{ fontWeight: 600 }}>Y Title:</span> {urlParams.y_label}</div>}
+                  {cfg.xLabel && <div><span style={{ fontWeight: 600 }}>X Title:</span> {cfg.xLabel}</div>}
+                  {cfg.yLabel && <div><span style={{ fontWeight: 600 }}>Y Title:</span> {cfg.yLabel}</div>}
                 </div>
               );
             })()}
@@ -3425,7 +3435,11 @@ const GraphCapture = () => {
             <div style={{ marginTop: 12 }}>
               <SavedGraphPreview
                 points={selectedCurvePoints}
-                config={normalizeCurveConfig(selectedCurve)}
+                config={{
+                  ...normalizeCurveConfig(selectedCurve),
+                  xLabel: normalizeCurveConfig(selectedCurve).xLabel || urlParams.x_label,
+                  yLabel: normalizeCurveConfig(selectedCurve).yLabel || urlParams.y_label,
+                }}
                 width={600}
                 height={240}
                 animate
@@ -3557,8 +3571,8 @@ const GraphCapture = () => {
                   <div><span style={{ fontWeight: 600 }}>Y Max:</span> {formatDisplayValue(bounds.yMax)}</div>
                   <div><span style={{ fontWeight: 600 }}>X Scale:</span> {cfg.xScale || '—'}</div>
                   <div><span style={{ fontWeight: 600 }}>Y Scale:</span> {cfg.yScale || '—'}</div>
-                  {urlParams.x_label && <div><span style={{ fontWeight: 600 }}>X Title:</span> {urlParams.x_label}</div>}
-                  {urlParams.y_label && <div><span style={{ fontWeight: 600 }}>Y Title:</span> {urlParams.y_label}</div>}
+                  {cfg.xLabel && <div><span style={{ fontWeight: 600 }}>X Title:</span> {cfg.xLabel}</div>}
+                  {cfg.yLabel && <div><span style={{ fontWeight: 600 }}>Y Title:</span> {cfg.yLabel}</div>}
                 </div>
               );
             })()}
@@ -3566,7 +3580,11 @@ const GraphCapture = () => {
               {selectedGroup.curves.length === 1 ? (
                 <SavedGraphPreview
                   points={selectedGroup.curves[0]?.points ?? selectedGroup.curves[0]?.data_points ?? []}
-                  config={normalizeCurveConfig(selectedGroup.curves[0])}
+                  config={{
+                    ...normalizeCurveConfig(selectedGroup.curves[0]),
+                    xLabel: normalizeCurveConfig(selectedGroup.curves[0]).xLabel || urlParams.x_label,
+                    yLabel: normalizeCurveConfig(selectedGroup.curves[0]).yLabel || urlParams.y_label,
+                  }}
                   width={700}
                   height={280}
                   animate
@@ -3574,7 +3592,11 @@ const GraphCapture = () => {
               ) : (
                 <SavedGraphCombinedPreview
                   curves={selectedGroup.curves}
-                  config={normalizeCurveConfig(selectedGroup.curves[0])}
+                  config={{
+                    ...normalizeCurveConfig(selectedGroup.curves[0]),
+                    xLabel: normalizeCurveConfig(selectedGroup.curves[0]).xLabel || urlParams.x_label,
+                    yLabel: normalizeCurveConfig(selectedGroup.curves[0]).yLabel || urlParams.y_label,
+                  }}
                   width={700}
                   height={280}
                 />

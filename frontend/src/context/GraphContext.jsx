@@ -25,6 +25,8 @@ export const GraphProvider = ({ children }) => {
     partNumber: '',
     curveName: '',
     graphTitle: '',
+    xLabel: '',
+    yLabel: '',
     xScale: 'Linear',
     yScale: 'Linear',
     xUnit: '',

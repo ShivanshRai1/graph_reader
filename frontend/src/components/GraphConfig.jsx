@@ -54,7 +54,7 @@ const convertTemperatureToCelsius = (rawValue, unit) => {
   return formatTemperatureNumber(numericValue);
 };
 
-const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNameReadOnly = false, initialCurveName = '', initialGraphTitle = '', isAxisMappingConfirmed = false, isEditingCurve = false, onConfirmAxisMapping = () => {}, onRetakeAxis = () => {}, children = null }) => {
+const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNameReadOnly = false, initialCurveName = '', initialGraphTitle = '', initialXTitle = '', initialYTitle = '', isAxisMappingConfirmed = false, isEditingCurve = false, onConfirmAxisMapping = () => {}, onRetakeAxis = () => {}, children = null }) => {
   const { graphConfig, setGraphConfig } = useGraph();
   const [logError, setLogError] = useState({ x: '', y: '' });
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -67,14 +67,16 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
   
   // Apply initial values from props when component mounts
   useEffect(() => {
-    if (initialCurveName || initialGraphTitle) {
+    if (initialCurveName || initialGraphTitle || initialXTitle || initialYTitle) {
       setGraphConfig((prevConfig) => ({
         ...prevConfig,
         curveName: initialCurveName || prevConfig.curveName,
         graphTitle: initialGraphTitle || prevConfig.graphTitle,
+        xLabel: initialXTitle || prevConfig.xLabel,
+        yLabel: initialYTitle || prevConfig.yLabel,
       }));
     }
-  }, [initialCurveName, initialGraphTitle, setGraphConfig]);
+  }, [initialCurveName, initialGraphTitle, initialXTitle, initialYTitle, setGraphConfig]);
   
 
   // Validate min/max values
@@ -440,6 +442,32 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             disabled={isConfigLocked || isCurveNameReadOnly}
           />
         </label>
+        <label className="block mb-3 font-medium text-gray-800">
+          <span className="block mb-1 text-sm text-gray-800">X Title:</span>
+          <input
+            type="text"
+            name="xLabel"
+            value={graphConfig.xLabel || ''}
+            onChange={handleChange}
+            placeholder="Enter X title"
+            className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed"
+            readOnly={isConfigLocked}
+            disabled={isConfigLocked}
+          />
+        </label>
+        <label className="block mb-3 font-medium text-gray-800">
+          <span className="block mb-1 text-sm text-gray-800">Y Title:</span>
+          <input
+            type="text"
+            name="yLabel"
+            value={graphConfig.yLabel || ''}
+            onChange={handleChange}
+            placeholder="Enter Y title"
+            className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed"
+            readOnly={isConfigLocked}
+            disabled={isConfigLocked}
+          />
+        </label>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6" style={{ opacity: (isAxisMappingConfirmed || isEditingCurve) ? 0.5 : 1, pointerEvents: (isAxisMappingConfirmed || isEditingCurve) ? 'none' : 'auto' }}>
@@ -624,6 +652,10 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             {/* Validation messaging */}
             {(() => {
               const missing = [];
+              if (!String(graphConfig.graphTitle || '').trim()) missing.push('Graph Title');
+              if (!String(graphConfig.curveName || '').trim()) missing.push('Curve or Line Name');
+              if (!String(graphConfig.xLabel || '').trim()) missing.push('X Title');
+              if (!String(graphConfig.yLabel || '').trim()) missing.push('Y Title');
               if (!graphConfig.xMin && graphConfig.xMin !== 0) missing.push('X Min');
               if (!graphConfig.xMax && graphConfig.xMax !== 0) missing.push('X Max');
               if (!graphConfig.yMin && graphConfig.yMin !== 0) missing.push('Y Min');
@@ -695,6 +727,10 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
               Confirm the values below. If you continue, axis mapping is locked and point capture begins.
             </div>
             <div className="text-sm" style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: 12 }}>
+              <div className="mb-2"><strong>Graph Title:</strong> {graphConfig.graphTitle || '-'}</div>
+              <div className="mb-2"><strong>Curve or Line Name:</strong> {graphConfig.curveName || '-'}</div>
+              <div className="mb-2"><strong>X Title:</strong> {graphConfig.xLabel || '-'}</div>
+              <div className="mb-3"><strong>Y Title:</strong> {graphConfig.yLabel || '-'}</div>
               <div className="mb-2"><strong>X Min:</strong> {formatAxisDisplay(graphConfig.xMin, graphConfig.xScale)}</div>
               <div className="mb-2"><strong>X Max:</strong> {formatAxisDisplay(graphConfig.xMax, graphConfig.xScale)}</div>
               <div className="mb-2"><strong>X Scale:</strong> {graphConfig.xScale || '-'}</div>
