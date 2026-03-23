@@ -468,6 +468,12 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             </select>
           </label>
           
+          {graphConfig.yScale === 'Logarithmic' && (
+            <div className="block mb-3 p-2 bg-blue-50 border border-blue-300 rounded text-xs text-blue-700">
+              Enter either exponent or number value
+            </div>
+          )}
+          
           {graphConfig.yScale === 'Logarithmic' ? (
             <>
               {renderLogField('yMin', 'Min', '-2', '0.01', logError.y)}
@@ -526,6 +532,12 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
               <option value="1e12">Tera (T) = 1e12</option>
             </select>
           </label>
+          
+          {graphConfig.xScale === 'Logarithmic' && (
+            <div className="block mb-3 p-2 bg-blue-50 border border-blue-300 rounded text-xs text-blue-700">
+              Enter either exponent or number value
+            </div>
+          )}
           
           {graphConfig.xScale === 'Logarithmic' ? (
             <>
@@ -588,9 +600,9 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
                 onRetakeAxis();
               }}
               className="px-3 py-1 rounded bg-orange-600 text-white text-xs font-medium hover:bg-orange-700"
-              title="Unlock axis mapping (will clear captured points)"
+              title="Unlock configuration (will clear captured points)"
             >
-              Unlock Axis Mapping
+              Unlock Configuration
             </button>
           )}
         </div>
@@ -693,7 +705,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
               <div><strong>Y Unit:</strong> {getUnitLabel(graphConfig.yUnitPrefix)}</div>
             </div>
             <div className="text-xs mt-3" style={{ color: '#6b7280' }}>
-              Need to change values? Click “Unlock Axis Mapping” to edit the configuration.
+              Need to change values? Click "Unlock Configuration" to edit the configuration.
             </div>
             <div className="mt-5 flex gap-3 justify-end">
               <button
