@@ -1820,7 +1820,13 @@ const GraphCapture = () => {
       console.log('Local save successful, calling sendToCompanyDatabase...');
       const companyResult = await sendToCompanyDatabase(graphImageUrl, result.id, allowRedirect);
       const companyGraphId = companyResult?.graphId ?? null;
-      console.log('sendToCompanyDatabase returned graphId:', companyGraphId);
+      const companyDetailId = companyResult?.detailId ?? null;
+      const companyIdentifier = companyResult?.identifier ?? '';
+      console.log('sendToCompanyDatabase returned:', {
+        graphId: companyGraphId,
+        detailId: companyDetailId,
+        identifier: companyIdentifier,
+      });
 
       // Re-fetch from company API to get the real detail ID for the newly created curve
       let realDetailId = '';
@@ -1836,16 +1842,42 @@ const GraphCapture = () => {
               : Array.isArray(refetchResult?.graph?.details)
                 ? refetchResult.graph.details
                 : [];
+            
+            console.log('[RE-FETCH DETAILS] Retrieved details from Company API:', {
+              totalDetailsReturned: refetchDetails.length,
+              details: refetchDetails.map((d, idx) => ({ index: idx, id: d.id, curveTitle: d.curve_title })),
+            });
+            
             // Find matching detail by xy data (most reliable match)
             const savedPoints = payload?.data_points || [];
             const savedXyStr = savedPoints.map((p) => `{x:${p.x_value},y:${p.y_value}}`).join(',');
-            const matchedDetail = refetchDetails.find((d) => {
+            console.log('[RE-FETCH DETAILS] Searching for XY match with:', {
+              pointCount: savedPoints.length,
+              xyStringLength: savedXyStr.length,
+              xyString: savedXyStr.substring(0, 100) + (savedXyStr.length > 100 ? '...' : ''),
+            });
+            
+            let matchedDetail = refetchDetails.find((d) => {
               if (savedXyStr && d.xy && d.xy.replace(/\s/g, '') === savedXyStr.replace(/\s/g, '')) return true;
               return false;
-            }) || refetchDetails[refetchDetails.length - 1]; // fallback to last (newest)
+            });
+            
+            if (!matchedDetail && refetchDetails.length > 0) {
+              // Fallback: Use the last (newest) detail, but log a warning
+              console.warn('[RE-FETCH DETAILS] XY matching failed, using fallback to last detail', {
+                reasonCouldNotMatch: 'No XY data matched, treating last detail as newest',
+                lastDetail: { id: refetchDetails[refetchDetails.length - 1]?.id, curveTitle: refetchDetails[refetchDetails.length - 1]?.curve_title },
+              });
+              matchedDetail = refetchDetails[refetchDetails.length - 1];
+            }
+            
             if (matchedDetail?.id) {
               realDetailId = String(matchedDetail.id);
-              console.log('Re-fetched real company detailId:', realDetailId);
+              console.log('[RE-FETCH DETAILS] Matched detail_id for this curve:', {
+                matchedDetailId: realDetailId,
+                matchedCurveTitle: matchedDetail.curve_title,
+                assumedMatchMethod: savedXyStr ? 'XY data match' : 'Fallback to last',
+              });
             }
           }
         } catch (refetchErr) {
@@ -1856,7 +1888,7 @@ const GraphCapture = () => {
       const savedCurve = {
         id: realDetailId ? `${companyGraphId}_${realDetailId}` : result.id,
         graphId: String(companyGraphId || ''),
-        identifier: String(companyGraphId || ''),
+        identifier: String(companyIdentifier || ''),
         discoveree_cat_id: String(urlParams.discoveree_cat_id || companyGraphId || ''),
         detailId: realDetailId,
         testuser_id: urlParams.testuser_id || '',
@@ -1875,6 +1907,26 @@ const GraphCapture = () => {
       console.log('Saving curve with config:', savedCurve.config);
       console.log('xUnitPrefix:', savedCurve.config.xUnitPrefix);
       console.log('yUnitPrefix:', savedCurve.config.yUnitPrefix);
+      
+      // CRITICAL: Validate that this curve has a unique detail_id
+      const duplicateDetailId = savedCurves.some(curve => curve.detailId && curve.detailId === savedCurve.detailId);
+      if (duplicateDetailId && savedCurve.detailId) {
+        console.error('[CRITICAL] Duplicate detail_id detected!', {
+          currentCurveDetailId: savedCurve.detailId,
+          existingCurveDetailIds: savedCurves.map(c => c.detailId),
+          issue: 'Multiple curves have the same detail_id - Company API may have merged them',
+        });
+        alert('WARNING: Multiple curves have the same detail_id. Data may have been merged in Company API.');
+      }
+      
+      if (savedCurve.detailId) {
+        console.log('[DETAIL_ID_ASSIGNMENT] New curve assigned detail_id:', {
+          detailId: savedCurve.detailId,
+          graphId: savedCurve.graphId,
+          identifier: savedCurve.identifier,
+          curveIndex: savedCurves.length,
+        });
+      }
       
       setSavedCurves((prev) => [
         ...prev,
@@ -1917,7 +1969,34 @@ const GraphCapture = () => {
   };
 
   const handleCaptureAnotherCurve = () => {
+    console.log('[CAPTURE ANOTHER] Starting capture of next curve', {
+      sessionGraphId: activeSessionGraphIdRef.current,
+      sessionIdentifier: activeSessionIdentifierRef.current,
+      currentUrl: window.location.href,
+    });
+    // CRITICAL: Close the modal and prepare for next curve capture
+    // But preserve the session state (graph_id and identifier) for the append-to-graph flow
     setShowReturnDecisionModal(false);
+    
+    // Clear data points to show a clean canvas for the next curve
+    clearDataPoints();
+    
+    // Clear the selected curve details modal if any is open
+    setSelectedCurveId('');
+    
+    // Verify session state is still intact after closing modal
+    setTimeout(() => {
+      const checkUrl = new URL(window.location.href);
+      const urlGraphId = checkUrl.searchParams.get('graph_id');
+      const urlIdentifier = checkUrl.searchParams.get('identifier');
+      console.log('[CAPTURE ANOTHER] Session state after UI reset:', {
+        refGraphId: activeSessionGraphIdRef.current,
+        refIdentifier: activeSessionIdentifierRef.current,
+        urlGraphId,
+        urlIdentifier,
+        sessionPreserved: Boolean(activeSessionGraphIdRef.current && activeSessionIdentifierRef.current),
+      });
+    }, 0);
   };
 
   const handleReturnNow = () => {
@@ -2039,8 +2118,9 @@ const GraphCapture = () => {
         (savedCurves[0]?.identifier ? String(savedCurves[0].identifier) : '');
       const isAppendingToExistingGraph = Boolean(existingGraphId);
       // Use the stored session identifier (from original create-new save) to avoid API creating a new graph.
-      // Falls back to API-provided identifier, then to graph_id as last resort.
-      const appendIdentifier = String(activeSessionIdentifierRef.current || existingGraphIdentifier || existingGraphId || '');
+      // Falls back to URL identifier param, then to stored identifier from response.
+      // CRITICAL: Never use graph_id as identifier fallback - this causes Company API to create new graphs!
+      const appendIdentifier = String(activeSessionIdentifierRef.current || existingGraphIdentifier || '');
 
       console.log('=== GRAPH SESSION STATE BEFORE SAVE ===', {
         sessionActive: hasActiveAppendSessionRef.current,
@@ -2048,11 +2128,15 @@ const GraphCapture = () => {
         incomingUrlGraphId,
         storedIdentifier: activeSessionIdentifierRef.current || '(none)',
         isAppendingToExistingGraph,
+        currentUrlFull: window.location.href,
+        allGraphIdParamsInUrl: searchParams.getAll('graph_id'),
+        allIdentifierParamsInUrl: searchParams.getAll('identifier'),
       });
 
       // Build the JSON payload for company's API
       const uniqueIdentifier = `usergraph_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
-      const resolvedOutgoingIdentifier = isAppendingToExistingGraph ? appendIdentifier : uniqueIdentifier;
+      // CRITICAL: If appending and identifier is empty, use unique ID as fallback to prevent new graph creation
+      const resolvedOutgoingIdentifier = isAppendingToExistingGraph ? (appendIdentifier || uniqueIdentifier) : uniqueIdentifier;
       const companyApiPayload = {
         graph: {
           // In append mode, graph_id must come from query param only to avoid API creating a new graph.
@@ -2131,6 +2215,15 @@ const GraphCapture = () => {
       const effectiveGraphId = returnedGraphId || requestedGraphId;
       const companyGraphId = effectiveGraphId || null;
       const companyDetailId = result?.detail_id || result?.details?.[0]?.id || '';
+      
+      // CRITICAL: Log the detail_id returned by Company API immediately after save
+      console.log('[DETAIL_ID_FROM_API] Company API returned:', {
+        graphId: companyGraphId,
+        detailIdFromResponse: companyDetailId,
+        detailIdFromFirstDetailArray: result?.details?.[0]?.id,
+        allDetails: result?.details,
+        isDifferentFromRequested: companyDetailId !== 'expected (this is first save)',
+      });
 
       if (requestedGraphId && returnedGraphId && returnedGraphId !== requestedGraphId) {
         console.warn('Graph ID changed by API during append; switching session to returned graph_id.', {
@@ -2154,11 +2247,62 @@ const GraphCapture = () => {
         sentIdentifier: String(companyApiPayload?.graph?.identifier || ''),
         returnedGraphId,
         effectiveGraphId,
+        returnedDetailId: companyDetailId,
         matchesRequested: !requestedGraphId || requestedGraphId === returnedGraphId,
         note: 'If matchesRequested is false during append-existing-graph, API is returning a different graph_id than requested.',
       });
+      
+      // CRITICAL: Verify identifier and detail_id consistency
+      console.log('=== IDENTIFIER + DETAIL_ID FLOW ===', {
+        sentIdentifier: String(companyApiPayload?.graph?.identifier || ''),
+        returnedGraphId,
+        returnedDetailId: companyDetailId,
+        willBeStoredInRef: true,
+        willBeStoredInSavedCurves: true,
+        nextSaveShouldUseStoredIdentifier: 'YES - prevents Company API from creating new graphs',
+      });
+      // CRITICAL: Verify all curves in session have the same graph_id
+      const curvesInThisSession = savedCurves.filter(curve => (curve.graphId || getGraphIdForCurve(curve)) === String(companyGraphId));
+      const otherGraphIds = savedCurves.map(curve => curve.graphId || getGraphIdForCurve(curve)).filter(id => id !== String(companyGraphId));
+      
+      if (otherGraphIds.length > 0) {
+        console.error('[CRITICAL] GRAPH_ID MISMATCH DETECTED!', {
+          currentCurveGraphId: String(companyGraphId),
+          otherGraphIdsInSavedCurves: [...new Set(otherGraphIds)],
+          issue: 'Multiple different graph_ids in same session - curves may have been split across graphs',
+          affectedCurves: savedCurves.map((c, idx) => ({ 
+            index: idx, 
+            graphId: c.graphId || getGraphIdForCurve(c), 
+            identifier: c.identifier,
+            detailId: c.detailId,
+          })),
+        });
+        alert('ERROR: Curves in this session have different graph_ids! Data may be inconsistent.\n\nPlease refresh and try again.');
+      } else {
+        console.log('[GRAPH_ID_VALIDATION] All curves in session share same graph_id ✓', {
+          graphId: companyGraphId,
+          curvesWithThisId: curvesInThisSession.length,
+        });
+      }
+      
       if (companyGraphId) {
+        // CRITICAL: syncGraphIdContext must store both graph_id AND identifier to preserve session for next curve capture
         syncGraphIdContext(companyGraphId, resolvedOutgoingIdentifier);
+        // Verify identifier was stored in ref (double-check for safety)
+        if (resolvedOutgoingIdentifier && !activeSessionIdentifierRef.current) {
+          activeSessionIdentifierRef.current = resolvedOutgoingIdentifier;
+          console.log('[CRITICAL] Manually ensured identifier ref was set:', resolvedOutgoingIdentifier);
+        }
+        
+        // Verify URL was updated correctly
+        const checkUrl = new URL(window.location.href);
+        const urlGraphId = checkUrl.searchParams.get('graph_id');
+        console.log('[URL_VALIDATION] After syncGraphIdContext:', {
+          graphIdInUrl: urlGraphId,
+          expectedGraphId: String(companyGraphId),
+          urlMatches: urlGraphId === String(companyGraphId),
+          fullUrl: window.location.href,
+        });
       }
 
       // Update local backend with the real discoveree_cat_id
@@ -2196,7 +2340,11 @@ const GraphCapture = () => {
         // Do not show a second success message
         console.log('No return URL - data saved.');
       }
-      return { graphId: companyGraphId, detailId: companyDetailId ? String(companyDetailId) : '' };
+      return { 
+        graphId: companyGraphId, 
+        detailId: companyDetailId ? String(companyDetailId) : '',
+        identifier: resolvedOutgoingIdentifier,
+      };
     } catch (error) {
       console.error('Full error object:', error);
       console.error('Error name:', error.name);
