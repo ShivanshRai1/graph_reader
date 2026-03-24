@@ -344,7 +344,7 @@ const formatAxisUnitCompact = (prefixValue, axisTitle) => {
 const formatAxisHeaderWithUnit = (axisFallback, axisTitle, axisUnit) => {
   const titleText = String(axisTitle || '').trim() || axisFallback;
   const unitText = String(axisUnit || '').trim();
-  return unitText ? `${titleText}, ${unitText}` : titleText;
+  return unitText ? `${titleText} (${unitText})` : titleText;
 };
 
 const GraphCapture = () => {
