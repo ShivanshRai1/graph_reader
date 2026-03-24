@@ -393,6 +393,8 @@ const GraphCapture = () => {
     return_url: '',
     graph_id: '',
   });
+  const [isXTitleUrlLocked, setIsXTitleUrlLocked] = useState(false);
+  const [isYTitleUrlLocked, setIsYTitleUrlLocked] = useState(false);
   const [symbolValues, setSymbolValues] = useState({});
   const [symbolNames, setSymbolNames] = useState([]);
   const [returnParams, setReturnParams] = useState({});
@@ -1109,6 +1111,36 @@ const GraphCapture = () => {
     window.history.replaceState({}, '', currentUrl.toString());
   };
 
+  const syncAxisTitleContext = (nextXTitle, nextYTitle) => {
+    const normalizedXTitle = String(nextXTitle || '').trim();
+    const normalizedYTitle = String(nextYTitle || '').trim();
+    if (!normalizedXTitle && !normalizedYTitle) {
+      return;
+    }
+
+    setUrlParams((prev) => ({
+      ...prev,
+      x_label: normalizedXTitle || prev.x_label,
+      y_label: normalizedYTitle || prev.y_label,
+    }));
+
+    if (normalizedXTitle) {
+      setIsXTitleUrlLocked(true);
+    }
+    if (normalizedYTitle) {
+      setIsYTitleUrlLocked(true);
+    }
+
+    const currentUrl = new URL(window.location.href);
+    if (normalizedXTitle) {
+      currentUrl.searchParams.set('x_title', normalizedXTitle);
+    }
+    if (normalizedYTitle) {
+      currentUrl.searchParams.set('y_title', normalizedYTitle);
+    }
+    window.history.replaceState({}, '', currentUrl.toString());
+  };
+
   useEffect(() => {
     const nextImage = uploadedImage || '';
     const sessionImageKey = activeSessionImageKeyRef.current || previousUploadedImageRef.current || '';
@@ -1663,13 +1695,16 @@ const GraphCapture = () => {
       getLastNonEmptyQueryValue(searchParams, 'return_graph_id') ||
       '';
 
+    const xTitleFromUrl = (searchParams.get('x_label') || searchParams.get('x_title') || searchParams.get('xlabel') || '').trim();
+    const yTitleFromUrl = (searchParams.get('y_label') || searchParams.get('y_title') || searchParams.get('ylabel') || '').trim();
+
     setUrlParams({
       partno,
       manufacturer,
       graph_title: graphTitle,
       curve_title: curveTitle,
-      x_label: searchParams.get('x_label') || searchParams.get('x_title') || searchParams.get('xlabel') || '',
-      y_label: searchParams.get('y_label') || searchParams.get('y_title') || searchParams.get('ylabel') || '',
+      x_label: xTitleFromUrl,
+      y_label: yTitleFromUrl,
       other_symbols: otherSymbols,
       discoveree_cat_id: searchParams.get('discoveree_cat_id') || '',
       identifier: normalizeSessionIdentifier(
@@ -1681,13 +1716,16 @@ const GraphCapture = () => {
       graph_id: graphIdFromUrl,
     });
 
+    setIsXTitleUrlLocked(Boolean(xTitleFromUrl));
+    setIsYTitleUrlLocked(Boolean(yTitleFromUrl));
+
     // Auto-populate graphConfig with URL parameters
     setGraphConfig((prevConfig) => ({
       ...prevConfig,
       curveName: curveTitle || prevConfig.curveName,
       graphTitle: graphTitle || prevConfig.graphTitle,
-      xLabel: (searchParams.get('x_label') || searchParams.get('x_title') || searchParams.get('xlabel') || '').trim() || prevConfig.xLabel,
-      yLabel: (searchParams.get('y_label') || searchParams.get('y_title') || searchParams.get('ylabel') || '').trim() || prevConfig.yLabel,
+      xLabel: xTitleFromUrl || prevConfig.xLabel,
+      yLabel: yTitleFromUrl || prevConfig.yLabel,
       partNumber: partno || prevConfig.partNumber,
       temperature: tctjValue && tctjValue !== '0' ? tctjValue : prevConfig.temperature,
     }));
@@ -2728,6 +2766,7 @@ const GraphCapture = () => {
       if (companyGraphId) {
         // CRITICAL: syncGraphIdContext must store both graph_id AND identifier to preserve session for next curve capture
         syncGraphIdContext(companyGraphId, resolvedOutgoingIdentifier);
+        syncAxisTitleContext(graphConfig.xLabel, graphConfig.yLabel);
         // Verify identifier was stored in ref (double-check for safety)
         if (resolvedOutgoingIdentifier && !activeSessionIdentifierRef.current) {
           activeSessionIdentifierRef.current = resolvedOutgoingIdentifier;
@@ -3014,6 +3053,8 @@ const GraphCapture = () => {
                 showTctj={shouldShowTemperatureInput} 
                 isGraphTitleReadOnly={Boolean(urlParams.graph_id || urlParams.graph_title)} 
                 isCurveNameReadOnly={false} 
+                isXTitleReadOnly={isXTitleUrlLocked}
+                isYTitleReadOnly={isYTitleUrlLocked}
                 initialCurveName={urlParams.curve_title} 
                 initialGraphTitle={urlParams.graph_title}
                 initialXTitle={urlParams.x_label}

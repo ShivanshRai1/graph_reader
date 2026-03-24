@@ -54,7 +54,7 @@ const convertTemperatureToCelsius = (rawValue, unit) => {
   return formatTemperatureNumber(numericValue);
 };
 
-const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNameReadOnly = false, initialCurveName = '', initialGraphTitle = '', initialXTitle = '', initialYTitle = '', isAxisMappingConfirmed = false, isEditingCurve = false, onConfirmAxisMapping = () => {}, onRetakeAxis = () => {}, children = null }) => {
+const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNameReadOnly = false, isXTitleReadOnly = false, isYTitleReadOnly = false, initialCurveName = '', initialGraphTitle = '', initialXTitle = '', initialYTitle = '', isAxisMappingConfirmed = false, isEditingCurve = false, onConfirmAxisMapping = () => {}, onRetakeAxis = () => {}, children = null }) => {
   const { graphConfig, setGraphConfig } = useGraph();
   const [logError, setLogError] = useState({ x: '', y: '' });
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -451,8 +451,8 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             onChange={handleChange}
             placeholder="Enter X title"
             className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed"
-            readOnly={isConfigLocked}
-            disabled={isConfigLocked}
+            readOnly={isConfigLocked || isXTitleReadOnly}
+            disabled={isConfigLocked || isXTitleReadOnly}
           />
         </label>
         <label className="block mb-3 font-medium text-gray-800">
@@ -464,8 +464,8 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             onChange={handleChange}
             placeholder="Enter Y title"
             className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed"
-            readOnly={isConfigLocked}
-            disabled={isConfigLocked}
+            readOnly={isConfigLocked || isYTitleReadOnly}
+            disabled={isConfigLocked || isYTitleReadOnly}
           />
         </label>
       </div>
