@@ -15,6 +15,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   const [showMagnifier, setShowMagnifier] = useState(false);
   const [magnifierPos, setMagnifierPos] = useState({ x: 0, y: 0 });
   const [showFixPoints, setShowFixPoints] = useState(false);
+  const [showSmoothPreview, setShowSmoothPreview] = useState(false);
   const [dragDistance, setDragDistance] = useState(0);
   const imageRef = useRef(null);
   const coordinateUpdateTimeoutRef = useRef(null);
@@ -30,6 +31,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   const [zeroWarnActive, setZeroWarnActive] = useState(false);
   const [stuckWarnActive, setStuckWarnActive] = useState(false);
   const warningHoldTimeoutRef = useRef(null);
+  const lastCaptureClickRef = useRef({ x: null, y: null, ts: 0 });
   const [boxTransparent, setBoxTransparent] = useState(false);
   const lastUserBoxRef = useRef(null); // Store last manually set box dimensions
   const potentialResizeHandleRef = useRef(null); // Track which handle was clicked
@@ -41,6 +43,8 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   const WARN_CLEAR_DELAY = 180; // ms to hold warning before clearing
   const DRAG_THRESHOLD = 50; // Threshold to distinguish between click and drag
   const RESIZE_ACTIVATION_THRESHOLD = 3; // pixels to move before activating resize
+  const DOUBLE_CLICK_GUARD_MS = 140; // Only suppress very rapid repeat clicks
+  const DOUBLE_CLICK_GUARD_PX = 2; // Only suppress near-identical click locations
 
   const normalizeArea = (area) => {
     let { x, y, width, height } = area;
@@ -249,16 +253,27 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     const validPoints = dataPoints.filter(p => typeof p.canvasX === 'number' && typeof p.canvasY === 'number' && !isNaN(p.canvasX) && !isNaN(p.canvasY));
     if (validPoints.length < 2) return;
 
-    // Sort points by X coordinate (left to right) to avoid zig-zag
-    const sortedPoints = [...validPoints].sort((a, b) => a.canvasX - b.canvasX);
-
     ctx.save();
     ctx.strokeStyle = '#1976d2';
     ctx.lineWidth = 4;
     ctx.beginPath();
-    ctx.moveTo(sortedPoints[0].canvasX, sortedPoints[0].canvasY);
-    for (let i = 1; i < sortedPoints.length; i++) {
-      ctx.lineTo(sortedPoints[i].canvasX, sortedPoints[i].canvasY);
+    // Draw in capture order to preserve manual tracing intent in steep/vertical regions.
+    ctx.moveTo(validPoints[0].canvasX, validPoints[0].canvasY);
+    if (showSmoothPreview && validPoints.length >= 3) {
+      // Midpoint quadratic smoothing for preview only; source points remain unchanged.
+      for (let i = 1; i < validPoints.length - 1; i++) {
+        const current = validPoints[i];
+        const next = validPoints[i + 1];
+        const midX = (current.canvasX + next.canvasX) / 2;
+        const midY = (current.canvasY + next.canvasY) / 2;
+        ctx.quadraticCurveTo(current.canvasX, current.canvasY, midX, midY);
+      }
+      const last = validPoints[validPoints.length - 1];
+      ctx.lineTo(last.canvasX, last.canvasY);
+    } else {
+      for (let i = 1; i < validPoints.length; i++) {
+        ctx.lineTo(validPoints[i].canvasX, validPoints[i].canvasY);
+      }
     }
     ctx.stroke();
     ctx.restore();
@@ -482,7 +497,23 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
         alert('⚠️ Please confirm the axis mapping first before capturing data points.');
         return;
       }
+
+      const now = Date.now();
+      const last = lastCaptureClickRef.current;
+      const hasLastPoint = Number.isFinite(last.x) && Number.isFinite(last.y);
+      if (hasLastPoint) {
+        const dx = canvasX - last.x;
+        const dy = canvasY - last.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        const deltaMs = now - Number(last.ts || 0);
+        if (distance <= DOUBLE_CLICK_GUARD_PX && deltaMs <= DOUBLE_CLICK_GUARD_MS) {
+          console.warn('[CAPTURE_GUARD] Ignored near-identical rapid click:', { distance, deltaMs });
+          return;
+        }
+      }
+
       addDataPoint({ canvasX, canvasY });
+      lastCaptureClickRef.current = { x: canvasX, y: canvasY, ts: now };
       // Make box transparent after first point is captured (entering capture mode)
       setBoxTransparent(true);
     }
@@ -840,6 +871,16 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
           onClick={() => setShowFixPoints((prev) => !prev)}
         >
           {showFixPoints ? 'Hide points' : 'Connect points'}
+        </button>
+        <button
+          className={`px-4 py-2 rounded text-white font-medium ${showSmoothPreview ? 'bg-teal-700' : 'bg-teal-600'} ${showFixPoints ? '' : 'opacity-60 cursor-not-allowed'}`}
+          onClick={() => {
+            if (!showFixPoints) return;
+            setShowSmoothPreview((prev) => !prev);
+          }}
+          title="Optional preview-only smoothing for connected points"
+        >
+          {showSmoothPreview ? 'Smooth preview: On' : 'Smooth preview: Off'}
         </button>
         <button
           className="px-4 py-2 rounded bg-gray-700 text-white font-medium"
