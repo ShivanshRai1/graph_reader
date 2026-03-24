@@ -177,6 +177,21 @@ export const GraphProvider = ({ children }) => {
       // Mark this as an annotation if we know which curve we're working on
       isAnnotation: !!targetCurveId,
     };
+
+    // Check for duplicate point (same x, y coordinates within precision 6)
+    const isDuplicate = dataPoints.some((existing) => {
+      const existingXKey = Number(existing.x).toFixed(6);
+      const existingYKey = Number(existing.y).toFixed(6);
+      const newXKey = Number(dataPoint.x).toFixed(6);
+      const newYKey = Number(dataPoint.y).toFixed(6);
+      return existingXKey === newXKey && existingYKey === newYKey;
+    });
+
+    if (isDuplicate) {
+      console.warn('[DEDUP] Duplicate point detected, skipping:', { x: dataPoint.x.toFixed(6), y: dataPoint.y.toFixed(6) });
+      return;
+    }
+
     const newDataPoints = [...dataPoints, dataPoint];
     setDataPoints(newDataPoints);
     
