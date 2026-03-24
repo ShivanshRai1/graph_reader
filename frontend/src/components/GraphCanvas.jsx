@@ -15,9 +15,11 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   const [showMagnifier, setShowMagnifier] = useState(false);
   const [magnifierPos, setMagnifierPos] = useState({ x: 0, y: 0 });
   const [showFixPoints, setShowFixPoints] = useState(false);
+  const [showConnectHint, setShowConnectHint] = useState(false);
   const [dragDistance, setDragDistance] = useState(0);
   const imageRef = useRef(null);
   const coordinateUpdateTimeoutRef = useRef(null);
+  const connectHintTimeoutRef = useRef(null);
   const [resizeMode, setResizeMode] = useState(null);
   const [initialArea, setInitialArea] = useState(null);
   const [initialMouse, setInitialMouse] = useState({ x: 0, y: 0 });
@@ -140,6 +142,9 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   useEffect(() => () => {
     if (coordinateUpdateTimeoutRef.current) {
       clearTimeout(coordinateUpdateTimeoutRef.current);
+    }
+    if (connectHintTimeoutRef.current) {
+      clearTimeout(connectHintTimeoutRef.current);
     }
     if (warningHoldTimeoutRef.current) {
       clearTimeout(warningHoldTimeoutRef.current);
@@ -854,7 +859,23 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       <div className="flex items-center gap-4 mt-4 mb-6">
         <button
           className="px-4 py-2 rounded bg-blue-600 text-white font-medium"
-          onClick={() => setShowFixPoints((prev) => !prev)}
+          onClick={() => {
+            setShowFixPoints((prev) => {
+              const next = !prev;
+              if (next) {
+                setShowConnectHint(true);
+                if (connectHintTimeoutRef.current) {
+                  clearTimeout(connectHintTimeoutRef.current);
+                }
+                connectHintTimeoutRef.current = setTimeout(() => {
+                  setShowConnectHint(false);
+                }, 2800);
+              } else {
+                setShowConnectHint(false);
+              }
+              return next;
+            });
+          }}
         >
           {showFixPoints ? 'Hide points' : 'Connect points'}
         </button>
@@ -890,6 +911,11 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
         {showRedrawMsg && (
           <div className="text-red-600 font-bold mt-2">
             Please redraw the axis box
+          </div>
+        )}
+        {showConnectHint && (
+          <div className="text-xs sm:text-sm text-blue-800 bg-blue-100 border border-blue-300 rounded px-3 py-2">
+            Points are connected in capture time order (first click to last click).
           </div>
         )}
       </div>
