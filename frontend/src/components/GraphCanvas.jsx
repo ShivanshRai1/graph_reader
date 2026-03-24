@@ -852,7 +852,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
         />
       </div>
       <div className="flex items-center gap-4 mt-4 mb-6">
-        <div className="flex flex-col items-start gap-2">
+        <div className="relative">
           <button
             className="px-4 py-2 rounded bg-blue-600 text-white font-medium"
             onClick={() => setShowFixPoints((prev) => !prev)}
@@ -860,7 +860,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
             {showFixPoints ? 'Hide points' : 'Connect points'}
           </button>
           {showFixPoints && (
-            <div className="text-xs font-bold text-blue-800 bg-blue-100 border border-blue-300 rounded px-2 py-1">
+            <div className="absolute left-0 top-full mt-3 text-xs font-bold text-blue-800 bg-blue-100 border border-blue-300 rounded px-2 py-1 whitespace-nowrap z-10">
               Points are connected in capture time order (first click to last click).
             </div>
           )}
