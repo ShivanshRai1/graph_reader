@@ -1,19 +1,49 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-const formatUnitLabel = (value) => {
-  const unitLabels = {
-    '1e-12': 'pico (p)',
-    '1e-9': 'nano (n)',
-    '1e-6': 'micro (u)',
-    '1e-3': 'milli (m)',
-    '1': '1',
-    '1e3': 'kilo (k)',
-    '1e6': 'mega (M)',
-    '1e9': 'giga (G)',
-    '1e12': 'tera (T)',
-  };
+const UNIT_PREFIX_SYMBOL_MAP = {
+  '1e-12': 'p',
+  '1e-9': 'n',
+  '1e-6': 'μ',
+  '1e-3': 'm',
+  '1': '',
+  '1e3': 'k',
+  '1e6': 'M',
+  '1e9': 'G',
+  '1e12': 'T',
+};
 
-  return unitLabels[String(value || '')] || String(value || '-');
+const extractUnitFromAxisTitle = (title) => {
+  const text = String(title || '').trim();
+  if (!text) return '';
+  const squareMatch = text.match(/\[([^\]]+)\]/);
+  if (squareMatch && squareMatch[1]) return squareMatch[1].trim();
+  const roundMatch = text.match(/\(([^)]+)\)\s*$/);
+  return roundMatch && roundMatch[1] ? roundMatch[1].trim() : '';
+};
+
+const stripKnownUnitPrefix = (unitText) => {
+  const text = String(unitText || '').trim();
+  if (!text) return '';
+  const first = text.charAt(0);
+  if (['p', 'n', 'u', 'μ', 'm', 'k', 'K', 'M', 'G', 'T'].includes(first) && text.length > 1) {
+    return text.slice(1);
+  }
+  return text;
+};
+
+const formatUnitLabel = (value, axisTitle) => {
+  const normalizedValue = String(value ?? '').trim();
+  const prefixSymbol = UNIT_PREFIX_SYMBOL_MAP[normalizedValue];
+  const titleUnit = extractUnitFromAxisTitle(axisTitle);
+
+  if (prefixSymbol !== undefined) {
+    const baseUnit = stripKnownUnitPrefix(titleUnit);
+    if (!baseUnit) return prefixSymbol || '1';
+    return `${prefixSymbol}${baseUnit}`;
+  }
+
+  if (normalizedValue) return normalizedValue.replace(/^u(?=[A-Za-z])/, 'μ');
+  return titleUnit || '-';
 };
 
 const normalizeNumber = (value, fallback) => {
@@ -96,8 +126,14 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260 }
       graphTitle: baseConfig.graphTitle ?? firstConfig.graphTitle ?? firstCurve.graph_title ?? firstCurve.name ?? '-',
       xLabel: baseConfig.xLabel ?? baseConfig.xTitle ?? firstConfig.xLabel ?? firstConfig.xTitle ?? firstCurve.x_label ?? firstCurve.x_title ?? '-',
       yLabel: baseConfig.yLabel ?? baseConfig.yTitle ?? firstConfig.yLabel ?? firstConfig.yTitle ?? firstCurve.y_label ?? firstCurve.y_title ?? '-',
-      xUnit: formatUnitLabel(baseConfig.xUnit ?? firstConfig.xUnitPrefix ?? firstCurve.x_unit),
-      yUnit: formatUnitLabel(baseConfig.yUnit ?? firstConfig.yUnitPrefix ?? firstCurve.y_unit),
+      xUnit: formatUnitLabel(
+        baseConfig.xUnit ?? firstConfig.xUnitPrefix ?? firstCurve.x_unit,
+        baseConfig.xLabel ?? baseConfig.xTitle ?? firstConfig.xLabel ?? firstConfig.xTitle ?? firstCurve.x_label ?? firstCurve.x_title
+      ),
+      yUnit: formatUnitLabel(
+        baseConfig.yUnit ?? firstConfig.yUnitPrefix ?? firstCurve.y_unit,
+        baseConfig.yLabel ?? baseConfig.yTitle ?? firstConfig.yLabel ?? firstConfig.yTitle ?? firstCurve.y_label ?? firstCurve.y_title
+      ),
       curveNames: safeCurves
         .map((curve, curveIndex) => curve?.config?.curveName || curve?.curve_name || curve?.name || `Curve ${curveIndex + 1}`)
         .filter(Boolean),

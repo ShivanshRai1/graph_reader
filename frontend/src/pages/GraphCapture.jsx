@@ -256,10 +256,23 @@ const hasImplicitTemperatureContext = (...values) => {
 const resolveTemperatureForSave = (rawTemperature, shouldDefaultRoomTemperature) => {
   const parsedTemperature = parseTemperatureToCelsius(rawTemperature);
   if (parsedTemperature.celsiusText) {
+    console.log('[TEMP_DEBUG] Temperature normalized before save', {
+      rawInput: String(rawTemperature || ''),
+      detectedUnit: parsedTemperature.unit,
+      normalizedCelsius: parsedTemperature.celsiusText,
+      usedDefaultRoomTemperature: false,
+    });
     return parsedTemperature.celsiusText;
   }
 
-  return shouldDefaultRoomTemperature ? '25' : '';
+  const fallbackTemperature = shouldDefaultRoomTemperature ? '25' : '';
+  console.log('[TEMP_DEBUG] Temperature fallback applied before save', {
+    rawInput: String(rawTemperature || ''),
+    detectedUnit: parsedTemperature.unit,
+    normalizedCelsius: fallbackTemperature,
+    usedDefaultRoomTemperature: shouldDefaultRoomTemperature,
+  });
+  return fallbackTemperature;
 };
 
 const getLastNonEmptyQueryValue = (searchParams, key) => {
@@ -277,6 +290,61 @@ const normalizeSessionIdentifier = (rawValue) => {
   }
 
   return value;
+};
+
+const UNIT_PREFIX_SYMBOL_MAP = {
+  '1e-12': 'p',
+  '1e-9': 'n',
+  '1e-6': 'μ',
+  '1e-3': 'm',
+  '1': '',
+  '1e3': 'k',
+  '1e6': 'M',
+  '1e9': 'G',
+  '1e12': 'T',
+};
+
+const extractUnitFromAxisTitle = (title) => {
+  const text = String(title || '').trim();
+  if (!text) return '';
+  const squareMatch = text.match(/\[([^\]]+)\]/);
+  if (squareMatch && squareMatch[1]) return squareMatch[1].trim();
+  const roundMatch = text.match(/\(([^)]+)\)\s*$/);
+  return roundMatch && roundMatch[1] ? roundMatch[1].trim() : '';
+};
+
+const stripKnownUnitPrefix = (unitText) => {
+  const text = String(unitText || '').trim();
+  if (!text) return '';
+  const first = text.charAt(0);
+  if (['p', 'n', 'u', 'μ', 'm', 'k', 'K', 'M', 'G', 'T'].includes(first) && text.length > 1) {
+    return text.slice(1);
+  }
+  return text;
+};
+
+const formatAxisUnitCompact = (prefixValue, axisTitle) => {
+  const normalizedPrefix = String(prefixValue ?? '').trim();
+  const normalizedPrefixSymbol = UNIT_PREFIX_SYMBOL_MAP[normalizedPrefix];
+  const titleUnit = extractUnitFromAxisTitle(axisTitle);
+
+  if (normalizedPrefixSymbol !== undefined) {
+    const baseUnit = stripKnownUnitPrefix(titleUnit);
+    if (!baseUnit) return normalizedPrefixSymbol || '1';
+    return `${normalizedPrefixSymbol}${baseUnit}`;
+  }
+
+  if (normalizedPrefix) {
+    return normalizedPrefix.replace(/^u(?=[A-Za-z])/, 'μ');
+  }
+
+  return titleUnit || '';
+};
+
+const formatAxisHeaderWithUnit = (axisFallback, axisTitle, axisUnit) => {
+  const titleText = String(axisTitle || '').trim() || axisFallback;
+  const unitText = String(axisUnit || '').trim();
+  return unitText ? `${titleText}, ${unitText}` : titleText;
 };
 
 const GraphCapture = () => {
@@ -2050,6 +2118,13 @@ const GraphCapture = () => {
         console.warn(`[POINT_DEDUP] Removed ${removedDuplicatePoints} duplicate XY point(s) before saving.`);
       }
 
+      const resolvedTemperature = resolveTemperatureForSave(graphConfig.temperature, shouldShowTemperatureInput);
+      console.log('[TEMP_DEBUG] Local backend payload temperature', {
+        rawInput: String(graphConfig.temperature || ''),
+        resolvedTemperatureCelsius: resolvedTemperature,
+        shouldDefaultRoomTemperature: shouldShowTemperatureInput,
+      });
+
       const payload = {
         part_number: urlParams.partno || graphConfig.partNumber || null,
         curve_name: urlParams.curve_title || graphConfig.curveName,
@@ -2061,7 +2136,7 @@ const GraphCapture = () => {
         x_max: parseFloat(graphConfig.xMax),
         y_min: parseFloat(graphConfig.yMin),
         y_max: parseFloat(graphConfig.yMax),
-        temperature: resolveTemperatureForSave(graphConfig.temperature, shouldShowTemperatureInput),
+        temperature: resolvedTemperature,
         manufacturer: urlParams.manufacturer || null,
         graph_title: graphConfig.graphTitle || urlParams.graph_title || null,
         x_label: graphConfig.xLabel || urlParams.x_label || null,
@@ -2410,11 +2485,18 @@ const GraphCapture = () => {
       }
 
       console.log('Symbol values:', symbolValues);
+      const resolvedTemperature = resolveTemperatureForSave(graphConfig.temperature, shouldShowTemperatureInput);
+      console.log('[TEMP_DEBUG] Company API temperature before payload build', {
+        rawInput: String(graphConfig.temperature || ''),
+        resolvedTemperatureCelsius: resolvedTemperature,
+        shouldDefaultRoomTemperature: shouldShowTemperatureInput,
+      });
+
       const dynamicSymbolPayload = buildDynamicSymbolPayload(
         symbolValues,
         symbolLabels,
         symbolNames,
-        resolveTemperatureForSave(graphConfig.temperature, shouldShowTemperatureInput)
+        resolvedTemperature
       );
       const tctjValue = dynamicSymbolPayload.legacyTctjValue;
       console.log('TCTJ Value (plain string):', tctjValue);
@@ -3393,6 +3475,8 @@ const GraphCapture = () => {
             {(() => {
               const cfg = normalizeCurveConfig(selectedCurve);
               const bounds = resolveAxisBoundsWithFallback([selectedCurve]);
+              const xUnitDisplay = formatAxisUnitCompact(cfg.xUnit, cfg.xLabel);
+              const yUnitDisplay = formatAxisUnitCompact(cfg.yUnit, cfg.yLabel);
               return (
                 <div style={{ fontSize: 12, color: '#444', background: '#f5f5f5', borderRadius: 5, padding: '8px 12px', marginBottom: 8, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px 24px' }}>
                   {cfg.graphTitle && (
@@ -3413,6 +3497,8 @@ const GraphCapture = () => {
                   <div><span style={{ fontWeight: 600 }}>Y Scale:</span> {cfg.yScale || '—'}</div>
                   {cfg.xLabel && <div><span style={{ fontWeight: 600 }}>X Title:</span> {cfg.xLabel}</div>}
                   {cfg.yLabel && <div><span style={{ fontWeight: 600 }}>Y Title:</span> {cfg.yLabel}</div>}
+                  <div><span style={{ fontWeight: 600 }}>X Unit:</span> {xUnitDisplay || '—'}</div>
+                  <div><span style={{ fontWeight: 600 }}>Y Unit:</span> {yUnitDisplay || '—'}</div>
                 </div>
               );
             })()}
@@ -3449,10 +3535,18 @@ const GraphCapture = () => {
               <thead>
                 <tr style={{ backgroundColor: '#222', color: '#fff' }}>
                   <th className="px-2 py-1 border" style={{ borderColor: 'var(--color-border)', color: '#fff' }}>
-                    X
+                    {(() => {
+                      const cfg = normalizeCurveConfig(selectedCurve);
+                      const unit = formatAxisUnitCompact(cfg.xUnit, cfg.xLabel);
+                      return formatAxisHeaderWithUnit('X', cfg.xLabel, unit);
+                    })()}
                   </th>
                   <th className="px-2 py-1 border" style={{ borderColor: 'var(--color-border)', color: '#fff' }}>
-                    Y
+                    {(() => {
+                      const cfg = normalizeCurveConfig(selectedCurve);
+                      const unit = formatAxisUnitCompact(cfg.yUnit, cfg.yLabel);
+                      return formatAxisHeaderWithUnit('Y', cfg.yLabel, unit);
+                    })()}
                   </th>
                 </tr>
               </thead>
@@ -3552,6 +3646,8 @@ const GraphCapture = () => {
             {(() => {
               const cfg = normalizeCurveConfig(selectedGroup.curves[0]);
               const bounds = resolveAxisBoundsWithFallback(selectedGroup.curves);
+              const xUnitDisplay = formatAxisUnitCompact(cfg.xUnit, cfg.xLabel);
+              const yUnitDisplay = formatAxisUnitCompact(cfg.yUnit, cfg.yLabel);
               return (
                 <div style={{ fontSize: 12, color: '#444', background: '#f5f5f5', borderRadius: 5, padding: '8px 12px', marginBottom: 8, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px 24px' }}>
                   {cfg.graphTitle && (
@@ -3573,6 +3669,8 @@ const GraphCapture = () => {
                   <div><span style={{ fontWeight: 600 }}>Y Scale:</span> {cfg.yScale || '—'}</div>
                   {cfg.xLabel && <div><span style={{ fontWeight: 600 }}>X Title:</span> {cfg.xLabel}</div>}
                   {cfg.yLabel && <div><span style={{ fontWeight: 600 }}>Y Title:</span> {cfg.yLabel}</div>}
+                  <div><span style={{ fontWeight: 600 }}>X Unit:</span> {xUnitDisplay || '—'}</div>
+                  <div><span style={{ fontWeight: 600 }}>Y Unit:</span> {yUnitDisplay || '—'}</div>
                 </div>
               );
             })()}
