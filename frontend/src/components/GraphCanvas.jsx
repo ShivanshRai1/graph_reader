@@ -16,7 +16,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   const [magnifierPos, setMagnifierPos] = useState({ x: 0, y: 0 });
   const [showFixPoints, setShowFixPoints] = useState(false);
   const [dragDistance, setDragDistance] = useState(0);
-  const [previewMousePos, setPreviewMousePos] = useState({ x: 0, y: 0 });
+  const [previewMousePos, setPreviewMousePos] = useState({ x: null, y: null });
   const imageRef = useRef(null);
   const coordinateUpdateTimeoutRef = useRef(null);
   const [resizeMode, setResizeMode] = useState(null);
@@ -756,7 +756,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     setShowMagnifier(false);
     setZeroWarnActive(false);
     setStuckWarnActive(false);
-    setPreviewMousePos({ x: 0, y: 0 }); // Reset preview mouse position
+    setPreviewMousePos({ x: null, y: null }); // Hide preview line when mouse leaves
     
     // Clean up potential resize handle and flag
     potentialResizeHandleRef.current = null;
