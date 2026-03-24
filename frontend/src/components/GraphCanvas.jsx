@@ -16,6 +16,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   const [magnifierPos, setMagnifierPos] = useState({ x: 0, y: 0 });
   const [showFixPoints, setShowFixPoints] = useState(false);
   const [dragDistance, setDragDistance] = useState(0);
+  const [previewMousePos, setPreviewMousePos] = useState({ x: 0, y: 0 });
   const imageRef = useRef(null);
   const coordinateUpdateTimeoutRef = useRef(null);
   const [resizeMode, setResizeMode] = useState(null);
@@ -128,7 +129,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     drawSelection(ctx);
     drawDataPoints(ctx);
     if (showFixPoints) drawFixPoints(ctx);
-  }, [graphArea, dataPoints, showFixPoints, hoveredHandle, resizeMode]);
+  }, [graphArea, dataPoints, showFixPoints, hoveredHandle, resizeMode, previewMousePos]);
 
   // Set box to transparent when points are captured (manually or imported)
   useEffect(() => {
@@ -262,6 +263,21 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       ctx.lineTo(validPoints[i].canvasX, validPoints[i].canvasY);
     }
     ctx.stroke();
+
+    // Draw dashed preview line from last point to current mouse position
+    if (validPoints.length > 0 && previewMousePos.x !== null && previewMousePos.y !== null) {
+      ctx.strokeStyle = '#1976d2';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 5]); // 5px dash, 5px gap
+      ctx.globalAlpha = 0.5;
+      ctx.beginPath();
+      ctx.moveTo(validPoints[validPoints.length - 1].canvasX, validPoints[validPoints.length - 1].canvasY);
+      ctx.lineTo(previewMousePos.x, previewMousePos.y);
+      ctx.stroke();
+      ctx.setLineDash([]); // Clear dash pattern
+      ctx.globalAlpha = 1;
+    }
+
     ctx.restore();
   };
 
@@ -560,6 +576,9 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     const canvasX = (e.clientX - rect.left) * scaleX;
     const canvasY = (e.clientY - rect.top) * scaleY;
     
+    // Update preview mouse position for real-time preview line
+    setPreviewMousePos({ x: canvasX, y: canvasY });
+    
     // Check if mouse is directly over any resize handle
     const area = normalizeArea(graphArea);
     if (area.width > 0 && area.height > 0) {
@@ -737,6 +756,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     setShowMagnifier(false);
     setZeroWarnActive(false);
     setStuckWarnActive(false);
+    setPreviewMousePos({ x: 0, y: 0 }); // Reset preview mouse position
     
     // Clean up potential resize handle and flag
     potentialResizeHandleRef.current = null;
