@@ -266,7 +266,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
 
     // Draw dashed preview line from last point to current mouse position
     if (validPoints.length > 0 && previewMousePos.x !== null && previewMousePos.y !== null) {
-      ctx.strokeStyle = '#1976d2';
+      ctx.strokeStyle = '#FF9800';
       ctx.lineWidth = 2;
       ctx.setLineDash([5, 5]); // 5px dash, 5px gap
       ctx.globalAlpha = 0.5;
