@@ -15,7 +15,6 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   const [showMagnifier, setShowMagnifier] = useState(false);
   const [magnifierPos, setMagnifierPos] = useState({ x: 0, y: 0 });
   const [showFixPoints, setShowFixPoints] = useState(false);
-  const [showSmoothPreview, setShowSmoothPreview] = useState(false);
   const [dragDistance, setDragDistance] = useState(0);
   const imageRef = useRef(null);
   const coordinateUpdateTimeoutRef = useRef(null);
@@ -259,21 +258,8 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     ctx.beginPath();
     // Draw in capture order to preserve manual tracing intent in steep/vertical regions.
     ctx.moveTo(validPoints[0].canvasX, validPoints[0].canvasY);
-    if (showSmoothPreview && validPoints.length >= 3) {
-      // Midpoint quadratic smoothing for preview only; source points remain unchanged.
-      for (let i = 1; i < validPoints.length - 1; i++) {
-        const current = validPoints[i];
-        const next = validPoints[i + 1];
-        const midX = (current.canvasX + next.canvasX) / 2;
-        const midY = (current.canvasY + next.canvasY) / 2;
-        ctx.quadraticCurveTo(current.canvasX, current.canvasY, midX, midY);
-      }
-      const last = validPoints[validPoints.length - 1];
-      ctx.lineTo(last.canvasX, last.canvasY);
-    } else {
-      for (let i = 1; i < validPoints.length; i++) {
-        ctx.lineTo(validPoints[i].canvasX, validPoints[i].canvasY);
-      }
+    for (let i = 1; i < validPoints.length; i++) {
+      ctx.lineTo(validPoints[i].canvasX, validPoints[i].canvasY);
     }
     ctx.stroke();
     ctx.restore();
@@ -871,16 +857,6 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
           onClick={() => setShowFixPoints((prev) => !prev)}
         >
           {showFixPoints ? 'Hide points' : 'Connect points'}
-        </button>
-        <button
-          className={`px-4 py-2 rounded text-white font-medium ${showSmoothPreview ? 'bg-teal-700' : 'bg-teal-600'} ${showFixPoints ? '' : 'opacity-60 cursor-not-allowed'}`}
-          onClick={() => {
-            if (!showFixPoints) return;
-            setShowSmoothPreview((prev) => !prev);
-          }}
-          title="Optional preview-only smoothing for connected points"
-        >
-          {showSmoothPreview ? 'Smooth preview: On' : 'Smooth preview: Off'}
         </button>
         <button
           className="px-4 py-2 rounded bg-gray-700 text-white font-medium"
