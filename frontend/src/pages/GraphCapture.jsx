@@ -353,6 +353,12 @@ const stripDfPrefixForDisplay = (rawLabel) => {
   return label.toLowerCase().startsWith('df_') ? label.slice(3) : label;
 };
 
+const getAlternateDfSymbolKey = (rawKey) => {
+  const key = String(rawKey || '').trim();
+  if (!key) return '';
+  return key.toLowerCase().startsWith('df_') ? key.slice(3) : `df_${key}`;
+};
+
 const toApiSymbolKey = (rawKey) => {
   const key = String(rawKey || '').trim();
   if (!key) return '';
@@ -537,10 +543,30 @@ const GraphCapture = () => {
       };
 
       const extractDetailSymbolValues = (detail = {}, preferredKeys = []) => {
+        const preferredKeySet = new Set((Array.isArray(preferredKeys) ? preferredKeys : []).map((key) => String(key).toLowerCase()));
+        const readMappedValue = (source = {}, key = '') => {
+          const directValue = source?.[key];
+          if (directValue !== undefined && directValue !== null && String(directValue).trim() !== '') {
+            return String(directValue);
+          }
+
+          const alternateKey = getAlternateDfSymbolKey(key);
+          if (!alternateKey || preferredKeySet.has(String(alternateKey).toLowerCase())) {
+            return '';
+          }
+
+          const alternateValue = source?.[alternateKey];
+          if (alternateValue !== undefined && alternateValue !== null && String(alternateValue).trim() !== '') {
+            return String(alternateValue);
+          }
+
+          return '';
+        };
+
         const directValues = preferredKeys.reduce((accumulator, key) => {
-          const rawValue = detail?.[key];
-          if (rawValue !== undefined && rawValue !== null && String(rawValue).trim() !== '') {
-            accumulator[key] = String(rawValue);
+          const mappedValue = readMappedValue(detail, key);
+          if (mappedValue !== '') {
+            accumulator[key] = mappedValue;
           }
           return accumulator;
         }, {});
@@ -550,11 +576,37 @@ const GraphCapture = () => {
         }
 
         if (detail?.symbol_values && typeof detail.symbol_values === 'object' && !Array.isArray(detail.symbol_values)) {
+          const mappedFromSymbolValues = preferredKeys.reduce((accumulator, key) => {
+            const mappedValue = readMappedValue(detail.symbol_values, key);
+            if (mappedValue !== '') {
+              accumulator[key] = mappedValue;
+            }
+            return accumulator;
+          }, {});
+
+          if (Object.keys(mappedFromSymbolValues).length > 0) {
+            return mappedFromSymbolValues;
+          }
+
           return Object.fromEntries(
             Object.entries(detail.symbol_values)
               .filter(([, value]) => value !== undefined && value !== null && String(value).trim() !== '')
               .map(([key, value]) => [key, String(value)])
           );
+        }
+
+        if (detail?.tctj && typeof detail.tctj === 'object' && !Array.isArray(detail.tctj)) {
+          const mappedFromTctjObject = preferredKeys.reduce((accumulator, key) => {
+            const mappedValue = readMappedValue(detail.tctj, key);
+            if (mappedValue !== '') {
+              accumulator[key] = mappedValue;
+            }
+            return accumulator;
+          }, {});
+
+          if (Object.keys(mappedFromTctjObject).length > 0) {
+            return mappedFromTctjObject;
+          }
         }
 
         return parseSymbolValuesFromText(detail?.tctj, preferredKeys);
@@ -1880,11 +1932,24 @@ const GraphCapture = () => {
             if (graphImageUrl) {
               persistGraphImage(discovereeGraph.graph_id || graphId, graphImageUrl);
             }
+            const preferredSymbolKeySet = new Set((Array.isArray(symbolNames) ? symbolNames : []).map((key) => String(key).toLowerCase()));
             const graphLevelSymbolValues = symbolNames.reduce((accumulator, key) => {
-              const value = discovereeGraph?.[key];
-              if (value !== undefined && value !== null && String(value).trim() !== '') {
-                accumulator[key] = String(value).trim();
+              const directValue = discovereeGraph?.[key];
+              if (directValue !== undefined && directValue !== null && String(directValue).trim() !== '') {
+                accumulator[key] = String(directValue).trim();
+                return accumulator;
               }
+
+              const alternateKey = getAlternateDfSymbolKey(key);
+              if (!alternateKey || preferredSymbolKeySet.has(String(alternateKey).toLowerCase())) {
+                return accumulator;
+              }
+
+              const alternateValue = discovereeGraph?.[alternateKey];
+              if (alternateValue !== undefined && alternateValue !== null && String(alternateValue).trim() !== '') {
+                accumulator[key] = String(alternateValue).trim();
+              }
+
               return accumulator;
             }, {});
 
