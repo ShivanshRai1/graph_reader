@@ -1388,6 +1388,11 @@ const GraphCapture = () => {
         }));
       }
 
+      // Always send all symbol values in the payload, not just changed ones
+      Object.entries(getGraphDynamicFieldValues(nextSymbolPayload)).forEach(([key, value]) => {
+        localPayload[key] = value;
+      });
+
       const localUrl = `${apiUrl}/api/curves/${localCurveId}`;
       console.log('=== EDIT API REQUEST ===', {
         source: 'local',
@@ -1455,11 +1460,10 @@ const GraphCapture = () => {
       details: [detailPayload],
     };
 
-    if (hasSymbolValueChanges || hasLegacyTemperatureChange) {
-      Object.entries(getGraphDynamicFieldValues(nextSymbolPayload)).forEach(([key, value]) => {
-        payload.graph[key] = value;
-      });
-    }
+    // Always send all symbol values in the payload, not just changed ones
+    Object.entries(getGraphDynamicFieldValues(nextSymbolPayload)).forEach(([key, value]) => {
+      payload.graph[key] = value;
+    });
 
     const companyUrl = `https://www.discoveree.io/graph_capture_api.php?graph_id=${encodeURIComponent(companyGraphId)}`;
     console.log('=== EDIT API REQUEST ===', {
