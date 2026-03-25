@@ -359,6 +359,32 @@ const getAlternateDfSymbolKey = (rawKey) => {
   return key.toLowerCase().startsWith('df_') ? key.slice(3) : `df_${key}`;
 };
 
+const resolveSymbolValue = (source = {}, requestedKey = '', contextKeys = []) => {
+  const key = String(requestedKey || '').trim();
+  if (!key || !source || typeof source !== 'object') return '';
+
+  const directValue = source[key];
+  if (directValue !== undefined && directValue !== null && String(directValue).trim() !== '') {
+    return String(directValue);
+  }
+
+  const alternateKey = getAlternateDfSymbolKey(key);
+  if (!alternateKey) return '';
+
+  const contextKeySet = new Set((Array.isArray(contextKeys) ? contextKeys : []).map((item) => String(item).toLowerCase()));
+  // If alternate key is explicitly part of the same form/list, don't borrow it.
+  if (contextKeySet.has(String(alternateKey).toLowerCase())) {
+    return '';
+  }
+
+  const alternateValue = source[alternateKey];
+  if (alternateValue !== undefined && alternateValue !== null && String(alternateValue).trim() !== '') {
+    return String(alternateValue);
+  }
+
+  return '';
+};
+
 const toApiSymbolKey = (rawKey) => {
   const key = String(rawKey || '').trim();
   if (!key) return '';
@@ -776,7 +802,7 @@ const GraphCapture = () => {
       .map((key) => ({
         key,
         label: getSymbolDisplayLabel(key),
-        value: String(values?.[key] ?? '').trim(),
+        value: resolveSymbolValue(values, key, orderedKeys),
       }))
       .filter((entry) => entry.value !== '');
   };
@@ -3236,7 +3262,7 @@ const GraphCapture = () => {
                         </label>
                         <input
                           type="text"
-                          value={symbolValues[symbol] || ''}
+                          value={resolveSymbolValue(symbolValues, symbol, symbolNames)}
                           onChange={(e) => setSymbolValues({ ...symbolValues, [symbol]: e.target.value })}
                           disabled={Boolean(editingCurveId)}
                           placeholder={`Enter value for ${displayLabel}`}
@@ -3438,7 +3464,7 @@ const GraphCapture = () => {
                                             <input
                                               type="text"
                                               className="w-full mt-1 px-2 py-1 border border-gray-300 rounded text-xs"
-                                              value={editCurveSymbolValues[symbol] || ''}
+                                              value={resolveSymbolValue(editCurveSymbolValues, symbol, editableSymbolKeys)}
                                               onChange={(e) =>
                                                 setEditCurveSymbolValues({
                                                   ...editCurveSymbolValues,
