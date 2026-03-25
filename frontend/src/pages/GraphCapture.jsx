@@ -361,6 +361,15 @@ const formatSymbolValuesAsText = (symbolObj) => {
     .join(', ');
 };
 
+// Format symbol values as SQL SELECT statement for console output: "SELECT df_vds=5.0, df_vgs=2.5, df_tj=298"
+const formatSymbolValuesAsSql = (symbolObj) => {
+  if (!symbolObj || typeof symbolObj !== 'object') return '';
+  const assignments = Object.entries(symbolObj)
+    .map(([key, value]) => `${key}=${value}`)
+    .join(', ');
+  return `SELECT ${assignments}`;
+};
+
 const GraphCapture = () => {
   const {
     uploadedImage,
@@ -2555,7 +2564,7 @@ const GraphCapture = () => {
         return false;
       }
 
-      console.log('Symbol values:', formatSymbolValuesAsText(symbolValues));
+      console.log('Symbol values (SQL):', formatSymbolValuesAsSql(symbolValues));
       const resolvedTemperature = resolveTemperatureForSave(graphConfig.temperature, shouldShowTemperatureInput);
       console.log('[TEMP_DEBUG] Company API temperature before payload build', {
         rawInput: String(graphConfig.temperature || ''),
@@ -2650,7 +2659,7 @@ const GraphCapture = () => {
 
       console.log('Complete Company API Payload - Graph object:', {
         ...companyApiPayload.graph,
-        dynamicSymbols: formatSymbolValuesAsText(Object.fromEntries(
+        dynamicSymbols: formatSymbolValuesAsSql(Object.fromEntries(
           Object.entries(companyApiPayload.graph).filter(([key]) => 
             !['graph_id', 'discoveree_cat_id', 'identifier', 'partno', 'manf', 'graph_title', 'curve_title', 'x_title', 'y_title', 'graph_img', 'mark_review', 'testuser_id'].includes(key)
           )
