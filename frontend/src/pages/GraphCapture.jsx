@@ -370,6 +370,12 @@ const formatSymbolValuesAsSql = (symbolObj) => {
   return `SELECT ${assignments}`;
 };
 
+// Safely parse Company API responses that may come as JSONP (e.g. FF{...} or FF({...}))
+const parseCompanyApiText = (rawText) => {
+  const match = rawText.match(/[{\[][\s\S]*[}\]]/);
+  return JSON.parse(match ? match[0] : rawText);
+};
+
 const GraphCapture = () => {
   const {
     uploadedImage,
@@ -1354,7 +1360,7 @@ const GraphCapture = () => {
       },
       body: JSON.stringify(payload),
     });
-    const result = await response.json().catch(() => ({}));
+    const result = await response.text().then(parseCompanyApiText).catch(() => ({}));
     // console.log('=== EDIT API RESPONSE ===', {
     //   source: 'company',
     //   targetGraphId: companyGraphId,
@@ -1829,7 +1835,8 @@ const GraphCapture = () => {
         );
         console.log('[DEBUG] DiscoverEE response status:', discovereeResponse.status);
         if (discovereeResponse.ok) {
-          const result = await discovereeResponse.json();
+          const discovereeRaw = await discovereeResponse.text();
+          const result = parseCompanyApiText(discovereeRaw);
           console.log('[DEBUG] DiscoverEE response:', result);
 
           const discovereeGraph = result?.graph && !Array.isArray(result.graph) ? result.graph : null;
@@ -2313,7 +2320,8 @@ const GraphCapture = () => {
             `https://www.discoveree.io/graph_capture_api.php?graph_id=${encodeURIComponent(companyGraphId)}`
           );
           if (refetchResp.ok) {
-            const refetchResult = await refetchResp.json();
+            const refetchRaw = await refetchResp.text();
+            const refetchResult = parseCompanyApiText(refetchRaw);
             /* COMMENTED OUT
             console.log('[RE-FETCH] Full API response:', refetchResult);
             */
@@ -2798,9 +2806,9 @@ const GraphCapture = () => {
       }
 
       const rawText = await response.text();
-      // Strip JSONP wrapper if present (e.g. FF({...}) or someFunc({...}))
-      const jsonText = rawText.replace(/^[A-Za-z_$][A-Za-z0-9_$]*\s*\(([\s\S]*)\)\s*;?\s*$/, '$1').trim();
-      const result = JSON.parse(jsonText);
+      // Strip any non-JSON prefix/wrapper (handles JSONP like FF({...}) or FF{...})
+      const jsonMatch = rawText.match(/[{\[][\s\S]*[}\]]/);
+      const result = JSON.parse(jsonMatch ? jsonMatch[0] : rawText);
       /* COMMENTED OUT
       console.log('Company API Response received:', result);
       console.log('Company Graph ID from API:', result?.graph_id);
