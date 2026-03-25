@@ -2384,7 +2384,6 @@ const GraphCapture = () => {
           existingCurveDetailIds: savedCurves.map(c => c.detailId),
           issue: 'Multiple curves have the same detail_id - Company API may have merged them',
         });
-        alert('WARNING: Multiple curves have the same detail_id. Data may have been merged in Company API.');
       }
       
       if (savedCurve.detailId) {
