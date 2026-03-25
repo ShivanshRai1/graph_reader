@@ -1914,6 +1914,20 @@ const GraphCapture = () => {
     // Parse graph_id directly from URL to avoid timing issues with state
     const searchParams = new URLSearchParams(window.location.search);
     const graphId = searchParams.get('graph_id');
+    const hydratedSymbolNames =
+      Array.isArray(symbolNames) && symbolNames.length > 0
+        ? symbolNames
+        : (() => {
+            const otherSymbolsRaw = searchParams.get('other_symbols') || searchParams.get('other_symb') || '';
+            const symbolTokens = otherSymbolsRaw
+              ? otherSymbolsRaw.split(',').map((token) => token.trim()).filter(Boolean)
+              : [];
+
+            return symbolTokens.map((token) => {
+              const label = token.includes('=') ? token.split('=')[0].trim() : token;
+              return resolveSymbolParamName(label, searchParams);
+            });
+          })();
     
     if (!graphId) {
       console.log('[DEBUG] No graph_id in URL params, skipping fetch');
@@ -1958,8 +1972,8 @@ const GraphCapture = () => {
             if (graphImageUrl) {
               persistGraphImage(discovereeGraph.graph_id || graphId, graphImageUrl);
             }
-            const preferredSymbolKeySet = new Set((Array.isArray(symbolNames) ? symbolNames : []).map((key) => String(key).toLowerCase()));
-            const graphLevelSymbolValues = symbolNames.reduce((accumulator, key) => {
+            const preferredSymbolKeySet = new Set((Array.isArray(hydratedSymbolNames) ? hydratedSymbolNames : []).map((key) => String(key).toLowerCase()));
+            const graphLevelSymbolValues = hydratedSymbolNames.reduce((accumulator, key) => {
               const directValue = discovereeGraph?.[key];
               if (directValue !== undefined && directValue !== null && String(directValue).trim() !== '') {
                 accumulator[key] = String(directValue).trim();
@@ -1990,7 +2004,7 @@ const GraphCapture = () => {
               const detailSymbolValues =
                 detail.tctj && typeof detail.tctj === 'object' && !Array.isArray(detail.tctj)
                   ? detail.tctj
-                  : extractDetailSymbolValues(detail, symbolNames);
+                  : extractDetailSymbolValues(detail, hydratedSymbolNames);
               const mergedSymbolValues = {
                 ...graphLevelSymbolValues,
                 ...detailSymbolValues,
