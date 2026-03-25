@@ -256,22 +256,22 @@ const hasImplicitTemperatureContext = (...values) => {
 const resolveTemperatureForSave = (rawTemperature, shouldDefaultRoomTemperature) => {
   const parsedTemperature = parseTemperatureToCelsius(rawTemperature);
   if (parsedTemperature.celsiusText) {
-    console.log('[TEMP_DEBUG] Temperature normalized before save', {
-      rawInput: String(rawTemperature || ''),
-      detectedUnit: parsedTemperature.unit,
-      normalizedCelsius: parsedTemperature.celsiusText,
-      usedDefaultRoomTemperature: false,
-    });
+    // console.log('[TEMP_DEBUG] Temperature normalized before save', {
+    //   rawInput: String(rawTemperature || ''),
+    //   detectedUnit: parsedTemperature.unit,
+    //   normalizedCelsius: parsedTemperature.celsiusText,
+    //   usedDefaultRoomTemperature: false
+    // });
     return parsedTemperature.celsiusText;
   }
 
   const fallbackTemperature = shouldDefaultRoomTemperature ? '25' : '';
-  console.log('[TEMP_DEBUG] Temperature fallback applied before save', {
-    rawInput: String(rawTemperature || ''),
-    detectedUnit: parsedTemperature.unit,
-    normalizedCelsius: fallbackTemperature,
-    usedDefaultRoomTemperature: shouldDefaultRoomTemperature,
-  });
+  // console.log('[TEMP_DEBUG] Temperature fallback applied before save', {
+  //   rawInput: String(rawTemperature || ''),
+  //   detectedUnit: parsedTemperature.unit,
+  //   normalizedCelsius: fallbackTemperature,
+  //   usedDefaultRoomTemperature: shouldDefaultRoomTemperature,
+  // });
   return fallbackTemperature;
 };
 
@@ -351,6 +351,14 @@ const stripDfPrefixForDisplay = (rawLabel) => {
   const label = String(rawLabel || '').trim();
   if (!label) return '';
   return label.toLowerCase().startsWith('df_') ? label.slice(3) : label;
+};
+
+// Format symbol values as text for console output: "df_vds: 5.0, df_vgs: 2.5, df_tj: 298"
+const formatSymbolValuesAsText = (symbolObj) => {
+  if (!symbolObj || typeof symbolObj !== 'object') return '';
+  return Object.entries(symbolObj)
+    .map(([key, value]) => `${key}: ${value}`)
+    .join(', ');
 };
 
 const GraphCapture = () => {
@@ -719,7 +727,7 @@ const GraphCapture = () => {
 
     try {
       localStorage.setItem(`graph_image_${normalizedGraphId}`, normalizedImage);
-      console.log('[DEBUG] Persisted graph image for graph_id:', normalizedGraphId);
+      // console.log('[DEBUG] Persisted graph image for graph_id:', normalizedGraphId);
     } catch (error) {
       console.warn('[DEBUG] Failed to persist graph image:', error);
     }
@@ -766,12 +774,12 @@ const GraphCapture = () => {
   };
 
   const handleViewCurve = (curve) => {
-    console.log('[GRAPH SESSION] handleViewCurve', {
-      curveId: curve.id,
-      curveGraphId: curve.graphId || '',
-      sessionActive: hasActiveAppendSessionRef.current,
-      sessionGraphId: activeSessionGraphIdRef.current || '',
-    });
+    // console.log('[GRAPH SESSION] handleViewCurve', {
+    //   curveId: curve.id,
+    //   curveGraphId: curve.graphId || '',
+    //   sessionActive: hasActiveAppendSessionRef.current,
+    //   sessionGraphId: activeSessionGraphIdRef.current || '',
+    // });
     setSelectedCurveId(curve.id);
     if (curve.graphImageUrl) {
       setUploadedImageFromExistingGraph(curve.graphImageUrl);
@@ -813,12 +821,12 @@ const GraphCapture = () => {
   };
 
   const handleEditCurveStart = (curve) => {
-    console.log('[GRAPH SESSION] handleEditCurveStart', {
-      curveId: curve.id,
-      curveGraphId: curve.graphId || '',
-      sessionActive: hasActiveAppendSessionRef.current,
-      sessionGraphId: activeSessionGraphIdRef.current || '',
-    });
+    // console.log('[GRAPH SESSION] handleEditCurveStart', {
+    //   curveId: curve.id,
+    //   curveGraphId: curve.graphId || '',
+    //   sessionActive: hasActiveAppendSessionRef.current,
+    //   sessionGraphId: activeSessionGraphIdRef.current || '',
+    // });
     setSelectedCurveId('');
     if (curve.graphImageUrl) {
       setUploadedImageFromExistingGraph(curve.graphImageUrl);
@@ -965,7 +973,7 @@ const GraphCapture = () => {
     };
 
     if (hasImage) {
-      console.log('[GRAPH_IMAGE] AVAILABLE', payload);
+      // console.log('[GRAPH_IMAGE] AVAILABLE', payload);
     } else {
       console.warn('[GRAPH_IMAGE] MISSING', payload);
     }
@@ -1003,11 +1011,11 @@ const GraphCapture = () => {
     activeSessionGraphIdRef.current = nextGraphId;
     activeSessionImageKeyRef.current = String(imageUrl || uploadedImage || activeSessionImageKeyRef.current || '');
 
-    console.log('[GRAPH SESSION] activated', {
-      reason,
-      graphId: nextGraphId,
-      hasImageContext: Boolean(activeSessionImageKeyRef.current),
-    });
+    // console.log('[GRAPH SESSION] activated', {
+    //   reason,
+    //   graphId: nextGraphId,
+    //   hasImageContext: Boolean(activeSessionImageKeyRef.current),
+    // });
   };
 
   const getGraphIdForCurve = (curve) => {
@@ -1085,10 +1093,10 @@ const GraphCapture = () => {
     });
 
   const clearGraphIdContext = () => {
-    console.log('[GRAPH SESSION] clearGraphIdContext', {
-      previousGraphId: activeSessionGraphIdRef.current || '',
-      previousSessionActive: hasActiveAppendSessionRef.current,
-    });
+    // console.log('[GRAPH SESSION] clearGraphIdContext', {
+    //   previousGraphId: activeSessionGraphIdRef.current || '',
+    //   previousSessionActive: hasActiveAppendSessionRef.current,
+    // });
     setUrlParams((prev) => ({ ...prev, graph_id: '', identifier: '' }));
     setReturnGraphId('');
     setSelectedCurveId('');
@@ -1114,12 +1122,12 @@ const GraphCapture = () => {
     }
     const nextId = String(nextGraphId);
     const normalizedIdentifier = normalizeSessionIdentifier(nextIdentifier || activeSessionIdentifierRef.current || '');
-    console.log('[GRAPH SESSION] syncGraphIdContext', {
-      nextGraphId: nextId,
-      nextIdentifier: normalizedIdentifier || '(none)',
-      previousGraphId: activeSessionGraphIdRef.current || '',
-      isNewSession: !hasActiveAppendSessionRef.current,
-    });
+    // console.log('[GRAPH SESSION] syncGraphIdContext', {
+    //   nextGraphId: nextId,
+    //   nextIdentifier: normalizedIdentifier || '(none)',
+    //   previousGraphId: activeSessionGraphIdRef.current || '',
+    //   isNewSession: !hasActiveAppendSessionRef.current,
+    // });
     activateAppendSession(nextId, uploadedImage || activeSessionImageKeyRef.current || '', 'syncGraphIdContext');
     if (normalizedIdentifier) {
       activeSessionIdentifierRef.current = normalizedIdentifier;
@@ -1182,10 +1190,10 @@ const GraphCapture = () => {
       nextImage &&
       (!sessionImageKey || nextImage !== sessionImageKey)
     ) {
-      console.log('[GRAPH SESSION] resetting after user changed image', {
-        previousGraphId: activeSessionGraphIdRef.current,
-        sessionImageKey: sessionImageKey || '(none — old graph had no image)',
-      });
+      // console.log('[GRAPH SESSION] resetting after user changed image', {
+      //   previousGraphId: activeSessionGraphIdRef.current,
+      //   sessionImageKey: sessionImageKey || '(none — old graph had no image)',
+      // });
       clearGraphIdContext();
     }
 
@@ -1255,12 +1263,12 @@ const GraphCapture = () => {
       }
 
       const localUrl = `${apiUrl}/api/curves/${localCurveId}`;
-      console.log('=== EDIT API REQUEST ===', {
-        source: 'local',
-        url: localUrl,
-        method: 'PUT',
-        payload: localPayload,
-      });
+      // console.log('=== EDIT API REQUEST ===', {
+      //   source: 'local',
+      //   url: localUrl,
+      //   method: 'PUT',
+      //   payload: localPayload,
+      // });
 
       const localResponse = await fetch(localUrl, {
         method: 'PUT',
@@ -1271,13 +1279,13 @@ const GraphCapture = () => {
       });
 
       const localResult = await localResponse.json().catch(() => ({}));
-      console.log('=== EDIT API RESPONSE ===', {
-        source: 'local',
-        url: localUrl,
-        status: localResponse.status,
-        ok: localResponse.ok,
-        response: localResult,
-      });
+      // console.log('=== EDIT API RESPONSE ===', {
+      //   source: 'local',
+      //   url: localUrl,
+      //   status: localResponse.status,
+      //   ok: localResponse.ok,
+      //   response: localResult,
+      // });
 
       if (!localResponse.ok) {
         throw new Error(`Local API update failed (${localResponse.status})`);
@@ -1321,14 +1329,14 @@ const GraphCapture = () => {
     }
 
     const companyUrl = `https://www.discoveree.io/graph_capture_api.php?graph_id=${encodeURIComponent(companyGraphId)}`;
-    console.log('=== EDIT API REQUEST ===', {
-      source: 'company',
-      targetGraphId: companyGraphId,
-      targetDetailId: resolvedDetailId || '',
-      url: companyUrl,
-      method: 'POST',
-      payload,
-    });
+    // console.log('=== EDIT API REQUEST ===', {
+    //   source: 'company',
+    //   targetGraphId: companyGraphId,
+    //   targetDetailId: resolvedDetailId || '',
+    //   url: companyUrl,
+    //   method: 'POST',
+    //   payload,
+    // });
 
     const response = await fetch(companyUrl, {
       method: 'POST',
@@ -1338,25 +1346,25 @@ const GraphCapture = () => {
       body: JSON.stringify(payload),
     });
     const result = await response.json().catch(() => ({}));
-    console.log('=== EDIT API RESPONSE ===', {
-      source: 'company',
-      targetGraphId: companyGraphId,
-      targetDetailId: resolvedDetailId || '',
-      url: companyUrl,
-      status: response.status,
-      ok: response.ok,
-      response: result,
-    });
+    // console.log('=== EDIT API RESPONSE ===', {
+    //   source: 'company',
+    //   targetGraphId: companyGraphId,
+    //   targetDetailId: resolvedDetailId || '',
+    //   url: companyUrl,
+    //   status: response.status,
+    //   ok: response.ok,
+    //   response: result,
+    // });
 
     const returnedGraphId = result?.graph_id ? String(result.graph_id) : '';
-    console.log('=== GRAPH ID CONSISTENCY CHECK (EDIT) ===', {
-      expectedGraphId: String(companyGraphId),
-      sentGraphId: String(payload?.graph?.graph_id || ''),
-      sentIdentifier: String(payload?.graph?.identifier || ''),
-      returnedGraphId,
-      matchesExpected: !returnedGraphId || returnedGraphId === String(companyGraphId),
-      note: 'If matchesExpected is false, API is creating/updating a different graph context than requested.',
-    });
+    // console.log('=== GRAPH ID CONSISTENCY CHECK (EDIT) ===', {
+    //   expectedGraphId: String(companyGraphId),
+    //   sentGraphId: String(payload?.graph?.graph_id || ''),
+    //   sentIdentifier: String(payload?.graph?.identifier || ''),
+    //   returnedGraphId,
+    //   matchesExpected: !returnedGraphId || returnedGraphId === String(companyGraphId),
+    //   note: 'If matchesExpected is false, API is creating/updating a different graph context than requested.',
+    // });
 
     if (!response.ok) {
       throw new Error(`Company API update failed (${response.status})`);
@@ -1424,24 +1432,24 @@ const GraphCapture = () => {
   const removeCurveViaApi = async (curve) => {
     if (savedCurvesSource !== 'company') {
       const localUrl = `${apiUrl}/api/curves/${curve.id}`;
-      console.log('=== REMOVE API REQUEST ===', {
-        source: 'local',
-        url: localUrl,
-        method: 'DELETE',
-      });
+      // console.log('=== REMOVE API REQUEST ===', {
+      //   source: 'local',
+      //   url: localUrl,
+      //   method: 'DELETE',
+      // });
 
       const localResponse = await fetch(localUrl, {
         method: 'DELETE',
       });
 
       const localResult = await localResponse.json().catch(() => ({}));
-      console.log('=== REMOVE API RESPONSE ===', {
-        source: 'local',
-        url: localUrl,
-        status: localResponse.status,
-        ok: localResponse.ok,
-        response: localResult,
-      });
+      // console.log('=== REMOVE API RESPONSE ===', {
+      //   source: 'local',
+      //   url: localUrl,
+      //   status: localResponse.status,
+      //   ok: localResponse.ok,
+      //   response: localResult,
+      // });
 
       if (!localResponse.ok) {
         throw new Error(`Local remove failed (${localResponse.status})`);
@@ -1473,14 +1481,14 @@ const GraphCapture = () => {
     });
 
     const companyUrl = `https://www.discoveree.io/graph_capture_api.php?${removePayload.toString()}`;
-    console.log('=== REMOVE API REQUEST ===', {
-      source: 'company',
-      targetGraphId: String(graphId),
-      targetDetailId: detailId,
-      url: companyUrl,
-      method: 'GET',
-      payload: Object.fromEntries(removePayload.entries()),
-    });
+    // console.log('=== REMOVE API REQUEST ===', {
+    //   source: 'company',
+    //   targetGraphId: String(graphId),
+    //   targetDetailId: detailId,
+    //   url: companyUrl,
+    //   method: 'GET',
+    //   payload: Object.fromEntries(removePayload.entries()),
+    // });
 
     try {
       const response = await fetch(companyUrl, {
@@ -1495,15 +1503,15 @@ const GraphCapture = () => {
         // Keep raw text response when API does not return JSON.
       }
 
-      console.log('=== REMOVE API RESPONSE ===', {
-        source: 'company',
-        targetGraphId: String(graphId),
-        targetDetailId: detailId,
-        url: companyUrl,
-        status: response.status,
-        ok: response.ok,
-        response: result,
-      });
+      // console.log('=== REMOVE API RESPONSE ===', {
+      //   source: 'company',
+      //   targetGraphId: String(graphId),
+      //   targetDetailId: detailId,
+      //   url: companyUrl,
+      //   status: response.status,
+      //   ok: response.ok,
+      //   response: result,
+      // });
 
       if (!response.ok) {
         throw new Error(`Company remove failed (${response.status})`);
@@ -1516,13 +1524,13 @@ const GraphCapture = () => {
 
       console.warn('Remove fetch blocked by CORS, using browser fallback:', companyUrl);
       const fallbackResult = await triggerGetWithoutCors(companyUrl);
-      console.log('=== REMOVE API RESPONSE (FALLBACK) ===', {
-        source: 'company',
-        targetGraphId: String(graphId),
-        targetDetailId: detailId,
-        url: companyUrl,
-        fallbackResult,
-      });
+      // console.log('=== REMOVE API RESPONSE (FALLBACK) ===', {
+      //   source: 'company',
+      //   targetGraphId: String(graphId),
+      //   targetDetailId: detailId,
+      //   url: companyUrl,
+      //   fallbackResult,
+      // });
     }
   };
 
@@ -1581,7 +1589,7 @@ const GraphCapture = () => {
 
       // Redirect to return_url if it exists
       if (urlParams.return_url) {
-        console.log('Redirecting to return_url:', urlParams.return_url);
+        // console.log('Redirecting to return_url:', urlParams.return_url);
         window.location.href = urlParams.return_url;
       }
     } catch (error) {
@@ -2547,7 +2555,7 @@ const GraphCapture = () => {
         return false;
       }
 
-      console.log('Symbol values:', symbolValues);
+      console.log('Symbol values:', formatSymbolValuesAsText(symbolValues));
       const resolvedTemperature = resolveTemperatureForSave(graphConfig.temperature, shouldShowTemperatureInput);
       console.log('[TEMP_DEBUG] Company API temperature before payload build', {
         rawInput: String(graphConfig.temperature || ''),
@@ -2640,9 +2648,20 @@ const GraphCapture = () => {
         companyApiPayload.graph[key] = value;
       });
 
-      console.log('Complete Company API Payload:', companyApiPayload);
+      console.log('Complete Company API Payload - Graph object:', {
+        ...companyApiPayload.graph,
+        dynamicSymbols: formatSymbolValuesAsText(Object.fromEntries(
+          Object.entries(companyApiPayload.graph).filter(([key]) => 
+            !['graph_id', 'discoveree_cat_id', 'identifier', 'partno', 'manf', 'graph_title', 'curve_title', 'x_title', 'y_title', 'graph_img', 'mark_review', 'testuser_id'].includes(key)
+          )
+        )),
+      });
       console.log('Graph object:', companyApiPayload.graph);
-      console.log('Details array:', companyApiPayload.details);
+      console.log('Details array (XY Points):', {
+        xy: companyApiPayload.details[0]?.xy?.substring(0, 100) + '...',
+        curve_title: companyApiPayload.details[0]?.curve_title,
+        scales: `${companyApiPayload.details[0]?.xscale || '1'} x ${companyApiPayload.details[0]?.yscale || '1'}`,
+      });
 
       // Skip API call if in testing mode
       if (!SEND_TO_API) {
