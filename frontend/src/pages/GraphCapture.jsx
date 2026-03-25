@@ -2525,28 +2525,36 @@ const GraphCapture = () => {
     // ============================================================
     const SEND_TO_API = true;
 
+    /* COMMENTED OUT
     console.log('=== SENDING TO COMPANY DATABASE STARTED ===');
     console.log('Local Graph ID:', graphId);
     console.log('Graph Image URL:', graphImageUrl);
     console.log('Full dataPoints object from context:', dataPoints);
     console.log('dataPoints type:', typeof dataPoints);
     console.log('dataPoints is array?:', Array.isArray(dataPoints));
+    */
 
     try {
+      /* COMMENTED OUT
       console.log('Before filtering - dataPoints length:', dataPoints ? dataPoints.length : 'dataPoints is null/undefined');
+      */
 
       const { unique: uniquePointsForCompanyApi, removed: removedDuplicatesForCompanyApi } = dedupePointsByXY(dataPoints, 6);
+      /* COMMENTED OUT
       if (removedDuplicatesForCompanyApi > 0) {
         console.warn(`[POINT_DEDUP] Removed ${removedDuplicatesForCompanyApi} duplicate XY point(s) before company API send.`);
       }
+      */
 
       const xyPoints = uniquePointsForCompanyApi
         .filter((point) => {
+          /* COMMENTED OUT
           console.log(
             `  Checking point:`,
             point,
             `isFinite(x)=${Number.isFinite(point.x)}, isFinite(y)=${Number.isFinite(point.y)}`
           );
+          */
           return Number.isFinite(point.x) && Number.isFinite(point.y);
         })
         .map((point) => ({
@@ -2554,9 +2562,11 @@ const GraphCapture = () => {
           y: String(point.y),
         }));
 
+      /* COMMENTED OUT
       console.log('Raw data points count:', dataPoints.length);
       console.log('Filtered valid XY Points count:', xyPoints.length);
       console.log('Filtered XY Points being sent:', xyPoints);
+      */
 
       if (xyPoints.length === 0) {
         console.error('No valid data points after filtering');
@@ -2567,11 +2577,13 @@ const GraphCapture = () => {
       console.log('Symbol values (Text):', formatSymbolValuesAsText(symbolValues));
       console.log('Symbol values (SQL):', formatSymbolValuesAsSql(symbolValues));
       const resolvedTemperature = resolveTemperatureForSave(graphConfig.temperature, shouldShowTemperatureInput);
+      /* COMMENTED OUT
       console.log('[TEMP_DEBUG] Company API temperature before payload build', {
         rawInput: String(graphConfig.temperature || ''),
         resolvedTemperatureCelsius: resolvedTemperature,
         shouldDefaultRoomTemperature: shouldShowTemperatureInput,
       });
+      */
 
       const dynamicSymbolPayload = buildDynamicSymbolPayload(
         symbolValues,
@@ -2580,7 +2592,9 @@ const GraphCapture = () => {
         resolvedTemperature
       );
       const tctjValue = dynamicSymbolPayload.legacyTctjValue;
+      /* COMMENTED OUT
       console.log('TCTJ Value (plain string):', tctjValue);
+      */
 
       const detailPayload = {
         curve_title: urlParams.curve_title || graphConfig.curveName || '',
@@ -2620,6 +2634,7 @@ const GraphCapture = () => {
       // CRITICAL: Never use graph_id as identifier fallback - this causes Company API to create new graphs!
       const appendIdentifier = normalizeSessionIdentifier(activeSessionIdentifierRef.current || existingGraphIdentifier || '');
 
+      /* COMMENTED OUT
       console.log('=== GRAPH SESSION STATE BEFORE SAVE ===', {
         sessionActive: hasActiveAppendSessionRef.current,
         sessionGraphId: activeSessionGraphIdRef.current || '',
@@ -2631,6 +2646,7 @@ const GraphCapture = () => {
         allIdentifierParamsInUrl: searchParams.getAll('identifier'),
         effectiveIdentifierForAppend: appendIdentifier || '(none)',
       });
+      */
 
       // Build the JSON payload for company's API
       const uniqueIdentifier = `usergraph_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
@@ -2658,6 +2674,7 @@ const GraphCapture = () => {
         companyApiPayload.graph[key] = value;
       });
 
+      /* COMMENTED OUT
       console.log('Complete Company API Payload - Graph object:', {
         ...companyApiPayload.graph,
         dynamicSymbolsText: formatSymbolValuesAsText(Object.fromEntries(
@@ -2677,14 +2694,19 @@ const GraphCapture = () => {
         curve_title: companyApiPayload.details[0]?.curve_title,
         scales: `${companyApiPayload.details[0]?.xscale || '1'} x ${companyApiPayload.details[0]?.yscale || '1'}`,
       });
+      */
 
       // Skip API call if in testing mode
       if (!SEND_TO_API) {
+        /* COMMENTED OUT
         console.log('TESTING MODE: Skipping actual API call');
+        */
         // Simulate successful response for testing redirect
         if (allowRedirect && urlParams.return_url) {
           const returnUrl = constructReturnUrl(urlParams.return_url, graphId);
+          /* COMMENTED OUT
           console.log('Return URL found. Showing decision modal:', returnUrl);
+          */
           setPendingReturnUrl(returnUrl);
           setShowReturnDecisionModal(true);
         } else {
@@ -2697,6 +2719,7 @@ const GraphCapture = () => {
         ? `https://www.discoveree.io/graph_capture_api.php?graph_id=${encodeURIComponent(existingGraphId)}`
         : 'https://www.discoveree.io/graph_capture_api.php';
 
+      /* COMMENTED OUT
       console.log('Company save mode:', isAppendingToExistingGraph ? 'append-existing-graph' : 'create-new-graph', {
         existingGraphId,
         existingGraphIdentifier: appendIdentifier,
@@ -2706,6 +2729,7 @@ const GraphCapture = () => {
 
       console.log('Making request to Company API:', COMPANY_API_SAVE_URL);
       console.log('Request body:', JSON.stringify(companyApiPayload, null, 2));
+      */
 
       const response = await fetch(COMPANY_API_SAVE_URL, {
         method: 'POST',
@@ -2715,8 +2739,10 @@ const GraphCapture = () => {
         body: JSON.stringify(companyApiPayload),
       });
 
+      /* COMMENTED OUT
       console.log('Company API Response status:', response.status);
       console.log('Company API Response headers:', Object.fromEntries(response.headers.entries()));
+      */
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -2725,8 +2751,10 @@ const GraphCapture = () => {
       }
 
       const result = await response.json();
+      /* COMMENTED OUT
       console.log('Company API Response received:', result);
       console.log('Company Graph ID from API:', result?.graph_id);
+      */
       const returnedGraphId = result?.graph_id ? String(result.graph_id) : '';
       const requestedGraphId = isAppendingToExistingGraph ? String(existingGraphId || '') : '';
       const appendGraphMismatch = Boolean(
@@ -2741,20 +2769,31 @@ const GraphCapture = () => {
       let companyDetailId = '';
       if (result?.detail_id) {
         companyDetailId = result.detail_id;
+        /* COMMENTED OUT
         console.log('[DETAIL_ID] Found in result.detail_id:', companyDetailId);
+        */
       } else if (result?.details && Array.isArray(result.details) && result.details.length > 0) {
         companyDetailId = result.details[0]?.id;
+        /* COMMENTED OUT
         console.log('[DETAIL_ID] Found in result.details[0].id:', companyDetailId);
+        */
       } else if (result?.graph?.detail_id) {
         companyDetailId = result.graph.detail_id;
+        /* COMMENTED OUT
         console.log('[DETAIL_ID] Found in result.graph.detail_id:', companyDetailId);
+        */
       } else if (result?.graph?.details && Array.isArray(result.graph.details) && result.graph.details.length > 0) {
         companyDetailId = result.graph.details[0]?.id;
+        /* COMMENTED OUT
         console.log('[DETAIL_ID] Found in result.graph.details[0].id:', companyDetailId);
+        */
       } else {
+        /* COMMENTED OUT
         console.warn('[DETAIL_ID] Not found in immediate API response - will attempt re-fetch');
+        */
       }
       
+      /* COMMENTED OUT
       console.log('[DETAIL_ID_FROM_API] Company API response analysis:', {
         hasDetailId: Boolean(companyDetailId),
         foundDetailId: companyDetailId || '(will re-fetch)',
@@ -2769,6 +2808,7 @@ const GraphCapture = () => {
           pinnedGraphId: requestedGraphId,
         });
       }
+      */
 
       // Store the identifier used for this create-new save so subsequent appends use the same one.
       if (companyGraphId && resolvedOutgoingIdentifier) {
