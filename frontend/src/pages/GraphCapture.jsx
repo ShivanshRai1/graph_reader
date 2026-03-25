@@ -347,6 +347,12 @@ const formatAxisHeaderWithUnit = (axisFallback, axisTitle, axisUnit) => {
   return unitText ? `${titleText}( Unit: ${unitText} )` : titleText;
 };
 
+const stripDfPrefixForDisplay = (rawLabel) => {
+  const label = String(rawLabel || '').trim();
+  if (!label) return '';
+  return label.toLowerCase().startsWith('df_') ? label.slice(3) : label;
+};
+
 const GraphCapture = () => {
   const {
     uploadedImage,
@@ -662,6 +668,26 @@ const GraphCapture = () => {
     }
 
     return { ...symbolValues };
+  };
+
+  const getSymbolDisplayLabel = (symbolKey) => {
+    const rawLabel = symbolLabels[symbolKey] || symbolKey;
+    return stripDfPrefixForDisplay(rawLabel);
+  };
+
+  const getCurveSymbolMetadataEntries = (curve) => {
+    const values = normalizeCurveSymbolValues(curve);
+    const orderedKeys = Array.from(
+      new Set([...(Array.isArray(symbolNames) ? symbolNames : []), ...Object.keys(values || {})].filter(Boolean))
+    );
+
+    return orderedKeys
+      .map((key) => ({
+        key,
+        label: getSymbolDisplayLabel(key),
+        value: String(values?.[key] ?? '').trim(),
+      }))
+      .filter((entry) => entry.value !== '');
   };
 
   const resolveAxisValue = (primaryValue, secondaryValue, fallbackValue = '') => {
@@ -3076,7 +3102,7 @@ const GraphCapture = () => {
                   <div className="p-4 border rounded" style={{ backgroundColor: '#ffffff', borderColor: 'var(--color-border)' }}>
                     {symbolNames.map((symbol) => {
                       // Use the friendly label stored in symbolLabels map
-                      const displayLabel = symbolLabels[symbol] || symbol;
+                      const displayLabel = getSymbolDisplayLabel(symbol);
                       return (
                       <div key={symbol} className="mb-3">
                         <label className="block mb-1 text-sm font-medium" style={{ color: '#213547' }}>
@@ -3196,6 +3222,20 @@ const GraphCapture = () => {
                                 X unit: {curve.config?.xUnitPrefix || curve.x_unit || '-'} | Y unit: {curve.config?.yUnitPrefix || curve.y_unit || '-'}<br />
                                 X scale: {curve.config?.xScale || curve.x_scale || '-'} | Y scale: {curve.config?.yScale || curve.y_scale || '-'}
                               </div>
+                              {(() => {
+                                const symbolEntries = getCurveSymbolMetadataEntries(curve);
+                                if (symbolEntries.length === 0) return null;
+                                return (
+                                  <div className="text-xs mb-2 text-gray-700">
+                                    {symbolEntries.map((entry, index) => (
+                                      <span key={`${curve.id}_${entry.key}`}>
+                                        {index > 0 ? ' | ' : ''}
+                                        {entry.label}: {entry.value}
+                                      </span>
+                                    ))}
+                                  </div>
+                                );
+                              })()}
                               {editingCurveId === curve.id ? (
                                 <div className="mt-2">
                                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -3250,10 +3290,22 @@ const GraphCapture = () => {
                                       </select>
                                     </label>
                                   </div>
-                                  {symbolNames && symbolNames.length > 0 ? (
+                                  {(() => {
+                                    const editableSymbolKeys = Array.from(
+                                      new Set([
+                                        ...(Array.isArray(symbolNames) ? symbolNames : []),
+                                        ...Object.keys(editCurveSymbolValues || {}),
+                                      ].filter(Boolean))
+                                    );
+
+                                    if (editableSymbolKeys.length === 0) {
+                                      return null;
+                                    }
+
+                                    return (
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-                                      {symbolNames.map((symbol) => {
-                                        const displayLabel = symbolLabels[symbol] || symbol;
+                                      {editableSymbolKeys.map((symbol) => {
+                                        const displayLabel = getSymbolDisplayLabel(symbol);
                                         return (
                                           <label key={`${curve.id}_${symbol}`} className="text-xs text-gray-700">
                                             {displayLabel}
@@ -3272,7 +3324,8 @@ const GraphCapture = () => {
                                         );
                                       })}
                                     </div>
-                                  ) : null}
+                                    );
+                                  })()}
                                   <div className="flex gap-2 mt-3">
                                     <button
                                       className="px-3 py-1 rounded bg-green-600 text-white text-xs"
@@ -3540,6 +3593,21 @@ const GraphCapture = () => {
                   {cfg.yLabel && <div><span style={{ fontWeight: 600 }}>Y Title:</span> {cfg.yLabel}</div>}
                   <div><span style={{ fontWeight: 600 }}>X Unit:</span> {xUnitDisplay || '—'}</div>
                   <div><span style={{ fontWeight: 600 }}>Y Unit:</span> {yUnitDisplay || '—'}</div>
+                  {(() => {
+                    const symbolEntries = getCurveSymbolMetadataEntries(selectedCurve);
+                    if (symbolEntries.length === 0) return null;
+                    return (
+                      <div style={{ gridColumn: '1 / -1' }}>
+                        <span style={{ fontWeight: 600 }}>Parameters:</span>{' '}
+                        {symbolEntries.map((entry, index) => (
+                          <span key={`${selectedCurve.id}_${entry.key}`}>
+                            {index > 0 ? ' | ' : ''}
+                            {entry.label}: {entry.value}
+                          </span>
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </div>
               );
             })()}
@@ -3712,6 +3780,32 @@ const GraphCapture = () => {
                   {cfg.yLabel && <div><span style={{ fontWeight: 600 }}>Y Title:</span> {cfg.yLabel}</div>}
                   <div><span style={{ fontWeight: 600 }}>X Unit:</span> {xUnitDisplay || '—'}</div>
                   <div><span style={{ fontWeight: 600 }}>Y Unit:</span> {yUnitDisplay || '—'}</div>
+                  {(() => {
+                    const allEntries = selectedGroup.curves.flatMap((curve, curveIndex) =>
+                      getCurveSymbolMetadataEntries(curve).map((entry) => ({
+                        ...entry,
+                        curveName:
+                          curve.config?.curveName ||
+                          curve.curve_name ||
+                          curve.name ||
+                          `Curve ${curveIndex + 1}`,
+                      }))
+                    );
+
+                    if (allEntries.length === 0) return null;
+
+                    return (
+                      <div style={{ gridColumn: '1 / -1' }}>
+                        <span style={{ fontWeight: 600 }}>Parameters:</span>{' '}
+                        {allEntries.map((entry, index) => (
+                          <span key={`${entry.curveName}_${entry.key}_${index}`}>
+                            {index > 0 ? ' | ' : ''}
+                            {entry.curveName} {entry.label}: {entry.value}
+                          </span>
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </div>
               );
             })()}
