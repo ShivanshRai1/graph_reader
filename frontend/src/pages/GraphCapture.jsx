@@ -359,13 +359,30 @@ const getAlternateDfSymbolKey = (rawKey) => {
   return key.toLowerCase().startsWith('df_') ? key.slice(3) : `df_${key}`;
 };
 
+const isValidSymbolValue = (value) => {
+  // Check if value is null, undefined, or not a valid primitive
+  if (value === undefined || value === null) return false;
+  
+  // Convert to string and check
+  const strValue = String(value).trim();
+  if (!strValue) return false;
+  
+  // Exclude literal string representations of invalid values
+  const lowerValue = strValue.toLowerCase();
+  if (lowerValue === 'null' || lowerValue === 'undefined' || lowerValue === 'nan') {
+    return false;
+  }
+  
+  return true;
+};
+
 const resolveSymbolValue = (source = {}, requestedKey = '', contextKeys = []) => {
   const key = String(requestedKey || '').trim();
   if (!key || !source || typeof source !== 'object') return '';
 
   const directValue = source[key];
-  if (directValue !== undefined && directValue !== null && String(directValue).trim() !== '') {
-    return String(directValue);
+  if (isValidSymbolValue(directValue)) {
+    return String(directValue).trim();
   }
 
   const alternateKey = getAlternateDfSymbolKey(key);
@@ -378,8 +395,8 @@ const resolveSymbolValue = (source = {}, requestedKey = '', contextKeys = []) =>
   }
 
   const alternateValue = source[alternateKey];
-  if (alternateValue !== undefined && alternateValue !== null && String(alternateValue).trim() !== '') {
-    return String(alternateValue);
+  if (isValidSymbolValue(alternateValue)) {
+    return String(alternateValue).trim();
   }
 
   return '';
@@ -810,8 +827,8 @@ const GraphCapture = () => {
   const resolveAxisValue = (primaryValue, secondaryValue, fallbackValue = '') => {
     const candidates = [primaryValue, secondaryValue, fallbackValue];
     for (const candidate of candidates) {
-      if (candidate !== undefined && candidate !== null && String(candidate).trim() !== '') {
-        return String(candidate);
+      if (isValidSymbolValue(candidate)) {
+        return String(candidate).trim();
       }
     }
     return '';
@@ -1372,12 +1389,12 @@ const GraphCapture = () => {
       }
 
       const localUrl = `${apiUrl}/api/curves/${localCurveId}`;
-      // console.log('=== EDIT API REQUEST ===', {
-      //   source: 'local',
-      //   url: localUrl,
-      //   method: 'PUT',
-      //   payload: localPayload,
-      // });
+      console.log('=== EDIT API REQUEST ===', {
+        source: 'local',
+        url: localUrl,
+        method: 'PUT',
+        payload: localPayload,
+      });
 
       const localResponse = await fetch(localUrl, {
         method: 'PUT',
@@ -1387,14 +1404,21 @@ const GraphCapture = () => {
         body: JSON.stringify(localPayload),
       });
 
-      const localResult = await localResponse.json().catch(() => ({}));
-      // console.log('=== EDIT API RESPONSE ===', {
-      //   source: 'local',
-      //   url: localUrl,
-      //   status: localResponse.status,
-      //   ok: localResponse.ok,
-      //   response: localResult,
-      // });
+      const localRawText = await localResponse.text();
+      let localResult = {};
+      try {
+        localResult = localRawText ? JSON.parse(localRawText) : {};
+      } catch {
+        localResult = localRawText;
+      }
+      console.log('=== EDIT API RESPONSE ===', {
+        source: 'local',
+        url: localUrl,
+        status: localResponse.status,
+        ok: localResponse.ok,
+        rawText: localRawText,
+        response: localResult,
+      });
 
       if (!localResponse.ok) {
         throw new Error(`Local API update failed (${localResponse.status})`);
@@ -1438,14 +1462,14 @@ const GraphCapture = () => {
     }
 
     const companyUrl = `https://www.discoveree.io/graph_capture_api.php?graph_id=${encodeURIComponent(companyGraphId)}`;
-    // console.log('=== EDIT API REQUEST ===', {
-    //   source: 'company',
-    //   targetGraphId: companyGraphId,
-    //   targetDetailId: resolvedDetailId || '',
-    //   url: companyUrl,
-    //   method: 'POST',
-    //   payload,
-    // });
+    console.log('=== EDIT API REQUEST ===', {
+      source: 'company',
+      targetGraphId: companyGraphId,
+      targetDetailId: resolvedDetailId || '',
+      url: companyUrl,
+      method: 'POST',
+      payload,
+    });
 
     const response = await fetch(companyUrl, {
       method: 'POST',
@@ -1454,26 +1478,33 @@ const GraphCapture = () => {
       },
       body: JSON.stringify(payload),
     });
-    const result = await response.text().then(parseCompanyApiText).catch(() => ({}));
-    // console.log('=== EDIT API RESPONSE ===', {
-    //   source: 'company',
-    //   targetGraphId: companyGraphId,
-    //   targetDetailId: resolvedDetailId || '',
-    //   url: companyUrl,
-    //   status: response.status,
-    //   ok: response.ok,
-    //   response: result,
-    // });
+    const rawText = await response.text();
+    let result = {};
+    try {
+      result = rawText ? parseCompanyApiText(rawText) : {};
+    } catch {
+      result = rawText;
+    }
+    console.log('=== EDIT API RESPONSE ===', {
+      source: 'company',
+      targetGraphId: companyGraphId,
+      targetDetailId: resolvedDetailId || '',
+      url: companyUrl,
+      status: response.status,
+      ok: response.ok,
+      rawText,
+      response: result,
+    });
 
     const returnedGraphId = result?.graph_id ? String(result.graph_id) : '';
-    // console.log('=== GRAPH ID CONSISTENCY CHECK (EDIT) ===', {
-    //   expectedGraphId: String(companyGraphId),
-    //   sentGraphId: String(payload?.graph?.graph_id || ''),
-    //   sentIdentifier: String(payload?.graph?.identifier || ''),
-    //   returnedGraphId,
-    //   matchesExpected: !returnedGraphId || returnedGraphId === String(companyGraphId),
-    //   note: 'If matchesExpected is false, API is creating/updating a different graph context than requested.',
-    // });
+    console.log('=== GRAPH ID CONSISTENCY CHECK (EDIT) ===', {
+      expectedGraphId: String(companyGraphId),
+      sentGraphId: String(payload?.graph?.graph_id || ''),
+      sentIdentifier: String(payload?.graph?.identifier || ''),
+      returnedGraphId,
+      matchesExpected: !returnedGraphId || returnedGraphId === String(companyGraphId),
+      note: 'If matchesExpected is false, API is creating/updating a different graph context than requested.',
+    });
 
     if (!response.ok) {
       throw new Error(`Company API update failed (${response.status})`);
