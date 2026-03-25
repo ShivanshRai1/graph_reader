@@ -2621,7 +2621,8 @@ const GraphCapture = () => {
       }
 
       console.log('Symbol values (Text):', formatSymbolValuesAsText(symbolValues));
-      console.log('Symbol values (SQL):', formatSymbolValuesAsSql(symbolValues));
+      const dfOnlyValues = Object.fromEntries(Object.entries(symbolValues).filter(([k]) => k.startsWith('df_')));
+      console.table(dfOnlyValues);
       const resolvedTemperature = resolveTemperatureForSave(graphConfig.temperature, shouldShowTemperatureInput);
       /* COMMENTED OUT
       console.log('[TEMP_DEBUG] Company API temperature before payload build', {
@@ -2796,7 +2797,10 @@ const GraphCapture = () => {
         throw new Error(`Company API error! status: ${response.status}. ${errorData.detail || errorData.message || ''}`);
       }
 
-      const result = await response.json();
+      const rawText = await response.text();
+      // Strip JSONP wrapper if present (e.g. FF({...}) or someFunc({...}))
+      const jsonText = rawText.replace(/^[A-Za-z_$][A-Za-z0-9_$]*\s*\(([\s\S]*)\)\s*;?\s*$/, '$1').trim();
+      const result = JSON.parse(jsonText);
       /* COMMENTED OUT
       console.log('Company API Response received:', result);
       console.log('Company Graph ID from API:', result?.graph_id);
