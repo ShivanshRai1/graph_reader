@@ -353,6 +353,19 @@ const stripDfPrefixForDisplay = (rawLabel) => {
   return label.toLowerCase().startsWith('df_') ? label.slice(3) : label;
 };
 
+const toApiSymbolKey = (rawKey) => {
+  const key = String(rawKey || '').trim();
+  if (!key) return '';
+
+  const lower = key.toLowerCase();
+  // Keep legacy/special keys as-is.
+  if (lower === 'tctj' || lower === 'graph_tctj') {
+    return key;
+  }
+
+  return lower.startsWith('df_') ? key : `df_${key}`;
+};
+
 // Format symbol values as text for console output: "df_vds: 5.0, df_vgs: 2.5, df_tj: 298"
 const formatSymbolValuesAsText = (symbolObj) => {
   if (!symbolObj || typeof symbolObj !== 'object') return '';
@@ -559,9 +572,12 @@ const GraphCapture = () => {
         const symbolTitles = {};
         const symbolValuesPayload = {};
 
-        orderedKeys.forEach((key) => {
-          const label = String(labels?.[key] || '').trim();
-          const rawValue = values?.[key];
+        orderedKeys.forEach((rawKey) => {
+          const key = toApiSymbolKey(rawKey);
+          if (!key) return;
+
+          const label = String(labels?.[rawKey] || labels?.[key] || '').trim();
+          const rawValue = values?.[rawKey] ?? values?.[key];
 
           if (label) {
             symbolTitles[key] = label;
@@ -2149,12 +2165,10 @@ const GraphCapture = () => {
       return null;
     }
 
-    /* COMMENTED OUT
     console.log('=== SAVE CURVE STARTED ===');
     console.log('GraphConfig:', graphConfig);
     console.log('DataPoints count:', dataPoints.length);
     console.log('DataPoints:', dataPoints);
-    */
 
     const graphTitle = String(graphConfig.graphTitle || '').trim();
     const curveName = String(graphConfig.curveName || '').trim();
@@ -2181,9 +2195,7 @@ const GraphCapture = () => {
     const yMin = parseFloat(graphConfig.yMin);
     const yMax = parseFloat(graphConfig.yMax);
 
-    /* COMMENTED OUT
     console.log('Parsed min/max values:', { xMin, xMax, yMin, yMax });
-    */
 
     if (isNaN(xMin) || isNaN(xMax) || isNaN(yMin) || isNaN(yMax)) {
       console.error('Validation failed: Invalid numeric values');
@@ -2200,9 +2212,7 @@ const GraphCapture = () => {
       alert('Y-axis: Min must be less than Max');
       return null;
     }
-    /* COMMENTED OUT
     console.log('All validations passed');
-    */
 
     setIsSaving(true);
     try {
@@ -2213,13 +2223,11 @@ const GraphCapture = () => {
       }
 
       const resolvedTemperature = resolveTemperatureForSave(graphConfig.temperature, shouldShowTemperatureInput);
-      /* COMMENTED OUT
       console.log('[TEMP_DEBUG] Local backend payload temperature', {
         rawInput: String(graphConfig.temperature || ''),
         resolvedTemperatureCelsius: resolvedTemperature,
         shouldDefaultRoomTemperature: shouldShowTemperatureInput,
       });
-      */
 
       const payload = {
         part_number: urlParams.partno || graphConfig.partNumber || null,
@@ -2246,18 +2254,14 @@ const GraphCapture = () => {
         })),
       };
 
-      /* COMMENTED OUT
       console.log('URL Params extracted:', urlParams);
       console.log('Backend payload being sent:', payload);
       console.log('Data points to be saved:', payload.data_points);
-      */
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 180000);
 
-      /* COMMENTED OUT
       console.log(`Making POST request to: ${apiUrl}/api/curves`);
-      */
       const response = await fetch(`${apiUrl}/api/curves`, {
         method: 'POST',
         headers: {
@@ -2270,10 +2274,8 @@ const GraphCapture = () => {
       clearTimeout(timeoutId);
       const elapsed = Date.now() - startTime;
 
-      /* COMMENTED OUT
       console.log('Backend response status:', response.status);
       console.log(`Backend request took ${(elapsed / 1000).toFixed(1)}s`);
-      */
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -2282,10 +2284,8 @@ const GraphCapture = () => {
       }
 
       const result = await response.json();
-      /* COMMENTED OUT
       console.log('Backend save successful! Response:', result);
       console.log('Graph ID from backend:', result.id);
-      */
 
       // Show only one success message after saving
       if (!urlParams.return_url) {
@@ -2294,37 +2294,29 @@ const GraphCapture = () => {
 
       const graphGroupId = buildGraphGroupId(uploadedImage || '');
       const graphImageUrl = uploadedImage || '';
-      /* COMMENTED OUT
       console.log('Local save successful, calling sendToCompanyDatabase...');
-      */
       const companyResult = await sendToCompanyDatabase(graphImageUrl, result.id, allowRedirect);
       const companyGraphId = companyResult?.graphId ?? null;
       const companyDetailId = companyResult?.detailId ?? null;
       const companyIdentifier = companyResult?.identifier ?? '';
-      /* COMMENTED OUT
       console.log('sendToCompanyDatabase returned:', {
         graphId: companyGraphId,
         detailId: companyDetailId,
         identifier: companyIdentifier,
       });
-      */
 
       // Re-fetch from company API to get the real detail ID for the newly created curve
       let realDetailId = '';
       if (companyGraphId) {
         try {
-          /* COMMENTED OUT
           console.log('[RE-FETCH] Fetching details for graph_id:', companyGraphId);
-          */
           const refetchResp = await fetch(
             `https://www.discoveree.io/graph_capture_api.php?graph_id=${encodeURIComponent(companyGraphId)}`
           );
           if (refetchResp.ok) {
             const refetchRaw = await refetchResp.text();
             const refetchResult = parseCompanyApiText(refetchRaw);
-            /* COMMENTED OUT
             console.log('[RE-FETCH] Full API response:', refetchResult);
-            */
             
             // Company API can return details in different structures
             let refetchDetails = [];
@@ -2337,7 +2329,6 @@ const GraphCapture = () => {
               refetchDetails = Object.values(refetchResult.details);
             }
             
-            /* COMMENTED OUT
             console.log('[RE-FETCH] Parsed details array:', {
               totalDetails: refetchDetails.length,
               details: refetchDetails.map((d, idx) => ({ 
@@ -2347,19 +2338,16 @@ const GraphCapture = () => {
                 xy: d?.xy ? d.xy.substring(0, 50) + '...' : 'no xy'
               })),
             });
-            */
             
             if (refetchDetails.length > 0) {
               // Try to match by XY data first
               const savedPoints = payload?.data_points || [];
               const savedXyStr = savedPoints.map((p) => `{x:${p.x_value},y:${p.y_value}}`).join(',');
               
-              /* COMMENTED OUT
               console.log('[RE-FETCH] Attempting XY match with:', {
                 pointCount: savedPoints.length,
                 xyLength: savedXyStr.length,
               });
-              */
               
               let matchedDetail = refetchDetails.find((d) => {
                 if (!savedXyStr || !d?.xy) return false;
@@ -2367,9 +2355,7 @@ const GraphCapture = () => {
                 const normalizedApiXy = d.xy.replace(/\s/g, '').toLowerCase();
                 const matches = normalizedSavedXy === normalizedApiXy;
                 if (matches) {
-                  /* COMMENTED OUT
                   console.log('[RE-FETCH] XY MATCH FOUND for detail:', d?.id);
-                  */
                 }
                 return matches;
               });
@@ -2377,49 +2363,35 @@ const GraphCapture = () => {
               // If no XY match, use the LAST detail (most recently added)
               if (!matchedDetail && refetchDetails.length > 0) {
                 matchedDetail = refetchDetails[refetchDetails.length - 1];
-                /* COMMENTED OUT
                 console.log('[RE-FETCH] No XY match, using last (newest) detail:', {
                   id: matchedDetail?.id,
                   curve_title: matchedDetail?.curve_title,
                 });
-                */
               }
               
               // Extract the detail_id
               if (matchedDetail && matchedDetail.id) {
                 realDetailId = String(matchedDetail.id);
-                /* COMMENTED OUT
                 console.log('[RE-FETCH] ✓ Successfully extracted detail_id:', realDetailId);
-                */
               } else {
-                /* COMMENTED OUT
                 console.warn('[RE-FETCH] Matched detail has no id field', {
                   matchedDetail,
                   keys: matchedDetail ? Object.keys(matchedDetail) : 'null',
                 });
-                */
               }
             } else {
-              /* COMMENTED OUT
               console.warn('[RE-FETCH] No details returned from API');
-              */
             }
           } else {
-            /* COMMENTED OUT
             console.warn('[RE-FETCH] API returned non-OK status:', refetchResp.status);
-            */
           }
         } catch (refetchErr) {
-          /* COMMENTED OUT
           console.error('[RE-FETCH] Error fetching details:', refetchErr.message);
-          */
         }
       }
       
       if (!realDetailId) {
-        /* COMMENTED OUT
         console.warn('[DETAIL_ID] Could not extract detail_id from Company API. Will store empty value.');
-        */
       }
 
       const savedCurve = {
@@ -2441,11 +2413,9 @@ const GraphCapture = () => {
         graphGroupId,
         graphImageUrl,
       };
-      /* COMMENTED OUT
       console.log('Saving curve with config:', savedCurve.config);
       console.log('xUnitPrefix:', savedCurve.config.xUnitPrefix);
       console.log('yUnitPrefix:', savedCurve.config.yUnitPrefix);
-      */
       
       // CRITICAL: Validate that this curve has a unique detail_id
       const duplicateDetailId = savedCurves.some(curve => curve.detailId && curve.detailId === savedCurve.detailId);
@@ -2579,36 +2549,28 @@ const GraphCapture = () => {
     // ============================================================
     const SEND_TO_API = true;
 
-    /* COMMENTED OUT
     console.log('=== SENDING TO COMPANY DATABASE STARTED ===');
     console.log('Local Graph ID:', graphId);
     console.log('Graph Image URL:', graphImageUrl);
     console.log('Full dataPoints object from context:', dataPoints);
     console.log('dataPoints type:', typeof dataPoints);
     console.log('dataPoints is array?:', Array.isArray(dataPoints));
-    */
 
     try {
-      /* COMMENTED OUT
       console.log('Before filtering - dataPoints length:', dataPoints ? dataPoints.length : 'dataPoints is null/undefined');
-      */
 
       const { unique: uniquePointsForCompanyApi, removed: removedDuplicatesForCompanyApi } = dedupePointsByXY(dataPoints, 6);
-      /* COMMENTED OUT
       if (removedDuplicatesForCompanyApi > 0) {
         console.warn(`[POINT_DEDUP] Removed ${removedDuplicatesForCompanyApi} duplicate XY point(s) before company API send.`);
       }
-      */
 
       const xyPoints = uniquePointsForCompanyApi
         .filter((point) => {
-          /* COMMENTED OUT
           console.log(
             `  Checking point:`,
             point,
             `isFinite(x)=${Number.isFinite(point.x)}, isFinite(y)=${Number.isFinite(point.y)}`
           );
-          */
           return Number.isFinite(point.x) && Number.isFinite(point.y);
         })
         .map((point) => ({
@@ -2616,11 +2578,9 @@ const GraphCapture = () => {
           y: String(point.y),
         }));
 
-      /* COMMENTED OUT
       console.log('Raw data points count:', dataPoints.length);
       console.log('Filtered valid XY Points count:', xyPoints.length);
       console.log('Filtered XY Points being sent:', xyPoints);
-      */
 
       if (xyPoints.length === 0) {
         console.error('No valid data points after filtering');
@@ -2632,13 +2592,11 @@ const GraphCapture = () => {
       const dfOnlyValues = Object.fromEntries(Object.entries(symbolValues).filter(([k]) => k.startsWith('df_')));
       console.table(dfOnlyValues);
       const resolvedTemperature = resolveTemperatureForSave(graphConfig.temperature, shouldShowTemperatureInput);
-      /* COMMENTED OUT
       console.log('[TEMP_DEBUG] Company API temperature before payload build', {
         rawInput: String(graphConfig.temperature || ''),
         resolvedTemperatureCelsius: resolvedTemperature,
         shouldDefaultRoomTemperature: shouldShowTemperatureInput,
       });
-      */
 
       const dynamicSymbolPayload = buildDynamicSymbolPayload(
         symbolValues,
@@ -2647,9 +2605,7 @@ const GraphCapture = () => {
         resolvedTemperature
       );
       const tctjValue = dynamicSymbolPayload.legacyTctjValue;
-      /* COMMENTED OUT
       console.log('TCTJ Value (plain string):', tctjValue);
-      */
 
       const detailPayload = {
         curve_title: urlParams.curve_title || graphConfig.curveName || '',
@@ -2689,7 +2645,6 @@ const GraphCapture = () => {
       // CRITICAL: Never use graph_id as identifier fallback - this causes Company API to create new graphs!
       const appendIdentifier = normalizeSessionIdentifier(activeSessionIdentifierRef.current || existingGraphIdentifier || '');
 
-      /* COMMENTED OUT
       console.log('=== GRAPH SESSION STATE BEFORE SAVE ===', {
         sessionActive: hasActiveAppendSessionRef.current,
         sessionGraphId: activeSessionGraphIdRef.current || '',
@@ -2701,7 +2656,6 @@ const GraphCapture = () => {
         allIdentifierParamsInUrl: searchParams.getAll('identifier'),
         effectiveIdentifierForAppend: appendIdentifier || '(none)',
       });
-      */
 
       // Build the JSON payload for company's API
       const uniqueIdentifier = `usergraph_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
@@ -2729,7 +2683,6 @@ const GraphCapture = () => {
         companyApiPayload.graph[key] = value;
       });
 
-      /* COMMENTED OUT
       console.log('Complete Company API Payload - Graph object:', {
         ...companyApiPayload.graph,
         dynamicSymbolsText: formatSymbolValuesAsText(Object.fromEntries(
@@ -2749,19 +2702,14 @@ const GraphCapture = () => {
         curve_title: companyApiPayload.details[0]?.curve_title,
         scales: `${companyApiPayload.details[0]?.xscale || '1'} x ${companyApiPayload.details[0]?.yscale || '1'}`,
       });
-      */
 
       // Skip API call if in testing mode
       if (!SEND_TO_API) {
-        /* COMMENTED OUT
         console.log('TESTING MODE: Skipping actual API call');
-        */
         // Simulate successful response for testing redirect
         if (allowRedirect && urlParams.return_url) {
           const returnUrl = constructReturnUrl(urlParams.return_url, graphId);
-          /* COMMENTED OUT
           console.log('Return URL found. Showing decision modal:', returnUrl);
-          */
           setPendingReturnUrl(returnUrl);
           setShowReturnDecisionModal(true);
         } else {
@@ -2774,7 +2722,6 @@ const GraphCapture = () => {
         ? `https://www.discoveree.io/graph_capture_api.php?graph_id=${encodeURIComponent(existingGraphId)}`
         : 'https://www.discoveree.io/graph_capture_api.php';
 
-      /* COMMENTED OUT
       console.log('Company save mode:', isAppendingToExistingGraph ? 'append-existing-graph' : 'create-new-graph', {
         existingGraphId,
         existingGraphIdentifier: appendIdentifier,
@@ -2784,7 +2731,6 @@ const GraphCapture = () => {
 
       console.log('Making request to Company API:', COMPANY_API_SAVE_URL);
       console.log('Request body:', JSON.stringify(companyApiPayload, null, 2));
-      */
 
       const response = await fetch(COMPANY_API_SAVE_URL, {
         method: 'POST',
@@ -2794,10 +2740,8 @@ const GraphCapture = () => {
         body: JSON.stringify(companyApiPayload),
       });
 
-      /* COMMENTED OUT
       console.log('Company API Response status:', response.status);
       console.log('Company API Response headers:', Object.fromEntries(response.headers.entries()));
-      */
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -2809,10 +2753,8 @@ const GraphCapture = () => {
       // Strip any non-JSON prefix/wrapper (handles JSONP like FF({...}) or FF{...})
       const jsonMatch = rawText.match(/[{\[][\s\S]*[}\]]/);
       const result = JSON.parse(jsonMatch ? jsonMatch[0] : rawText);
-      /* COMMENTED OUT
       console.log('Company API Response received:', result);
       console.log('Company Graph ID from API:', result?.graph_id);
-      */
       const returnedGraphId = result?.graph_id ? String(result.graph_id) : '';
       const requestedGraphId = isAppendingToExistingGraph ? String(existingGraphId || '') : '';
       const appendGraphMismatch = Boolean(
@@ -2827,31 +2769,20 @@ const GraphCapture = () => {
       let companyDetailId = '';
       if (result?.detail_id) {
         companyDetailId = result.detail_id;
-        /* COMMENTED OUT
         console.log('[DETAIL_ID] Found in result.detail_id:', companyDetailId);
-        */
       } else if (result?.details && Array.isArray(result.details) && result.details.length > 0) {
         companyDetailId = result.details[0]?.id;
-        /* COMMENTED OUT
         console.log('[DETAIL_ID] Found in result.details[0].id:', companyDetailId);
-        */
       } else if (result?.graph?.detail_id) {
         companyDetailId = result.graph.detail_id;
-        /* COMMENTED OUT
         console.log('[DETAIL_ID] Found in result.graph.detail_id:', companyDetailId);
-        */
       } else if (result?.graph?.details && Array.isArray(result.graph.details) && result.graph.details.length > 0) {
         companyDetailId = result.graph.details[0]?.id;
-        /* COMMENTED OUT
         console.log('[DETAIL_ID] Found in result.graph.details[0].id:', companyDetailId);
-        */
       } else {
-        /* COMMENTED OUT
         console.warn('[DETAIL_ID] Not found in immediate API response - will attempt re-fetch');
-        */
       }
       
-      /* COMMENTED OUT
       console.log('[DETAIL_ID_FROM_API] Company API response analysis:', {
         hasDetailId: Boolean(companyDetailId),
         foundDetailId: companyDetailId || '(will re-fetch)',
@@ -2866,7 +2797,6 @@ const GraphCapture = () => {
           pinnedGraphId: requestedGraphId,
         });
       }
-      */
 
       // Store the identifier used for this create-new save so subsequent appends use the same one.
       if (companyGraphId && resolvedOutgoingIdentifier) {
@@ -3974,3 +3904,4 @@ const GraphCapture = () => {
 };
 
 export default GraphCapture;
+
