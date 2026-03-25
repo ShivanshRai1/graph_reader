@@ -2142,10 +2142,12 @@ const GraphCapture = () => {
       return null;
     }
 
+    /* COMMENTED OUT
     console.log('=== SAVE CURVE STARTED ===');
     console.log('GraphConfig:', graphConfig);
     console.log('DataPoints count:', dataPoints.length);
     console.log('DataPoints:', dataPoints);
+    */
 
     const graphTitle = String(graphConfig.graphTitle || '').trim();
     const curveName = String(graphConfig.curveName || '').trim();
@@ -2172,7 +2174,9 @@ const GraphCapture = () => {
     const yMin = parseFloat(graphConfig.yMin);
     const yMax = parseFloat(graphConfig.yMax);
 
+    /* COMMENTED OUT
     console.log('Parsed min/max values:', { xMin, xMax, yMin, yMax });
+    */
 
     if (isNaN(xMin) || isNaN(xMax) || isNaN(yMin) || isNaN(yMax)) {
       console.error('Validation failed: Invalid numeric values');
@@ -2189,7 +2193,9 @@ const GraphCapture = () => {
       alert('Y-axis: Min must be less than Max');
       return null;
     }
+    /* COMMENTED OUT
     console.log('All validations passed');
+    */
 
     setIsSaving(true);
     try {
@@ -2200,11 +2206,13 @@ const GraphCapture = () => {
       }
 
       const resolvedTemperature = resolveTemperatureForSave(graphConfig.temperature, shouldShowTemperatureInput);
+      /* COMMENTED OUT
       console.log('[TEMP_DEBUG] Local backend payload temperature', {
         rawInput: String(graphConfig.temperature || ''),
         resolvedTemperatureCelsius: resolvedTemperature,
         shouldDefaultRoomTemperature: shouldShowTemperatureInput,
       });
+      */
 
       const payload = {
         part_number: urlParams.partno || graphConfig.partNumber || null,
@@ -2231,14 +2239,18 @@ const GraphCapture = () => {
         })),
       };
 
+      /* COMMENTED OUT
       console.log('URL Params extracted:', urlParams);
       console.log('Backend payload being sent:', payload);
       console.log('Data points to be saved:', payload.data_points);
+      */
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 180000);
 
+      /* COMMENTED OUT
       console.log(`Making POST request to: ${apiUrl}/api/curves`);
+      */
       const response = await fetch(`${apiUrl}/api/curves`, {
         method: 'POST',
         headers: {
@@ -2251,8 +2263,10 @@ const GraphCapture = () => {
       clearTimeout(timeoutId);
       const elapsed = Date.now() - startTime;
 
+      /* COMMENTED OUT
       console.log('Backend response status:', response.status);
       console.log(`Backend request took ${(elapsed / 1000).toFixed(1)}s`);
+      */
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -2261,8 +2275,10 @@ const GraphCapture = () => {
       }
 
       const result = await response.json();
+      /* COMMENTED OUT
       console.log('Backend save successful! Response:', result);
       console.log('Graph ID from backend:', result.id);
+      */
 
       // Show only one success message after saving
       if (!urlParams.return_url) {
@@ -2271,28 +2287,36 @@ const GraphCapture = () => {
 
       const graphGroupId = buildGraphGroupId(uploadedImage || '');
       const graphImageUrl = uploadedImage || '';
+      /* COMMENTED OUT
       console.log('Local save successful, calling sendToCompanyDatabase...');
+      */
       const companyResult = await sendToCompanyDatabase(graphImageUrl, result.id, allowRedirect);
       const companyGraphId = companyResult?.graphId ?? null;
       const companyDetailId = companyResult?.detailId ?? null;
       const companyIdentifier = companyResult?.identifier ?? '';
+      /* COMMENTED OUT
       console.log('sendToCompanyDatabase returned:', {
         graphId: companyGraphId,
         detailId: companyDetailId,
         identifier: companyIdentifier,
       });
+      */
 
       // Re-fetch from company API to get the real detail ID for the newly created curve
       let realDetailId = '';
       if (companyGraphId) {
         try {
+          /* COMMENTED OUT
           console.log('[RE-FETCH] Fetching details for graph_id:', companyGraphId);
+          */
           const refetchResp = await fetch(
             `https://www.discoveree.io/graph_capture_api.php?graph_id=${encodeURIComponent(companyGraphId)}`
           );
           if (refetchResp.ok) {
             const refetchResult = await refetchResp.json();
+            /* COMMENTED OUT
             console.log('[RE-FETCH] Full API response:', refetchResult);
+            */
             
             // Company API can return details in different structures
             let refetchDetails = [];
@@ -2305,6 +2329,7 @@ const GraphCapture = () => {
               refetchDetails = Object.values(refetchResult.details);
             }
             
+            /* COMMENTED OUT
             console.log('[RE-FETCH] Parsed details array:', {
               totalDetails: refetchDetails.length,
               details: refetchDetails.map((d, idx) => ({ 
@@ -2314,16 +2339,19 @@ const GraphCapture = () => {
                 xy: d?.xy ? d.xy.substring(0, 50) + '...' : 'no xy'
               })),
             });
+            */
             
             if (refetchDetails.length > 0) {
               // Try to match by XY data first
               const savedPoints = payload?.data_points || [];
               const savedXyStr = savedPoints.map((p) => `{x:${p.x_value},y:${p.y_value}}`).join(',');
               
+              /* COMMENTED OUT
               console.log('[RE-FETCH] Attempting XY match with:', {
                 pointCount: savedPoints.length,
                 xyLength: savedXyStr.length,
               });
+              */
               
               let matchedDetail = refetchDetails.find((d) => {
                 if (!savedXyStr || !d?.xy) return false;
@@ -2331,7 +2359,9 @@ const GraphCapture = () => {
                 const normalizedApiXy = d.xy.replace(/\s/g, '').toLowerCase();
                 const matches = normalizedSavedXy === normalizedApiXy;
                 if (matches) {
+                  /* COMMENTED OUT
                   console.log('[RE-FETCH] XY MATCH FOUND for detail:', d?.id);
+                  */
                 }
                 return matches;
               });
@@ -2339,35 +2369,49 @@ const GraphCapture = () => {
               // If no XY match, use the LAST detail (most recently added)
               if (!matchedDetail && refetchDetails.length > 0) {
                 matchedDetail = refetchDetails[refetchDetails.length - 1];
+                /* COMMENTED OUT
                 console.log('[RE-FETCH] No XY match, using last (newest) detail:', {
                   id: matchedDetail?.id,
                   curve_title: matchedDetail?.curve_title,
                 });
+                */
               }
               
               // Extract the detail_id
               if (matchedDetail && matchedDetail.id) {
                 realDetailId = String(matchedDetail.id);
+                /* COMMENTED OUT
                 console.log('[RE-FETCH] ✓ Successfully extracted detail_id:', realDetailId);
+                */
               } else {
+                /* COMMENTED OUT
                 console.warn('[RE-FETCH] Matched detail has no id field', {
                   matchedDetail,
                   keys: matchedDetail ? Object.keys(matchedDetail) : 'null',
                 });
+                */
               }
             } else {
+              /* COMMENTED OUT
               console.warn('[RE-FETCH] No details returned from API');
+              */
             }
           } else {
+            /* COMMENTED OUT
             console.warn('[RE-FETCH] API returned non-OK status:', refetchResp.status);
+            */
           }
         } catch (refetchErr) {
+          /* COMMENTED OUT
           console.error('[RE-FETCH] Error fetching details:', refetchErr.message);
+          */
         }
       }
       
       if (!realDetailId) {
+        /* COMMENTED OUT
         console.warn('[DETAIL_ID] Could not extract detail_id from Company API. Will store empty value.');
+        */
       }
 
       const savedCurve = {
@@ -2389,9 +2433,11 @@ const GraphCapture = () => {
         graphGroupId,
         graphImageUrl,
       };
+      /* COMMENTED OUT
       console.log('Saving curve with config:', savedCurve.config);
       console.log('xUnitPrefix:', savedCurve.config.xUnitPrefix);
       console.log('yUnitPrefix:', savedCurve.config.yUnitPrefix);
+      */
       
       // CRITICAL: Validate that this curve has a unique detail_id
       const duplicateDetailId = savedCurves.some(curve => curve.detailId && curve.detailId === savedCurve.detailId);
