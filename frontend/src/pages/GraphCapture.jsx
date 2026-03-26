@@ -3421,7 +3421,7 @@ const GraphCapture = () => {
                                 Points: {curve.points?.length ?? curve.data_points?.length ?? 0}
                               </div>
                               <div className="text-xs mb-2 text-gray-700">
-                                X unit: {curve.config?.xUnitPrefix || curve.x_unit || '-'} | Y unit: {curve.config?.yUnitPrefix || curve.y_unit || '-'}<br />
+                                X unit: {getUnitLabel(curve.config?.xUnitPrefix || curve.x_unit) || '-'} | Y unit: {getUnitLabel(curve.config?.yUnitPrefix || curve.y_unit) || '-'}<br />
                                 X scale: {curve.config?.xScale || curve.x_scale || '-'} | Y scale: {curve.config?.yScale || curve.y_scale || '-'}
                               </div>
                               {(() => {
