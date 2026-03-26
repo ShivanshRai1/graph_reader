@@ -3770,8 +3770,6 @@ const GraphCapture = () => {
             {(() => {
               const cfg = normalizeCurveConfig(selectedCurve);
               const bounds = resolveAxisBoundsWithFallback([selectedCurve]);
-              const xUnitDisplay = formatAxisUnitCompact(cfg.xUnit, cfg.xLabel);
-              const yUnitDisplay = formatAxisUnitCompact(cfg.yUnit, cfg.yLabel);
               return (
                 <div style={{ fontSize: 12, color: '#444', background: '#f5f5f5', borderRadius: 5, padding: '8px 12px', marginBottom: 8, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px 24px' }}>
                   {cfg.graphTitle && (
@@ -3792,8 +3790,8 @@ const GraphCapture = () => {
                   <div><span style={{ fontWeight: 600 }}>Y Scale:</span> {cfg.yScale || '—'}</div>
                   {cfg.xLabel && <div><span style={{ fontWeight: 600 }}>X Title:</span> {cfg.xLabel}</div>}
                   {cfg.yLabel && <div><span style={{ fontWeight: 600 }}>Y Title:</span> {cfg.yLabel}</div>}
-                  <div><span style={{ fontWeight: 600 }}>X Unit:</span> {xUnitDisplay || '—'}</div>
-                  <div><span style={{ fontWeight: 600 }}>Y Unit:</span> {yUnitDisplay || '—'}</div>
+                  <div><span style={{ fontWeight: 600 }}>X Unit:</span> {cfg.xUnit || '—'}</div>
+                  <div><span style={{ fontWeight: 600 }}>Y Unit:</span> {cfg.yUnit || '—'}</div>
                   {(() => {
                     const symbolEntries = getCurveSymbolMetadataEntries(selectedCurve);
                     if (symbolEntries.length === 0) return null;
@@ -3956,8 +3954,6 @@ const GraphCapture = () => {
             {(() => {
               const cfg = normalizeCurveConfig(selectedGroup.curves[0]);
               const bounds = resolveAxisBoundsWithFallback(selectedGroup.curves);
-              const xUnitDisplay = formatAxisUnitCompact(cfg.xUnit, cfg.xLabel);
-              const yUnitDisplay = formatAxisUnitCompact(cfg.yUnit, cfg.yLabel);
               return (
                 <div style={{ fontSize: 12, color: '#444', background: '#f5f5f5', borderRadius: 5, padding: '8px 12px', marginBottom: 8, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px 24px' }}>
                   {cfg.graphTitle && (
@@ -3979,8 +3975,8 @@ const GraphCapture = () => {
                   <div><span style={{ fontWeight: 600 }}>Y Scale:</span> {cfg.yScale || '—'}</div>
                   {cfg.xLabel && <div><span style={{ fontWeight: 600 }}>X Title:</span> {cfg.xLabel}</div>}
                   {cfg.yLabel && <div><span style={{ fontWeight: 600 }}>Y Title:</span> {cfg.yLabel}</div>}
-                  <div><span style={{ fontWeight: 600 }}>X Unit:</span> {xUnitDisplay || '—'}</div>
-                  <div><span style={{ fontWeight: 600 }}>Y Unit:</span> {yUnitDisplay || '—'}</div>
+                  <div><span style={{ fontWeight: 600 }}>X Unit:</span> {cfg.xUnit || '—'}</div>
+                  <div><span style={{ fontWeight: 600 }}>Y Unit:</span> {cfg.yUnit || '—'}</div>
                   {(() => {
                     const allEntries = selectedGroup.curves.flatMap((curve, curveIndex) =>
                       getCurveSymbolMetadataEntries(curve).map((entry) => ({
