@@ -3840,8 +3840,8 @@ const GraphCapture = () => {
                     padding: '4px 10px',
                     fontSize: 12,
                     fontWeight: 600,
-                    background: previewSortByX ? '#ffffff' : '#1d4ed8',
-                    color: previewSortByX ? '#1e40af' : '#ffffff',
+                    background: previewSortByX ? '#475569' : '#1d4ed8',
+                    color: previewSortByX ? '#ffffff' : '#fde047',
                     cursor: 'pointer',
                   }}
                 >
@@ -3852,12 +3852,12 @@ const GraphCapture = () => {
                   onClick={() => setPreviewSortByX(true)}
                   style={{
                     border: 'none',
-                    borderLeft: '1px solid #cbd5e1',
+                    borderLeft: '1px solid #94a3b8',
                     padding: '4px 10px',
                     fontSize: 12,
                     fontWeight: 600,
-                    background: previewSortByX ? '#1d4ed8' : '#ffffff',
-                    color: previewSortByX ? '#ffffff' : '#1e40af',
+                    background: previewSortByX ? '#1d4ed8' : '#475569',
+                    color: previewSortByX ? '#fde047' : '#ffffff',
                     cursor: 'pointer',
                   }}
                 >
@@ -4045,8 +4045,8 @@ const GraphCapture = () => {
                     padding: '4px 10px',
                     fontSize: 12,
                     fontWeight: 600,
-                    background: previewSortByX ? '#ffffff' : '#1d4ed8',
-                    color: previewSortByX ? '#1e40af' : '#ffffff',
+                    background: previewSortByX ? '#475569' : '#1d4ed8',
+                    color: previewSortByX ? '#ffffff' : '#fde047',
                     cursor: 'pointer',
                   }}
                 >
@@ -4057,12 +4057,12 @@ const GraphCapture = () => {
                   onClick={() => setPreviewSortByX(true)}
                   style={{
                     border: 'none',
-                    borderLeft: '1px solid #cbd5e1',
+                    borderLeft: '1px solid #94a3b8',
                     padding: '4px 10px',
                     fontSize: 12,
                     fontWeight: 600,
-                    background: previewSortByX ? '#1d4ed8' : '#ffffff',
-                    color: previewSortByX ? '#ffffff' : '#1e40af',
+                    background: previewSortByX ? '#1d4ed8' : '#475569',
+                    color: previewSortByX ? '#fde047' : '#ffffff',
                     cursor: 'pointer',
                   }}
                 >

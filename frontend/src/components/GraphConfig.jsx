@@ -496,11 +496,9 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             </select>
           </label>
           
-          {graphConfig.yScale === 'Logarithmic' && (
-            <div className="block mb-3 p-2 bg-blue-50 border border-blue-300 rounded text-xs text-blue-700">
-              Enter either exponent or number value
-            </div>
-          )}
+          <div className="block mb-3 p-2 bg-blue-50 border border-blue-300 rounded text-xs text-blue-700" style={{ visibility: graphConfig.yScale === 'Logarithmic' ? 'visible' : 'hidden' }}>
+            Enter either exponent or number value
+          </div>
           
           {graphConfig.yScale === 'Logarithmic' ? (
             <>
@@ -561,11 +559,9 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             </select>
           </label>
           
-          {graphConfig.xScale === 'Logarithmic' && (
-            <div className="block mb-3 p-2 bg-blue-50 border border-blue-300 rounded text-xs text-blue-700">
-              Enter either exponent or number value
-            </div>
-          )}
+          <div className="block mb-3 p-2 bg-blue-50 border border-blue-300 rounded text-xs text-blue-700" style={{ visibility: graphConfig.xScale === 'Logarithmic' ? 'visible' : 'hidden' }}>
+            Enter either exponent or number value
+          </div>
           
           {graphConfig.xScale === 'Logarithmic' ? (
             <>

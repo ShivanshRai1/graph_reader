@@ -891,17 +891,17 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
           </button>
           {showFixPoints && (
             <div className="absolute left-0 top-full mt-3 z-10 min-w-max">
-              <div className="inline-flex rounded border border-blue-300 overflow-hidden text-xs font-semibold">
+              <div className="inline-flex rounded border border-blue-400 overflow-hidden text-xs font-semibold">
                 <button
                   type="button"
-                  className={`px-2 py-1 ${connectSortByX ? 'bg-white text-blue-800' : 'bg-blue-700 text-white'}`}
+                  className={`px-2 py-1 ${connectSortByX ? 'bg-slate-600 text-white' : 'bg-blue-700 text-yellow-300'}`}
                   onClick={() => setConnectSortByX(false)}
                 >
                   Capture Order
                 </button>
                 <button
                   type="button"
-                  className={`px-2 py-1 border-l border-blue-300 ${connectSortByX ? 'bg-blue-700 text-white' : 'bg-white text-blue-800'}`}
+                  className={`px-2 py-1 border-l border-blue-400 ${connectSortByX ? 'bg-blue-700 text-yellow-300' : 'bg-slate-600 text-white'}`}
                   onClick={() => setConnectSortByX(true)}
                 >
                   X-Sorted
