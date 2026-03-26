@@ -3842,20 +3842,8 @@ const GraphCapture = () => {
             <table className="mt-2 w-full text-xs border" style={{ borderColor: 'var(--color-border)', marginTop: 12 }}>
               <thead>
                 <tr style={{ backgroundColor: '#222', color: '#fff' }}>
-                  <th className="px-2 py-1 border" style={{ borderColor: 'var(--color-border)', color: '#fff' }}>
-                    {(() => {
-                      const cfg = normalizeCurveConfig(selectedCurve);
-                      const unit = formatAxisUnitCompact(cfg.xUnit, cfg.xLabel);
-                      return formatAxisHeaderWithUnit('X', cfg.xLabel, unit);
-                    })()}
-                  </th>
-                  <th className="px-2 py-1 border" style={{ borderColor: 'var(--color-border)', color: '#fff' }}>
-                    {(() => {
-                      const cfg = normalizeCurveConfig(selectedCurve);
-                      const unit = formatAxisUnitCompact(cfg.yUnit, cfg.yLabel);
-                      return formatAxisHeaderWithUnit('Y', cfg.yLabel, unit);
-                    })()}
-                  </th>
+                  <th className="px-2 py-1 border" style={{ borderColor: 'var(--color-border)', color: '#fff' }}>X</th>
+                  <th className="px-2 py-1 border" style={{ borderColor: 'var(--color-border)', color: '#fff' }}>Y</th>
                 </tr>
               </thead>
               <tbody>
