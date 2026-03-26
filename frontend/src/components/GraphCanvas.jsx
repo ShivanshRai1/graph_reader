@@ -894,14 +894,14 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
               <div className="inline-flex rounded border border-blue-300 overflow-hidden text-xs font-semibold">
                 <button
                   type="button"
-                  className={`px-2 py-1 ${connectSortByX ? 'bg-white text-blue-900' : 'bg-blue-200 text-blue-900'}`}
+                  className={`px-2 py-1 ${connectSortByX ? 'bg-white text-blue-800' : 'bg-blue-700 text-white'}`}
                   onClick={() => setConnectSortByX(false)}
                 >
                   Capture Order
                 </button>
                 <button
                   type="button"
-                  className={`px-2 py-1 border-l border-blue-300 ${connectSortByX ? 'bg-blue-200 text-blue-900' : 'bg-white text-blue-900'}`}
+                  className={`px-2 py-1 border-l border-blue-300 ${connectSortByX ? 'bg-blue-700 text-white' : 'bg-white text-blue-800'}`}
                   onClick={() => setConnectSortByX(true)}
                 >
                   X-Sorted

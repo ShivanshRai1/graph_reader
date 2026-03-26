@@ -3840,8 +3840,8 @@ const GraphCapture = () => {
                     padding: '4px 10px',
                     fontSize: 12,
                     fontWeight: 600,
-                    background: previewSortByX ? '#ffffff' : '#e2e8f0',
-                    color: '#1f2937',
+                    background: previewSortByX ? '#ffffff' : '#1d4ed8',
+                    color: previewSortByX ? '#1e40af' : '#ffffff',
                     cursor: 'pointer',
                   }}
                 >
@@ -3856,8 +3856,8 @@ const GraphCapture = () => {
                     padding: '4px 10px',
                     fontSize: 12,
                     fontWeight: 600,
-                    background: previewSortByX ? '#e2e8f0' : '#ffffff',
-                    color: '#1f2937',
+                    background: previewSortByX ? '#1d4ed8' : '#ffffff',
+                    color: previewSortByX ? '#ffffff' : '#1e40af',
                     cursor: 'pointer',
                   }}
                 >
@@ -4045,8 +4045,8 @@ const GraphCapture = () => {
                     padding: '4px 10px',
                     fontSize: 12,
                     fontWeight: 600,
-                    background: previewSortByX ? '#ffffff' : '#e2e8f0',
-                    color: '#1f2937',
+                    background: previewSortByX ? '#ffffff' : '#1d4ed8',
+                    color: previewSortByX ? '#1e40af' : '#ffffff',
                     cursor: 'pointer',
                   }}
                 >
@@ -4061,8 +4061,8 @@ const GraphCapture = () => {
                     padding: '4px 10px',
                     fontSize: 12,
                     fontWeight: 600,
-                    background: previewSortByX ? '#e2e8f0' : '#ffffff',
-                    color: '#1f2937',
+                    background: previewSortByX ? '#1d4ed8' : '#ffffff',
+                    color: previewSortByX ? '#ffffff' : '#1e40af',
                     cursor: 'pointer',
                   }}
                 >
