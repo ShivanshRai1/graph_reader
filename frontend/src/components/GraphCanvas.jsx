@@ -15,6 +15,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   const [showMagnifier, setShowMagnifier] = useState(false);
   const [magnifierPos, setMagnifierPos] = useState({ x: 0, y: 0 });
   const [showFixPoints, setShowFixPoints] = useState(false);
+  const [connectSortByX, setConnectSortByX] = useState(false);
   const [dragDistance, setDragDistance] = useState(0);
   const [previewMousePos, setPreviewMousePos] = useState({ x: null, y: null });
   const imageRef = useRef(null);
@@ -129,7 +130,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     drawSelection(ctx);
     drawDataPoints(ctx);
     if (showFixPoints) drawFixPoints(ctx);
-  }, [graphArea, dataPoints, showFixPoints, hoveredHandle, resizeMode, previewMousePos]);
+  }, [graphArea, dataPoints, showFixPoints, hoveredHandle, resizeMode, previewMousePos, connectSortByX]);
 
   // Set box to transparent when points are captured (manually or imported)
   useEffect(() => {
@@ -253,25 +254,34 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     const validPoints = dataPoints.filter(p => typeof p.canvasX === 'number' && typeof p.canvasY === 'number' && !isNaN(p.canvasX) && !isNaN(p.canvasY));
     if (validPoints.length < 2) return;
 
+    const orderedPoints = connectSortByX
+      ? validPoints
+        .map((point, index) => ({ point, index }))
+        .sort((a, b) => {
+          if (a.point.canvasX !== b.point.canvasX) return a.point.canvasX - b.point.canvasX;
+          return a.index - b.index;
+        })
+        .map((entry) => entry.point)
+      : validPoints;
+
     ctx.save();
     ctx.strokeStyle = '#1976d2';
     ctx.lineWidth = 4;
     ctx.beginPath();
-    // Draw in capture order to preserve manual tracing intent in steep/vertical regions.
-    ctx.moveTo(validPoints[0].canvasX, validPoints[0].canvasY);
-    for (let i = 1; i < validPoints.length; i++) {
-      ctx.lineTo(validPoints[i].canvasX, validPoints[i].canvasY);
+    ctx.moveTo(orderedPoints[0].canvasX, orderedPoints[0].canvasY);
+    for (let i = 1; i < orderedPoints.length; i++) {
+      ctx.lineTo(orderedPoints[i].canvasX, orderedPoints[i].canvasY);
     }
     ctx.stroke();
 
     // Draw dashed preview line from last point to current mouse position
-    if (validPoints.length > 0 && previewMousePos.x !== null && previewMousePos.y !== null) {
+    if (orderedPoints.length > 0 && previewMousePos.x !== null && previewMousePos.y !== null) {
       ctx.strokeStyle = '#FFD700';
       ctx.lineWidth = 4;
       ctx.setLineDash([5, 5]); // 5px dash, 5px gap
       ctx.globalAlpha = 0.9;
       ctx.beginPath();
-      ctx.moveTo(validPoints[validPoints.length - 1].canvasX, validPoints[validPoints.length - 1].canvasY);
+      ctx.moveTo(orderedPoints[orderedPoints.length - 1].canvasX, orderedPoints[orderedPoints.length - 1].canvasY);
       ctx.lineTo(previewMousePos.x, previewMousePos.y);
       ctx.stroke();
       ctx.setLineDash([]); // Clear dash pattern
@@ -880,8 +890,28 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
             {showFixPoints ? 'Hide points' : 'Connect points'}
           </button>
           {showFixPoints && (
-            <div className="absolute left-0 top-full mt-3 text-xs font-bold text-blue-800 bg-blue-100 border border-blue-300 rounded px-2 py-1 whitespace-nowrap z-10">
-              Points are connected in capture time order (first click to last click).
+            <div className="absolute left-0 top-full mt-3 z-10 min-w-max">
+              <div className="inline-flex rounded border border-blue-300 overflow-hidden text-xs font-semibold">
+                <button
+                  type="button"
+                  className={`px-2 py-1 ${connectSortByX ? 'bg-white text-blue-900' : 'bg-blue-200 text-blue-900'}`}
+                  onClick={() => setConnectSortByX(false)}
+                >
+                  Capture Order
+                </button>
+                <button
+                  type="button"
+                  className={`px-2 py-1 border-l border-blue-300 ${connectSortByX ? 'bg-blue-200 text-blue-900' : 'bg-white text-blue-900'}`}
+                  onClick={() => setConnectSortByX(true)}
+                >
+                  X-Sorted
+                </button>
+              </div>
+              <div className="mt-2 text-xs font-bold text-blue-800 bg-blue-100 border border-blue-300 rounded px-2 py-1 whitespace-nowrap">
+                {connectSortByX
+                  ? 'Points are connected after sorting by X value (left to right).'
+                  : 'Points are connected in capture time order (first click to last click).'}
+              </div>
             </div>
           )}
         </div>

@@ -68,7 +68,7 @@ const buildTicks = (min, max, count) => {
   return Array.from({ length: count }, (_, idx) => min + step * idx);
 };
 
-const SavedGraphPreview = ({ points, config, width = 520, height = 220, animate = true }) => {
+const SavedGraphPreview = ({ points, config, width = 520, height = 220, animate = true, sortByX = false }) => {
   const polylineRef = useRef(null);
   const [pathLength, setPathLength] = useState(0);
   const [hoveredPoint, setHoveredPoint] = useState(null);
@@ -76,12 +76,21 @@ const SavedGraphPreview = ({ points, config, width = 520, height = 220, animate 
   const parsedPoints = useMemo(() => {
     if (!Array.isArray(points)) return [];
     return points
-      .map((point) => ({
+      .map((point, index) => ({
         x: Number(point.x_value ?? point.x),
         y: Number(point.y_value ?? point.y),
+        sourceIndex: index,
       }))
       .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
   }, [points]);
+
+  const displayPoints = useMemo(() => {
+    if (!sortByX) return parsedPoints;
+    return [...parsedPoints].sort((a, b) => {
+      if (a.x !== b.x) return a.x - b.x;
+      return a.sourceIndex - b.sourceIndex;
+    });
+  }, [parsedPoints, sortByX]);
 
   const xScale = config?.xScale ?? config?.x_scale ?? 'Linear';
   const yScale = config?.yScale ?? config?.y_scale ?? 'Linear';
@@ -102,14 +111,14 @@ const SavedGraphPreview = ({ points, config, width = 520, height = 220, animate 
   );
 
   const plotData = useMemo(() => {
-    if (parsedPoints.length === 0) {
+    if (displayPoints.length === 0) {
       return { plottedPoints: [], xMin: 0, xMax: 1, yMin: 0, yMax: 1 };
     }
 
     const toPlotX = (value) => toPlotValue(value, xScale, logModeX);
     const toPlotY = (value) => toPlotValue(value, yScale, logModeY);
 
-    const plottedPoints = parsedPoints.map((point) => ({
+    const plottedPoints = displayPoints.map((point) => ({
       x: point.x,
       y: point.y,
       plotX: toPlotX(point.x),
@@ -138,7 +147,7 @@ const SavedGraphPreview = ({ points, config, width = 520, height = 220, animate 
       yMin: yMin === yMax ? yMin - 1 : yMin,
       yMax: yMin === yMax ? yMax + 1 : yMax,
     };
-  }, [parsedPoints, config, xScale, yScale, logModeX, logModeY]);
+  }, [displayPoints, config, xScale, yScale, logModeX, logModeY]);
 
   const { plottedPoints, xMin, xMax, yMin, yMax } = plotData;
   const xAxisTitle = (config?.xLabel ?? config?.xTitle ?? config?.x_label ?? config?.x_title ?? '').toString().trim();

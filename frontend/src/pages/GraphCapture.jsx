@@ -465,6 +465,7 @@ const GraphCapture = () => {
   const [isLoadingSavedCurve, setIsLoadingSavedCurve] = useState(false);
   const [savedCurvesSource, setSavedCurvesSource] = useState('company');
   const [showSavedPanel, setShowSavedPanel] = useState(false);
+  const [previewSortByX, setPreviewSortByX] = useState(false);
   const [isUpdatingCurveId, setIsUpdatingCurveId] = useState('');
   const [isRemovingCurveId, setIsRemovingCurveId] = useState('');
   const [isRemovingAllGraphs, setIsRemovingAllGraphs] = useState(false);
@@ -3828,6 +3829,42 @@ const GraphCapture = () => {
             >
               View graph in new tab
             </a>
+            <div style={{ marginTop: 12, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 12, color: '#374151', fontWeight: 600 }}>Point order:</span>
+              <div style={{ display: 'inline-flex', border: '1px solid #cbd5e1', borderRadius: 6, overflow: 'hidden' }}>
+                <button
+                  type="button"
+                  onClick={() => setPreviewSortByX(false)}
+                  style={{
+                    border: 'none',
+                    padding: '4px 10px',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    background: previewSortByX ? '#ffffff' : '#e2e8f0',
+                    color: '#1f2937',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Capture Order
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewSortByX(true)}
+                  style={{
+                    border: 'none',
+                    borderLeft: '1px solid #cbd5e1',
+                    padding: '4px 10px',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    background: previewSortByX ? '#e2e8f0' : '#ffffff',
+                    color: '#1f2937',
+                    cursor: 'pointer',
+                  }}
+                >
+                  X-Sorted
+                </button>
+              </div>
+            </div>
             <div style={{ marginTop: 12 }}>
               <SavedGraphPreview
                 points={selectedCurvePoints}
@@ -3839,6 +3876,7 @@ const GraphCapture = () => {
                 width={600}
                 height={240}
                 animate
+                sortByX={previewSortByX}
               />
             </div>
             <table className="mt-2 w-full text-xs border" style={{ borderColor: 'var(--color-border)', marginTop: 12 }}>
@@ -3996,6 +4034,42 @@ const GraphCapture = () => {
                 </div>
               );
             })()}
+            <div style={{ marginTop: 12, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 12, color: '#374151', fontWeight: 600 }}>Point order:</span>
+              <div style={{ display: 'inline-flex', border: '1px solid #cbd5e1', borderRadius: 6, overflow: 'hidden' }}>
+                <button
+                  type="button"
+                  onClick={() => setPreviewSortByX(false)}
+                  style={{
+                    border: 'none',
+                    padding: '4px 10px',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    background: previewSortByX ? '#ffffff' : '#e2e8f0',
+                    color: '#1f2937',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Capture Order
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewSortByX(true)}
+                  style={{
+                    border: 'none',
+                    borderLeft: '1px solid #cbd5e1',
+                    padding: '4px 10px',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    background: previewSortByX ? '#e2e8f0' : '#ffffff',
+                    color: '#1f2937',
+                    cursor: 'pointer',
+                  }}
+                >
+                  X-Sorted
+                </button>
+              </div>
+            </div>
             <div style={{ marginTop: 12 }}>
               {selectedGroup.curves.length === 1 ? (
                 <SavedGraphPreview
@@ -4008,6 +4082,7 @@ const GraphCapture = () => {
                   width={700}
                   height={280}
                   animate
+                  sortByX={previewSortByX}
                 />
               ) : (
                 <SavedGraphCombinedPreview
@@ -4019,6 +4094,7 @@ const GraphCapture = () => {
                   }}
                   width={700}
                   height={280}
+                  sortByX={previewSortByX}
                 />
               )}
             </div>

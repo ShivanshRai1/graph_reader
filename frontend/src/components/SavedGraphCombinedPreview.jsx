@@ -63,7 +63,7 @@ const buildTicks = (min, max, count) => {
 
 const palette = ['#2563eb', '#16a34a', '#f97316', '#e11d48', '#0ea5e9', '#8b5cf6', '#14b8a6'];
 
-const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260 }) => {
+const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260, sortByX = false }) => {
   const [hoveredPoint, setHoveredPoint] = useState(null);
   const polylineRefs = useRef([]);
   const [pathLengths, setPathLengths] = useState([]);
@@ -95,11 +95,19 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260 }
           ? curve.data_points
           : [];
       const parsedPoints = points
-        .map((point) => ({
+        .map((point, index) => ({
           x: Number(point.x_value ?? point.x),
           y: Number(point.y_value ?? point.y),
+          sourceIndex: index,
         }))
         .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
+
+      const displayPoints = sortByX
+        ? [...parsedPoints].sort((a, b) => {
+          if (a.x !== b.x) return a.x - b.x;
+          return a.sourceIndex - b.sourceIndex;
+        })
+        : parsedPoints;
 
       const curveConfig = curve?.config || {};
       const curveLogModeX = inferLogMode(
@@ -120,7 +128,7 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260 }
       const toPlotX = (value) => toPlotValue(value, xScale, curveLogModeX);
       const toPlotY = (value) => toPlotValue(value, yScale, curveLogModeY);
 
-      const plottedPoints = parsedPoints.map((point) => ({
+      const plottedPoints = displayPoints.map((point) => ({
         x: point.x,
         y: point.y,
         plotX: toPlotX(point.x),
@@ -136,7 +144,7 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260 }
         points: plottedPoints,
       };
     });
-  }, [safeCurves, xScale, yScale, baseLogModeX, baseLogModeY, baseConfig]);
+  }, [safeCurves, xScale, yScale, baseLogModeX, baseLogModeY, baseConfig, sortByX]);
 
   const plotBounds = useMemo(() => {
     const allPoints = parsedCurves.flatMap((curve) => curve.points);
