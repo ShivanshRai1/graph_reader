@@ -109,8 +109,7 @@ const SavedGraphPreview = ({ points, config, width = 520, height = 220, animate 
     const toPlotX = (value) => toPlotValue(value, xScale, logModeX);
     const toPlotY = (value) => toPlotValue(value, yScale, logModeY);
 
-    const sortedPoints = [...parsedPoints].sort((a, b) => a.x - b.x);
-    const plottedPoints = sortedPoints.map((point) => ({
+    const plottedPoints = parsedPoints.map((point) => ({
       x: point.x,
       y: point.y,
       plotX: toPlotX(point.x),
