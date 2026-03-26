@@ -787,6 +787,12 @@ const GraphCapture = () => {
     { value: '1e12', label: 'Tera (T) = 1e12' },
   ];
 
+  const getUnitLabel = (unitValue) => {
+    if (!unitValue) return '';
+    const option = unitOptions.find((opt) => opt.value === String(unitValue));
+    return option ? option.label : String(unitValue);
+  };
+
   const normalizeCurveSymbolValues = (curve) => {
     if (curve?.symbolValues && typeof curve.symbolValues === 'object') {
       return { ...curve.symbolValues };
@@ -3963,8 +3969,8 @@ const GraphCapture = () => {
                   <div><span style={{ fontWeight: 600 }}>Y Scale:</span> {cfg.yScale || '—'}</div>
                   {cfg.xLabel && <div><span style={{ fontWeight: 600 }}>X Title:</span> {cfg.xLabel}</div>}
                   {cfg.yLabel && <div><span style={{ fontWeight: 600 }}>Y Title:</span> {cfg.yLabel}</div>}
-                  <div><span style={{ fontWeight: 600 }}>X Unit:</span> {cfg.xUnit || '—'}</div>
-                  <div><span style={{ fontWeight: 600 }}>Y Unit:</span> {cfg.yUnit || '—'}</div>
+                  <div><span style={{ fontWeight: 600 }}>X Unit:</span> {getUnitLabel(cfg.xUnit) || '—'}</div>
+                  <div><span style={{ fontWeight: 600 }}>Y Unit:</span> {getUnitLabel(cfg.yUnit) || '—'}</div>
                   {(() => {
                     const allEntries = selectedGroup.curves.flatMap((curve, curveIndex) =>
                       getCurveSymbolMetadataEntries(curve).map((entry) => ({
