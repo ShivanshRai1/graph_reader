@@ -933,14 +933,8 @@ const GraphCapture = () => {
       temperature: curve.config?.temperature || curve.temperature || prev.temperature || '',
     }));
 
-    const loadedPoints = Array.isArray(curve.points)
-      ? curve.points.map((point) => ({
-          x: point.x_value ?? point.x,
-          y: point.y_value ?? point.y,
-          imported: true,
-        }))
-      : [];
-    replaceDataPoints(loadedPoints);
+    // Viewing a saved curve should not pollute capture state with old points.
+    clearDataPoints();
     setIsReadOnly(false);
 
     const curveSymbols = normalizeCurveSymbolValues(curve);
@@ -1006,6 +1000,7 @@ const GraphCapture = () => {
   const handleEditCurveCancel = () => {
     setEditingCurveId('');
     setEditCurveSymbolValues({});
+    clearDataPoints();
   };
 
   const getTctjValueFromSymbols = (symbols = {}, fallback = '') => {
@@ -3711,6 +3706,7 @@ const GraphCapture = () => {
             if (singleDragRef.current.wasDragged) { singleDragRef.current.wasDragged = false; return; }
             setSingleModalPos(null);
             setSelectedCurveId('');
+            clearDataPoints();
           }}
                     ref={singleModalRef}
         >
@@ -3746,7 +3742,7 @@ const GraphCapture = () => {
                 color: '#888',
                 cursor: 'pointer',
               }}
-              onClick={() => { setSingleModalPos(null); setSelectedCurveId(''); }}
+              onClick={() => { setSingleModalPos(null); setSelectedCurveId(''); clearDataPoints(); }}
               aria-label="Close"
             >
               ×
