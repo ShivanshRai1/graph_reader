@@ -3796,8 +3796,8 @@ const GraphCapture = () => {
                   <div><span style={{ fontWeight: 600 }}>Y Scale:</span> {cfg.yScale || '—'}</div>
                   {cfg.xLabel && <div><span style={{ fontWeight: 600 }}>X Title:</span> {cfg.xLabel}</div>}
                   {cfg.yLabel && <div><span style={{ fontWeight: 600 }}>Y Title:</span> {cfg.yLabel}</div>}
-                  <div><span style={{ fontWeight: 600 }}>X Unit:</span> {cfg.xUnit || '—'}</div>
-                  <div><span style={{ fontWeight: 600 }}>Y Unit:</span> {cfg.yUnit || '—'}</div>
+                  <div><span style={{ fontWeight: 600 }}>X Unit:</span> {getUnitLabel(cfg.xUnit) || '—'}</div>
+                  <div><span style={{ fontWeight: 600 }}>Y Unit:</span> {getUnitLabel(cfg.yUnit) || '—'}</div>
                   {(() => {
                     const symbolEntries = getCurveSymbolMetadataEntries(selectedCurve);
                     if (symbolEntries.length === 0) return null;
