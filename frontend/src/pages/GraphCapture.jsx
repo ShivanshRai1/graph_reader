@@ -1718,7 +1718,7 @@ const GraphCapture = () => {
       return;
     }
 
-    const confirmed = window.confirm(`Remove all graphs for graph_id ${activeGraphId || 'current selection'}?`);
+    const confirmed = window.confirm('Remove all graphs?');
     if (!confirmed) {
       return;
     }
@@ -1732,12 +1732,6 @@ const GraphCapture = () => {
       const removedIds = new Set(curvesToRemove.map((curve) => curve.id));
       setSavedCurves((prev) => prev.filter((curve) => !removedIds.has(curve.id)));
       clearGraphIdContext();
-
-      // Redirect to return_url if it exists
-      if (urlParams.return_url) {
-        // console.log('Redirecting to return_url:', urlParams.return_url);
-        window.location.href = urlParams.return_url;
-      }
     } catch (error) {
       console.error('Remove all API error:', error);
       alert(`Remove all failed: ${error.message}`);
@@ -3270,7 +3264,7 @@ const GraphCapture = () => {
       </header>
 
       <div className="flex flex-col gap-8">
-        <ImageUpload onImageLoaded={scrollToGraphWorkspace} />
+        <ImageUpload onImageLoaded={handleUserImageLoaded} />
         {(uploadedImage || urlParams.graph_id) && (
           <div ref={graphWorkspaceRef} className="flex flex-col lg:flex-row gap-8">
             <div className="w-full lg:w-2/5 flex flex-col gap-4">
