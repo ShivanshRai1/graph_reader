@@ -439,35 +439,6 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             disabled={isConfigLocked || isYTitleReadOnly}
           />
         </label>
-        {showTctj && (
-          <label className="block mb-3 font-medium text-gray-800">
-            <span className="block mb-1 text-sm text-gray-800">TC/TJ (Temperature):</span>
-            <div className="grid grid-cols-1 sm:grid-cols-[1fr_140px] gap-3">
-              <input
-                type="text"
-                inputMode="decimal"
-                value={temperatureValue}
-                onChange={(e) => handleTemperatureValueChange(e.target.value)}
-                disabled={isConfigLocked}
-                placeholder="Enter numeric temperature"
-                className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed"
-              />
-              <select
-                value={temperatureUnit}
-                onChange={(e) => handleTemperatureUnitChange(e.target.value)}
-                disabled={isConfigLocked}
-                className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                <option value="C">deg C</option>
-                <option value="F">F</option>
-                <option value="K">K</option>
-              </select>
-            </div>
-            <span className="block text-xs text-gray-500 mt-1">
-              If left empty, room temperature is assumed: 25 deg C. Stored in the database as deg C.
-            </span>
-          </label>
-        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6" style={{ opacity: (isAxisMappingConfirmed || isEditingCurve) ? 0.5 : 1, pointerEvents: (isAxisMappingConfirmed || isEditingCurve) ? 'none' : 'auto' }}>
@@ -597,6 +568,36 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
           )}
         </div>
       </div>
+
+      {showTctj && (
+        <label className="block mt-5 mb-3 font-medium text-gray-800">
+          <span className="block mb-1 text-sm text-gray-800">TC/TJ (Temperature):</span>
+          <div className="grid grid-cols-1 sm:grid-cols-[1fr_140px] gap-3">
+            <input
+              type="text"
+              inputMode="decimal"
+              value={temperatureValue}
+              onChange={(e) => handleTemperatureValueChange(e.target.value)}
+              disabled={isConfigLocked}
+              placeholder="Enter numeric temperature"
+              className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed"
+            />
+            <select
+              value={temperatureUnit}
+              onChange={(e) => handleTemperatureUnitChange(e.target.value)}
+              disabled={isConfigLocked}
+              className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              <option value="C">deg C</option>
+              <option value="F">F</option>
+              <option value="K">K</option>
+            </select>
+          </div>
+          <span className="block text-xs text-gray-500 mt-1">
+            If left empty, room temperature is assumed: 25 deg C. Stored in the database as deg C.
+          </span>
+        </label>
+      )}
 
       {children ? <div className="mt-4">{children}</div> : null}
 
