@@ -253,6 +253,19 @@ const hasImplicitTemperatureContext = (...values) => {
   return /(temperature|temp\b|tc\b|tj\b)/i.test(combined);
 };
 
+const isTemperatureSymbol = (...values) => {
+  const combined = values
+    .flat()
+    .filter(Boolean)
+    .map((value) => String(value))
+    .join(' ')
+    .toLowerCase();
+
+  if (!combined) return false;
+
+  return /(graph_tctj|df_tj|tctj|temperature|temp\b|tc\b|tj\b)/i.test(combined);
+};
+
 const resolveTemperatureForSave = (rawTemperature, shouldDefaultRoomTemperature) => {
   const parsedTemperature = parseTemperatureToCelsius(rawTemperature);
   if (parsedTemperature.celsiusText) {
@@ -769,12 +782,15 @@ const GraphCapture = () => {
   }, [savedCurves]);
   const selectedGroup = groupedCurves.find((group) => group.id === combinedGroupId);
   const selectedCurvePoints = selectedCurve?.points ?? selectedCurve?.data_points ?? [];
-  const shouldShowTemperatureInput = urlParams.tctj !== '0' && !hasImplicitTemperatureContext(
-    urlParams.x_label,
-    urlParams.y_label,
-    graphConfig.curveName,
-    urlParams.curve_title,
-  );
+  const hasTemperatureInOtherSymbols = isTemperatureSymbol(urlParams.other_symbols);
+  const shouldShowTemperatureInput =
+    (urlParams.tctj !== '0' || hasTemperatureInOtherSymbols) &&
+    !hasImplicitTemperatureContext(
+      urlParams.x_label,
+      urlParams.y_label,
+      graphConfig.curveName,
+      urlParams.curve_title,
+    );
 
   const unitOptions = [
     { value: '1e-12', label: 'pico (p) = 1e-12' },
@@ -815,6 +831,10 @@ const GraphCapture = () => {
     const rawLabel = symbolLabels[symbolKey] || symbolKey;
     return stripDfPrefixForDisplay(rawLabel);
   };
+
+  const visibleSymbolNames = (Array.isArray(symbolNames) ? symbolNames : []).filter(
+    (symbol) => !isTemperatureSymbol(symbol, getSymbolDisplayLabel(symbol))
+  );
 
   const getCurveSymbolMetadataEntries = (curve) => {
     const values = normalizeCurveSymbolValues(curve);
@@ -1823,22 +1843,39 @@ const GraphCapture = () => {
     const symbolNames = [];
     const initialSymbolValues = {};
     const labelMap = {}; // Map from symbol name to friendly label
+    let detectedTemperatureValue = searchParams.get('tctj') || '';
     
     symbolArray.forEach((symbolWithPotentialValue) => {
       if (symbolWithPotentialValue.includes('=')) {
         const [label, symbolValue] = symbolWithPotentialValue.split('=').map((s) => s.trim());
         const paramName = resolveSymbolParamName(label, searchParams);
+
+        if (isTemperatureSymbol(label, paramName)) {
+          if ((!detectedTemperatureValue || detectedTemperatureValue === '0') && symbolValue) {
+            detectedTemperatureValue = symbolValue;
+          }
+          return;
+        }
         
         symbolNames.push(paramName);
         initialSymbolValues[paramName] = symbolValue;
         labelMap[paramName] = label; // Store the friendly label for display
       } else {
         const paramName = resolveSymbolParamName(symbolWithPotentialValue, searchParams);
-        symbolNames.push(paramName);
-        initialSymbolValues[paramName] =
+        const symbolValue =
           searchParams.get(paramName) ||
           searchParams.get(`return_${paramName}`) ||
           '';
+
+        if (isTemperatureSymbol(symbolWithPotentialValue, paramName)) {
+          if ((!detectedTemperatureValue || detectedTemperatureValue === '0') && symbolValue) {
+            detectedTemperatureValue = symbolValue;
+          }
+          return;
+        }
+
+        symbolNames.push(paramName);
+        initialSymbolValues[paramName] = symbolValue;
         labelMap[paramName] = symbolWithPotentialValue;
       }
     });
@@ -1863,7 +1900,7 @@ const GraphCapture = () => {
     const manufacturer = searchParams.get('manufacturer') || searchParams.get('manf') || '';
     const curveTitle = searchParams.get('curve_title') || '';
     const graphTitle = searchParams.get('graph_title') || '';
-    const tctjValue = searchParams.get('tctj') || '';
+    const tctjValue = detectedTemperatureValue;
     const graphIdFromUrl =
       getLastNonEmptyQueryValue(searchParams, 'graph_id') ||
       getLastNonEmptyQueryValue(searchParams, 'return_graph_id') ||
@@ -3295,9 +3332,9 @@ const GraphCapture = () => {
                 }}
               >
                 {/* Dynamic Symbol Input Boxes - Only show if other_symb exists in URL */}
-                {symbolNames && symbolNames.length > 0 && (
+                {visibleSymbolNames.length > 0 && (
                   <div className="p-4 border rounded" style={{ backgroundColor: '#ffffff', borderColor: 'var(--color-border)' }}>
-                    {symbolNames.map((symbol) => {
+                    {visibleSymbolNames.map((symbol) => {
                       // Use the friendly label stored in symbolLabels map
                       const displayLabel = getSymbolDisplayLabel(symbol);
                       return (
@@ -3490,9 +3527,9 @@ const GraphCapture = () => {
                                   {(() => {
                                     const editableSymbolKeys = Array.from(
                                       new Set([
-                                        ...(Array.isArray(symbolNames) ? symbolNames : []),
+                                        ...visibleSymbolNames,
                                         ...Object.keys(editCurveSymbolValues || {}),
-                                      ].filter(Boolean))
+                                      ].filter((symbol) => symbol && !isTemperatureSymbol(symbol, getSymbolDisplayLabel(symbol))))
                                     );
 
                                     if (editableSymbolKeys.length === 0) {
