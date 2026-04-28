@@ -333,6 +333,10 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     }
 
     if (mode) {
+      // Prevent resizing if configuration is locked (after Final Check)
+      if (isAxisMappingConfirmed) {
+        return;
+      }
       // Store that a handle was clicked, but don't resize yet
       potentialResizeHandleRef.current = mode;
       clickedOnHandleRef.current = true;
@@ -355,7 +359,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     const y = (e.clientY - rect.top) * scaleY;
 
     // Check if we need to activate resize mode based on potential handle
-    if (!resizeMode && potentialResizeHandleRef.current && initialArea) {
+    if (!resizeMode && potentialResizeHandleRef.current && initialArea && !isAxisMappingConfirmed) {
       const dx = x - initialMouse.x;
       const dy = y - initialMouse.y;
       const moveDistance = Math.sqrt(dx * dx + dy * dy);
@@ -370,7 +374,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       }
     }
 
-    if (resizeMode && initialArea) {
+    if (resizeMode && initialArea && !isAxisMappingConfirmed) {
       const dx = x - initialMouse.x;
       const dy = y - initialMouse.y;
       const minSize = 20;
