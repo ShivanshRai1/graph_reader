@@ -3328,6 +3328,7 @@ const GraphCapture = () => {
                 onRetakeAxis={() => {
                   setIsAxisMappingConfirmed(false);
                   setFrozenGraphConfig(null);
+                  clearDataPoints();
                 }}
               >
                 {/* Dynamic Symbol Input Boxes - Only show if other_symb exists in URL */}
