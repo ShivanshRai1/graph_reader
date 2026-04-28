@@ -154,6 +154,47 @@ export const GraphProvider = ({ children }) => {
     return { canvasX, canvasY };
   };
 
+  useEffect(() => {
+    // Keep captured points' graph values synchronized with the current box/config.
+    // Imported points are defined by graph values, so we don't remap them here.
+    setDataPoints((prevPoints) => {
+      if (!Array.isArray(prevPoints) || prevPoints.length === 0) return prevPoints;
+
+      let changed = false;
+      const nextPoints = prevPoints.map((point) => {
+        if (point?.imported === true) return point;
+        if (!Number.isFinite(point?.canvasX) || !Number.isFinite(point?.canvasY)) return point;
+
+        const recalculated = convertCanvasToGraphCoordinates(point.canvasX, point.canvasY);
+        if (!Number.isFinite(recalculated.x) || !Number.isFinite(recalculated.y)) return point;
+
+        const sameX = Math.abs(Number(point.x) - recalculated.x) < 1e-9;
+        const sameY = Math.abs(Number(point.y) - recalculated.y) < 1e-9;
+        if (sameX && sameY) return point;
+
+        changed = true;
+        return {
+          ...point,
+          x: recalculated.x,
+          y: recalculated.y,
+        };
+      });
+
+      return changed ? nextPoints : prevPoints;
+    });
+  }, [
+    graphArea.x,
+    graphArea.y,
+    graphArea.width,
+    graphArea.height,
+    graphConfig.xMin,
+    graphConfig.xMax,
+    graphConfig.yMin,
+    graphConfig.yMax,
+    graphConfig.xScale,
+    graphConfig.yScale,
+  ]);
+
   const addDataPoint = (point, curveId = null) => {
     // Convert canvas coordinates to graph coordinates
     const graphCoords = convertCanvasToGraphCoordinates(point.canvasX, point.canvasY);

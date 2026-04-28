@@ -39,29 +39,13 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false }) => {
 
   // Recalculate point values based on current graphArea and graphConfig
   const getRecalculatedPoint = (point) => {
-    if (!graphArea || graphArea.width === 0 || graphArea.height === 0) {
+    if (!convertCanvasToGraphCoordinates) {
       return { x: point.x, y: point.y };
     }
-
-    // Get current min/max from graphConfig
-    const xMin = parseFloat(graphConfig.xMin);
-    const xMax = parseFloat(graphConfig.xMax);
-    const yMin = parseFloat(graphConfig.yMin);
-    const yMax = parseFloat(graphConfig.yMax);
-
-    if (!Number.isFinite(xMin) || !Number.isFinite(xMax) || !Number.isFinite(yMin) || !Number.isFinite(yMax)) {
+    if (!Number.isFinite(point?.canvasX) || !Number.isFinite(point?.canvasY)) {
       return { x: point.x, y: point.y };
     }
-
-    // Calculate ratios from canvas coordinates
-    const xRatio = (point.canvasX - graphArea.x) / graphArea.width;
-    const yRatio = (point.canvasY - graphArea.y) / graphArea.height;
-
-    // Linear interpolation for both axes
-    const graphX = xMin + xRatio * (xMax - xMin);
-    const graphY = yMax - yRatio * (yMax - yMin);
-
-    return { x: graphX, y: graphY };
+    return convertCanvasToGraphCoordinates(point.canvasX, point.canvasY);
   };
 
   const getExportMeta = () => {
