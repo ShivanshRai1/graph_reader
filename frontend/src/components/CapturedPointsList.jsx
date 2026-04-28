@@ -37,16 +37,8 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false }) => {
     return value.toFixed(6);
   };
 
-  // Recalculate point values based on current graphArea and graphConfig
-  const getRecalculatedPoint = (point) => {
-    if (!convertCanvasToGraphCoordinates) {
-      return { x: point.x, y: point.y };
-    }
-    if (!Number.isFinite(point?.canvasX) || !Number.isFinite(point?.canvasY)) {
-      return { x: point.x, y: point.y };
-    }
-    return convertCanvasToGraphCoordinates(point.canvasX, point.canvasY);
-  };
+  // Point x/y values are kept up-to-date by the useCallback+useEffect in GraphContext
+  const getRecalculatedPoint = (point) => ({ x: point.x, y: point.y });
 
   const getExportMeta = () => {
     const xMin = parseFloat(graphConfig.xMin);

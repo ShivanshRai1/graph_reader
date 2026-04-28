@@ -2,7 +2,7 @@ import { useRef, useState, useEffect } from 'react';
 import { useGraph } from '../context/GraphContext';
 
 const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', isAxisMappingConfirmed = false, hasReturnUrl = false }) => {
-  const { uploadedImage, graphArea, setGraphArea, dataPoints, addDataPoint, clearDataPoints, graphConfig, deleteDataPoint } = useGraph();
+  const { uploadedImage, graphArea, setGraphArea, dataPoints, addDataPoint, clearDataPoints, graphConfig, deleteDataPoint, convertGraphToCanvasCoordinates } = useGraph();
   const [showRedrawMsg, setShowRedrawMsg] = useState(false);
   const canvasRef = useRef(null);
   const magnifierRef = useRef(null);
@@ -221,11 +221,10 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     }
 
     dataPoints.forEach((point, index) => {
-      // Only draw if point has valid canvas coordinates
-      if (typeof point.canvasX !== 'number' || typeof point.canvasY !== 'number' || 
-          isNaN(point.canvasX) || isNaN(point.canvasY)) {
-        return;
-      }
+      // Use graph value -> canvas position so dots update when box is resized
+      if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) return;
+      const { canvasX: drawX, canvasY: drawY } = convertGraphToCanvasCoordinates(point.x, point.y);
+      if (!Number.isFinite(drawX) || !Number.isFinite(drawY)) return;
       
       const pointRadius = 2.5;
       
@@ -238,20 +237,26 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       ctx.strokeStyle = 'white';
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.arc(point.canvasX, point.canvasY, pointRadius, 0, 2 * Math.PI);
+      ctx.arc(drawX, drawY, pointRadius, 0, 2 * Math.PI);
       ctx.stroke();
       
       ctx.fillStyle = fillColor;
       ctx.beginPath();
-      ctx.arc(point.canvasX, point.canvasY, pointRadius, 0, 2 * Math.PI);
+      ctx.arc(drawX, drawY, pointRadius, 0, 2 * Math.PI);
       ctx.fill();
     });
   };
 
   // Draw lines connecting all captured points
   const drawFixPoints = (ctx) => {
-    // Only draw if there are at least 2 valid points with canvas coordinates (imported + captured)
-    const validPoints = dataPoints.filter(p => typeof p.canvasX === 'number' && typeof p.canvasY === 'number' && !isNaN(p.canvasX) && !isNaN(p.canvasY));
+    // Only draw if there are at least 2 valid points with graph values
+    const validPoints = dataPoints
+      .filter(p => Number.isFinite(p.x) && Number.isFinite(p.y))
+      .map(p => {
+        const { canvasX, canvasY } = convertGraphToCanvasCoordinates(p.x, p.y);
+        return { ...p, canvasX, canvasY };
+      })
+      .filter(p => Number.isFinite(p.canvasX) && Number.isFinite(p.canvasY));
     if (validPoints.length < 2) return;
 
     const orderedPoints = connectSortByX
