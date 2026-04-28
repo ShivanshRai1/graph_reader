@@ -461,6 +461,7 @@ const GraphCapture = () => {
     clearDataPoints,
     setUploadedImage,
     loadAnnotationsForCurve,
+    convertCanvasToGraphCoordinates,
   } = useGraph();
   const graphWorkspaceRef = useRef(null);
   const handleUserImageLoaded = () => {
@@ -3328,6 +3329,22 @@ const GraphCapture = () => {
                 onRetakeAxis={() => {
                   setIsAxisMappingConfirmed(false);
                   setFrozenGraphConfig(null);
+                  
+                  // Force immediate recalculation of all captured points
+                  if (convertCanvasToGraphCoordinates && Array.isArray(dataPoints) && dataPoints.length > 0) {
+                    const recalculatedPoints = dataPoints.map((point) => {
+                      if (point?.imported === true) return point;
+                      if (!Number.isFinite(point?.canvasX) || !Number.isFinite(point?.canvasY)) return point;
+                      
+                      const recalc = convertCanvasToGraphCoordinates(point.canvasX, point.canvasY);
+                      return {
+                        ...point,
+                        x: recalc.x,
+                        y: recalc.y,
+                      };
+                    });
+                    replaceDataPoints(recalculatedPoints);
+                  }
                 }}
               >
                 {/* Dynamic Symbol Input Boxes - Only show if other_symb exists in URL */}
