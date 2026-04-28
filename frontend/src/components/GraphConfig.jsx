@@ -63,7 +63,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
   const [temperatureValue, setTemperatureValue] = useState('');
   const [temperatureUnit, setTemperatureUnit] = useState('C');
   const skipTemperatureSyncRef = useRef(false);
-  const isConfigLocked = Boolean(isEditingCurve);
+  const isConfigLocked = Boolean(isEditingCurve || isAxisMappingConfirmed);
   
   // Apply initial values from props when component mounts
   useEffect(() => {
