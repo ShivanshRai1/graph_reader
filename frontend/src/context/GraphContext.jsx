@@ -382,6 +382,7 @@ export const GraphProvider = ({ children }) => {
     currentCurveId,
     setCurrentCurveId,
     loadAnnotationsForCurve,
+    convertCanvasToGraphCoordinates,
   };
 
   return (

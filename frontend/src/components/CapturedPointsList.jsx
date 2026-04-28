@@ -3,7 +3,7 @@ import { parseFile } from '../utils/fileParser';
 import { useEffect, useState } from 'react';
 
 const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false }) => {
-  const { dataPoints, clearDataPoints, importDataPoints, uploadedImage, updateDataPoint, deleteDataPoint, graphConfig, graphArea } = useGraph();
+  const { dataPoints, clearDataPoints, importDataPoints, uploadedImage, updateDataPoint, deleteDataPoint, graphConfig, graphArea, convertCanvasToGraphCoordinates } = useGraph();
   const [editingIndex, setEditingIndex] = useState(null);
   const [editX, setEditX] = useState('');
   const [editY, setEditY] = useState('');
@@ -35,6 +35,14 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false }) => {
   const formatExportValue = (value) => {
     if (typeof value !== 'number' || !Number.isFinite(value)) return 'Invalid';
     return value.toFixed(6);
+  };
+
+  // Recalculate point values based on current graphArea and graphConfig
+  const getRecalculatedPoint = (point) => {
+    if (!convertCanvasToGraphCoordinates) {
+      return { x: point.x, y: point.y };
+    }
+    return convertCanvasToGraphCoordinates(point.canvasX, point.canvasY);
   };
 
   const getExportMeta = () => {
@@ -98,11 +106,14 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false }) => {
       [''],
     ];
     const header = ['#', 'X', 'Y'];
-    const rows = dataPoints.map((point, idx) => [
-      (idx + 1).toString(),
-      formatExportValue(point.x),
-      formatExportValue(point.y),
-    ]);
+    const rows = dataPoints.map((point, idx) => {
+      const recalculated = getRecalculatedPoint(point);
+      return [
+        (idx + 1).toString(),
+        formatExportValue(recalculated.x),
+        formatExportValue(recalculated.y),
+      ];
+    });
     const csvContent = [...metaRows, header, ...rows].map(row => row.join(',')).join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
@@ -124,11 +135,14 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false }) => {
     }
     const jsonData = {
       metadata: getExportMeta(),
-      points: dataPoints.map((point, index) => ({
-        index: index + 1,
-        x: formatExportValue(point.x),
-        y: formatExportValue(point.y),
-      })),
+      points: dataPoints.map((point, index) => {
+        const recalculated = getRecalculatedPoint(point);
+        return {
+          index: index + 1,
+          x: formatExportValue(recalculated.x),
+          y: formatExportValue(recalculated.y),
+        };
+      }),
     };
 
     const jsonContent = JSON.stringify(jsonData, null, 2);
@@ -223,11 +237,14 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false }) => {
       return;
     }
     const header = ['#', 'X', 'Y'];
-    const rows = dataPoints.map((point, idx) => [
-      (idx + 1).toString(),
-      formatExportValue(point.x),
-      formatExportValue(point.y),
-    ]);
+    const rows = dataPoints.map((point, idx) => {
+      const recalculated = getRecalculatedPoint(point);
+      return [
+        (idx + 1).toString(),
+        formatExportValue(recalculated.x),
+        formatExportValue(recalculated.y),
+      ];
+    });
     const table = [header, ...rows].map(row => row.join(',')).join('\n');
     navigator.clipboard.writeText(table).then(() => {
       alert('Captured points copied to clipboard!');
@@ -313,7 +330,9 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false }) => {
               </tr>
             </thead>
             <tbody>
-              {dataPoints.map((point, index) => (
+              {dataPoints.map((point, index) => {
+                const recalculated = getRecalculatedPoint(point);
+                return (
                 <tr key={index} className="border-b border-gray-200 hover:bg-gray-50">
                   <td className="text-right px-3 py-2 text-sm text-gray-900 bg-white border-r border-gray-300">{index + 1}</td>
                   {editingIndex === index ? (
@@ -354,10 +373,10 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false }) => {
                   ) : (
                     <>
                       <td className="text-right px-3 py-2 font-mono text-sm text-gray-900 bg-white border-r border-gray-300">
-                        {formatDisplayValue(point.x)}
+                        {formatDisplayValue(recalculated.x)}
                       </td>
                       <td className="text-right px-3 py-2 font-mono text-sm text-gray-900 bg-white border-r border-gray-300">
-                        {formatDisplayValue(point.y)}
+                        {formatDisplayValue(recalculated.y)}
                       </td>
                       <td className="text-center px-3 py-2">
                         {!isReadOnly && (
@@ -380,7 +399,8 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false }) => {
                     </>
                   )}
                 </tr>
-              ))}
+              );
+              })}
             </tbody>
           </table>
         </div>
