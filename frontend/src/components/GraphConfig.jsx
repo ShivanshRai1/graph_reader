@@ -373,7 +373,6 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
   };
 
   return (
-    <>
     <div
       className="w-full p-5 bg-white rounded-lg mt-5 shadow"
       style={{
@@ -683,6 +682,21 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             })()}
           </>
         )}
+        
+        {isAxisMappingConfirmed && (
+          <button
+            onClick={() => {
+              setLogPairInputs(EMPTY_LOG_PAIR_INPUTS);
+              setLogInputMode(DEFAULT_LOG_INPUT_MODE);
+              onRetakeAxis();
+            }}
+            className="w-full mt-3 px-4 py-2 rounded bg-orange-600 text-white font-medium hover:bg-orange-700"
+            style={{ pointerEvents: 'auto' }}
+            title="Unlock configuration (will clear captured points)"
+          >
+            Unlock Configuration
+          </button>
+        )}
       </div>
 
       {showConfirmModal && (
@@ -749,22 +763,6 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
         </div>
       )}
     </div>
-
-    {/* Unlock Configuration Button - Outside wrapper to remain clickable when locked */}
-    {isAxisMappingConfirmed && (
-      <button
-        onClick={() => {
-          setLogPairInputs(EMPTY_LOG_PAIR_INPUTS);
-          setLogInputMode(DEFAULT_LOG_INPUT_MODE);
-          onRetakeAxis();
-        }}
-        className="mt-3 px-4 py-2 rounded bg-orange-600 text-white font-medium hover:bg-orange-700"
-        title="Unlock configuration (will clear captured points)"
-      >
-        Unlock Configuration
-      </button>
-    )}
-    </>
   );
 };
 
