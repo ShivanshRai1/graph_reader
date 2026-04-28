@@ -40,12 +40,25 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false }) => {
   // Recalculate point values based on current graphArea and graphConfig
   const getRecalculatedPoint = (point) => {
     if (!convertCanvasToGraphCoordinates) {
+      console.log('No conversion function available');
       return { x: point.x, y: point.y };
     }
     if (!Number.isFinite(point?.canvasX) || !Number.isFinite(point?.canvasY)) {
+      console.log('Invalid canvas coords:', point);
       return { x: point.x, y: point.y };
     }
-    return convertCanvasToGraphCoordinates(point.canvasX, point.canvasY);
+    const result = convertCanvasToGraphCoordinates(point.canvasX, point.canvasY);
+    console.log('Recalculating point:', {
+      canvasX: point.canvasX,
+      canvasY: point.canvasY,
+      storedX: point.x,
+      storedY: point.y,
+      recalcX: result.x,
+      recalcY: result.y,
+      graphArea: graphArea,
+      graphConfig: { xMin: graphConfig.xMin, xMax: graphConfig.xMax, yMin: graphConfig.yMin, yMax: graphConfig.yMax }
+    });
+    return result;
   };
 
   const getExportMeta = () => {
