@@ -691,7 +691,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
               onRetakeAxis();
             }}
             className="w-full mt-3 px-4 py-2 rounded bg-orange-600 text-white font-medium hover:bg-orange-700"
-            style={{ pointerEvents: 'auto' }}
+            style={{ pointerEvents: 'auto', opacity: 1 }}
             title="Unlock configuration (will clear captured points)"
           >
             Unlock Configuration
