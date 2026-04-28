@@ -3910,6 +3910,37 @@ const GraphCapture = () => {
                 sortByX={previewSortByX}
               />
             </div>
+            <div style={{ marginTop: 12, marginBottom: 8 }}>
+              <button
+                type="button"
+                onClick={() => {
+                  const headers = ['X', 'Y'];
+                  const rows = selectedCurvePoints.map((pt) => [
+                    formatDisplayValue(pt.x_value ?? pt.x),
+                    formatDisplayValue(pt.y_value ?? pt.y),
+                  ]);
+                  const tableData = [headers, ...rows].map((row) => row.join('\t')).join('\n');
+                  navigator.clipboard.writeText(tableData).then(() => {
+                    alert('Table copied to clipboard!');
+                  }).catch((err) => {
+                    console.error('Failed to copy:', err);
+                    alert('Failed to copy to clipboard');
+                  });
+                }}
+                style={{
+                  padding: '6px 14px',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  background: '#10b981',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 4,
+                  cursor: 'pointer',
+                }}
+              >
+                Copy Table
+              </button>
+            </div>
             <table className="mt-2 w-full text-xs border" style={{ borderColor: 'var(--color-border)', marginTop: 12 }}>
               <thead>
                 <tr style={{ backgroundColor: '#222', color: '#fff' }}>
