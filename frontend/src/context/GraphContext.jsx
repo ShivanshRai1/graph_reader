@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { 
   getAnnotationsForCurve, 
   saveAnnotationsForCurve, 
@@ -89,20 +89,33 @@ export const GraphProvider = ({ children }) => {
   };
 
   // Convert canvas coordinates to graph coordinates
-  const convertCanvasToGraphCoordinates = (canvasX, canvasY) => {
+  const convertCanvasToGraphCoordinates = useCallback((canvasX, canvasY) => {
     if (graphArea.width === 0 || graphArea.height === 0) {
       return { x: 0, y: 0 };
     }
 
-    const { xMin, xMax, yMin, yMax } = getNormalizedMinMax();
+    // Inline getNormalizedMinMax to avoid dependency issues
+    let xMin = parseFloat(graphConfig.xMin);
+    let xMax = parseFloat(graphConfig.xMax);
+    let yMin = parseFloat(graphConfig.yMin);
+    let yMax = parseFloat(graphConfig.yMax);
+
+    if (isNaN(xMin)) xMin = 0;
+    if (isNaN(xMax)) xMax = 100;
+    if (isNaN(yMin)) yMin = 0;
+    if (isNaN(yMax)) yMax = 100;
 
     const xRatio = (canvasX - graphArea.x) / graphArea.width;
     const yRatio = (canvasY - graphArea.y) / graphArea.height;
 
     let graphX;
     if (graphConfig.xScale === 'Logarithmic') {
-      const xBounds = getSafeLogBounds(xMin, xMax);
-      const exponent = xBounds.logMin + xRatio * (xBounds.logMax - xBounds.logMin);
+      const safeXMin = xMin > 0 ? xMin : 1e-12;
+      const candidateXMax = xMax > 0 ? xMax : safeXMin * 10;
+      const safeXMax = candidateXMax > safeXMin ? candidateXMax : safeXMin * 10;
+      const logXMin = Math.log10(safeXMin);
+      const logXMax = Math.log10(safeXMax);
+      const exponent = logXMin + xRatio * (logXMax - logXMin);
       graphX = Math.pow(10, exponent);
     } else {
       graphX = xMin + xRatio * (xMax - xMin);
@@ -110,15 +123,30 @@ export const GraphProvider = ({ children }) => {
 
     let graphY;
     if (graphConfig.yScale === 'Logarithmic') {
-      const yBounds = getSafeLogBounds(yMin, yMax);
-      const exponent = yBounds.logMax - yRatio * (yBounds.logMax - yBounds.logMin);
+      const safeYMin = yMin > 0 ? yMin : 1e-12;
+      const candidateYMax = yMax > 0 ? yMax : safeYMin * 10;
+      const safeYMax = candidateYMax > safeYMin ? candidateYMax : safeYMin * 10;
+      const logYMin = Math.log10(safeYMin);
+      const logYMax = Math.log10(safeYMax);
+      const exponent = logYMax - yRatio * (logYMax - logYMin);
       graphY = Math.pow(10, exponent);
     } else {
       graphY = yMax - yRatio * (yMax - yMin);
     }
     
     return { x: graphX, y: graphY };
-  };
+  }, [
+    graphArea.x,
+    graphArea.y,
+    graphArea.width,
+    graphArea.height,
+    graphConfig.xMin,
+    graphConfig.xMax,
+    graphConfig.yMin,
+    graphConfig.yMax,
+    graphConfig.xScale,
+    graphConfig.yScale,
+  ]);
 
   // Convert graph coordinates to canvas coordinates
   // Optional boundsOverride lets us map using updated bounds before state flushes
@@ -183,6 +211,7 @@ export const GraphProvider = ({ children }) => {
       return changed ? nextPoints : prevPoints;
     });
   }, [
+    convertCanvasToGraphCoordinates,
     graphArea.x,
     graphArea.y,
     graphArea.width,
