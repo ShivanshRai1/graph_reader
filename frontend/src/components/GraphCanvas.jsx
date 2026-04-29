@@ -216,9 +216,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   };
 
   const drawDataPoints = (ctx) => {
-    if (!isAxisMappingConfirmed) {
-      return;
-    }
+    if (dataPoints.length === 0) return;
 
     dataPoints.forEach((point, index) => {
       // Use graph value -> canvas position so dots update when box is resized
