@@ -26,6 +26,10 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   const [isResizing, setIsResizing] = useState(false);
   const justFinishedResizingRef = useRef(false);
   const [hoveredHandle, setHoveredHandle] = useState(null);
+  const prevCanvasPosRef = useRef(null);
+  const prevGraphPosRef = useRef(null);
+  const stuckFramesRef = useRef(0);
+  const [zeroWarnActive, setZeroWarnActive] = useState(false);
   const [stuckWarnActive, setStuckWarnActive] = useState(false);
   const warningHoldTimeoutRef = useRef(null);
   const lastCaptureClickRef = useRef({ x: null, y: null, ts: 0 });
