@@ -2,7 +2,7 @@ import { useRef, useState, useEffect } from 'react';
 import { useGraph } from '../context/GraphContext';
 
 const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', isAxisMappingConfirmed = false, hasReturnUrl = false }) => {
-  const { uploadedImage, graphArea, setGraphArea, dataPoints, addDataPoint, clearDataPoints, graphConfig, deleteDataPoint, convertGraphToCanvasCoordinates } = useGraph();
+  const { uploadedImage, graphArea, setGraphArea, dataPoints, addDataPoint, clearDataPoints, graphConfig, deleteDataPoint, convertGraphToCanvasCoordinates, replaceDataPoints, convertCanvasToGraphCoordinates } = useGraph();
   const [showRedrawMsg, setShowRedrawMsg] = useState(false);
   const canvasRef = useRef(null);
   const magnifierRef = useRef(null);
@@ -452,6 +452,17 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       justFinishedResizingRef.current = true;
       lastUserBoxRef.current = { ...graphArea };
       setBoxTransparent(true);
+      // Recalculate all captured point values using the new box
+      if (Array.isArray(dataPoints) && dataPoints.length > 0) {
+        const recalculated = dataPoints.map((point) => {
+          if (point?.imported === true) return point;
+          if (!Number.isFinite(point?.canvasX) || !Number.isFinite(point?.canvasY)) return point;
+          const newCoords = convertCanvasToGraphCoordinates(point.canvasX, point.canvasY);
+          if (!Number.isFinite(newCoords.x) || !Number.isFinite(newCoords.y)) return point;
+          return { ...point, x: newCoords.x, y: newCoords.y };
+        });
+        replaceDataPoints(recalculated);
+      }
       setTimeout(() => {
         justFinishedResizingRef.current = false;
       }, 100);
