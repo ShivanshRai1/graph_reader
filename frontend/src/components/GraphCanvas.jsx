@@ -25,6 +25,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   const [initialMouse, setInitialMouse] = useState({ x: 0, y: 0 });
   const [isResizing, setIsResizing] = useState(false);
   const justFinishedResizingRef = useRef(false);
+  const prevIsResizingRef = useRef(false);
   const [hoveredHandle, setHoveredHandle] = useState(null);
   const prevCanvasPosRef = useRef(null);
   const prevGraphPosRef = useRef(null);
@@ -131,6 +132,24 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     drawDataPoints(ctx);
     if (showFixPoints) drawFixPoints(ctx);
   }, [graphArea, dataPoints, showFixPoints, hoveredHandle, resizeMode, previewMousePos, connectSortByX, isAxisMappingConfirmed, graphConfig.xMin, graphConfig.xMax, graphConfig.yMin, graphConfig.yMax, graphConfig.xScale, graphConfig.yScale]);
+
+  // Recalculate point values after resize finishes (when isResizing goes true -> false)
+  // Using a useEffect ensures convertCanvasToGraphCoordinates has the final committed graphArea
+  useEffect(() => {
+    if (prevIsResizingRef.current === true && isResizing === false) {
+      if (Array.isArray(dataPoints) && dataPoints.length > 0) {
+        const recalculated = dataPoints.map((point) => {
+          if (point?.imported === true) return point;
+          if (!Number.isFinite(point?.canvasX) || !Number.isFinite(point?.canvasY)) return point;
+          const newCoords = convertCanvasToGraphCoordinates(point.canvasX, point.canvasY);
+          if (!Number.isFinite(newCoords.x) || !Number.isFinite(newCoords.y)) return point;
+          return { ...point, x: newCoords.x, y: newCoords.y };
+        });
+        replaceDataPoints(recalculated);
+      }
+    }
+    prevIsResizingRef.current = isResizing;
+  }, [isResizing]);
 
   // Set box to transparent when points are captured (manually or imported)
   useEffect(() => {
@@ -452,17 +471,6 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       justFinishedResizingRef.current = true;
       lastUserBoxRef.current = { ...graphArea };
       setBoxTransparent(true);
-      // Recalculate all captured point values using the new box
-      if (Array.isArray(dataPoints) && dataPoints.length > 0) {
-        const recalculated = dataPoints.map((point) => {
-          if (point?.imported === true) return point;
-          if (!Number.isFinite(point?.canvasX) || !Number.isFinite(point?.canvasY)) return point;
-          const newCoords = convertCanvasToGraphCoordinates(point.canvasX, point.canvasY);
-          if (!Number.isFinite(newCoords.x) || !Number.isFinite(newCoords.y)) return point;
-          return { ...point, x: newCoords.x, y: newCoords.y };
-        });
-        replaceDataPoints(recalculated);
-      }
       setTimeout(() => {
         justFinishedResizingRef.current = false;
       }, 100);
@@ -577,18 +585,19 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       // Skip imported points - can't delete them by right-click
       if (point.imported) continue;
       
-      // Check distance from click to point
-      if (typeof point.canvasX === 'number' && typeof point.canvasY === 'number' &&
-          !isNaN(point.canvasX) && !isNaN(point.canvasY)) {
-        const dx = canvasX - point.canvasX;
-        const dy = canvasY - point.canvasY;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        
-        if (distance <= clickRadius) {
-          // Found a point - delete it
-          deleteDataPoint(i);
-          return;
-        }
+      // Use live draw position (same as what drawDataPoints uses) for hit test
+      if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) continue;
+      const { canvasX: drawX, canvasY: drawY } = convertGraphToCanvasCoordinates(point.x, point.y);
+      if (!Number.isFinite(drawX) || !Number.isFinite(drawY)) continue;
+
+      const dx = canvasX - drawX;
+      const dy = canvasY - drawY;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      
+      if (distance <= clickRadius) {
+        // Found a point - delete it
+        deleteDataPoint(i);
+        return;
       }
     }
   };
