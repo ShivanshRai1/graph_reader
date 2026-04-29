@@ -2,7 +2,7 @@ import { useRef, useState, useEffect } from 'react';
 import { useGraph } from '../context/GraphContext';
 
 const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', isAxisMappingConfirmed = false, hasReturnUrl = false }) => {
-  const { uploadedImage, graphArea, setGraphArea, dataPoints, addDataPoint, clearDataPoints, graphConfig, deleteDataPoint, convertGraphToCanvasCoordinates, replaceDataPoints, convertCanvasToGraphCoordinates } = useGraph();
+  const { uploadedImage, graphArea, setGraphArea, dataPoints, addDataPoint, clearDataPoints, graphConfig, deleteDataPoint, convertGraphToCanvasCoordinates, convertCanvasToGraphCoordinates } = useGraph();
   const [showRedrawMsg, setShowRedrawMsg] = useState(false);
   const canvasRef = useRef(null);
   const magnifierRef = useRef(null);
@@ -25,12 +25,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   const [initialMouse, setInitialMouse] = useState({ x: 0, y: 0 });
   const [isResizing, setIsResizing] = useState(false);
   const justFinishedResizingRef = useRef(false);
-  const prevIsResizingRef = useRef(false);
   const [hoveredHandle, setHoveredHandle] = useState(null);
-  const prevCanvasPosRef = useRef(null);
-  const prevGraphPosRef = useRef(null);
-  const stuckFramesRef = useRef(0);
-  const [zeroWarnActive, setZeroWarnActive] = useState(false);
   const [stuckWarnActive, setStuckWarnActive] = useState(false);
   const warningHoldTimeoutRef = useRef(null);
   const lastCaptureClickRef = useRef({ x: null, y: null, ts: 0 });
@@ -132,24 +127,6 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     drawDataPoints(ctx);
     if (showFixPoints) drawFixPoints(ctx);
   }, [graphArea, dataPoints, showFixPoints, hoveredHandle, resizeMode, previewMousePos, connectSortByX, isAxisMappingConfirmed, graphConfig.xMin, graphConfig.xMax, graphConfig.yMin, graphConfig.yMax, graphConfig.xScale, graphConfig.yScale]);
-
-  // Recalculate point values after resize finishes (when isResizing goes true -> false)
-  // Using a useEffect ensures convertCanvasToGraphCoordinates has the final committed graphArea
-  useEffect(() => {
-    if (prevIsResizingRef.current === true && isResizing === false) {
-      if (Array.isArray(dataPoints) && dataPoints.length > 0) {
-        const recalculated = dataPoints.map((point) => {
-          if (point?.imported === true) return point;
-          if (!Number.isFinite(point?.canvasX) || !Number.isFinite(point?.canvasY)) return point;
-          const newCoords = convertCanvasToGraphCoordinates(point.canvasX, point.canvasY);
-          if (!Number.isFinite(newCoords.x) || !Number.isFinite(newCoords.y)) return point;
-          return { ...point, x: newCoords.x, y: newCoords.y };
-        });
-        replaceDataPoints(recalculated);
-      }
-    }
-    prevIsResizingRef.current = isResizing;
-  }, [isResizing]);
 
   // Set box to transparent when points are captured (manually or imported)
   useEffect(() => {
