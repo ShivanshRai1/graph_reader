@@ -130,7 +130,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     drawSelection(ctx);
     drawDataPoints(ctx);
     if (showFixPoints) drawFixPoints(ctx);
-  }, [graphArea, dataPoints, showFixPoints, hoveredHandle, resizeMode, previewMousePos, connectSortByX]);
+  }, [graphArea, dataPoints, showFixPoints, hoveredHandle, resizeMode, previewMousePos, connectSortByX, isAxisMappingConfirmed, graphConfig.xMin, graphConfig.xMax, graphConfig.yMin, graphConfig.yMax, graphConfig.xScale, graphConfig.yScale]);
 
   // Set box to transparent when points are captured (manually or imported)
   useEffect(() => {
