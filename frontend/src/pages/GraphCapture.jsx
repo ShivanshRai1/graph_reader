@@ -3808,8 +3808,16 @@ const GraphCapture = () => {
             {(() => {
               const cfg = normalizeCurveConfig(selectedCurve);
               const bounds = resolveAxisBoundsWithFallback([selectedCurve]);
+              const xTitle = cfg.xLabel || urlParams.x_label || '';
+              const yTitle = cfg.yLabel || urlParams.y_label || '';
+              const partNo = selectedCurve?.part_number || selectedCurve?.config?.partNumber || urlParams.partno || '';
               return (
                 <div style={{ fontSize: 12, color: '#444', background: '#f5f5f5', borderRadius: 5, padding: '8px 12px', marginBottom: 8, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px 24px' }}>
+                  {partNo && (
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <span style={{ fontWeight: 600 }}>Part Number:</span> {partNo}
+                    </div>
+                  )}
                   {cfg.graphTitle && (
                     <div style={{ gridColumn: '1 / -1' }}>
                       <span style={{ fontWeight: 600 }}>Graph Title:</span> {cfg.graphTitle}
@@ -3826,8 +3834,8 @@ const GraphCapture = () => {
                   <div><span style={{ fontWeight: 600 }}>Y Max:</span> {formatDisplayValue(bounds.yMax)}</div>
                   <div><span style={{ fontWeight: 600 }}>X Scale:</span> {cfg.xScale || '—'}</div>
                   <div><span style={{ fontWeight: 600 }}>Y Scale:</span> {cfg.yScale || '—'}</div>
-                  {cfg.xLabel && <div><span style={{ fontWeight: 600 }}>X Title:</span> {cfg.xLabel}</div>}
-                  {cfg.yLabel && <div><span style={{ fontWeight: 600 }}>Y Title:</span> {cfg.yLabel}</div>}
+                  {xTitle && <div><span style={{ fontWeight: 600 }}>X Title:</span> {xTitle}</div>}
+                  {yTitle && <div><span style={{ fontWeight: 600 }}>Y Title:</span> {yTitle}</div>}
                   <div><span style={{ fontWeight: 600 }}>X Unit:</span> {getUnitLabel(cfg.xUnit) || '—'}</div>
                   <div><span style={{ fontWeight: 600 }}>Y Unit:</span> {getUnitLabel(cfg.yUnit) || '—'}</div>
                   {(() => {
@@ -3919,8 +3927,8 @@ const GraphCapture = () => {
                 type="button"
                 onClick={() => {
                   const cfg = normalizeCurveConfig(selectedCurve);
-                  const xHdr = cfg.xLabel ? `X[${cfg.xLabel}]` : 'X';
-                  const yHdr = cfg.yLabel ? `Y[${cfg.yLabel}]` : 'Y';
+                  const xHdr = (cfg.xLabel || urlParams.x_label) ? `X[${cfg.xLabel || urlParams.x_label}]` : 'X';
+                  const yHdr = (cfg.yLabel || urlParams.y_label) ? `Y[${cfg.yLabel || urlParams.y_label}]` : 'Y';
                   const headers = [xHdr, yHdr];
                   const rows = selectedCurvePoints.map((pt) => [
                     formatDisplayValue(pt.x_value ?? pt.x),
@@ -3951,8 +3959,8 @@ const GraphCapture = () => {
             <table className="mt-2 w-full text-xs border" style={{ borderColor: 'var(--color-border)', marginTop: 12 }}>
               <thead>
                 <tr style={{ backgroundColor: '#222', color: '#fff' }}>
-                  <th className="px-2 py-1 border" style={{ borderColor: 'var(--color-border)', color: '#fff' }}>{normalizeCurveConfig(selectedCurve).xLabel ? `X[${normalizeCurveConfig(selectedCurve).xLabel}]` : 'X'}</th>
-                  <th className="px-2 py-1 border" style={{ borderColor: 'var(--color-border)', color: '#fff' }}>{normalizeCurveConfig(selectedCurve).yLabel ? `Y[${normalizeCurveConfig(selectedCurve).yLabel}]` : 'Y'}</th>
+                  <th className="px-2 py-1 border" style={{ borderColor: 'var(--color-border)', color: '#fff' }}>{(normalizeCurveConfig(selectedCurve).xLabel || urlParams.x_label) ? `X[${normalizeCurveConfig(selectedCurve).xLabel || urlParams.x_label}]` : 'X'}</th>
+                  <th className="px-2 py-1 border" style={{ borderColor: 'var(--color-border)', color: '#fff' }}>{(normalizeCurveConfig(selectedCurve).yLabel || urlParams.y_label) ? `Y[${normalizeCurveConfig(selectedCurve).yLabel || urlParams.y_label}]` : 'Y'}</th>
                 </tr>
               </thead>
               <tbody>
