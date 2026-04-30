@@ -54,7 +54,7 @@ const convertTemperatureToCelsius = (rawValue, unit) => {
   return formatTemperatureNumber(numericValue);
 };
 
-const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNameReadOnly = false, isXTitleReadOnly = false, isYTitleReadOnly = false, initialCurveName = '', initialGraphTitle = '', initialXTitle = '', initialYTitle = '', isAxisMappingConfirmed = false, isEditingCurve = false, onConfirmAxisMapping = () => {}, onRetakeAxis = () => {}, children = null }) => {
+const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNameReadOnly = false, isXTitleReadOnly = false, isYTitleReadOnly = false, initialCurveName = '', initialGraphTitle = '', initialXTitle = '', initialYTitle = '', isAxisMappingConfirmed = false, isEditingCurve = false, isPartNumberFromUrl = false, isPartNumberLocked = false, onConfirmAxisMapping = () => {}, onRetakeAxis = () => {}, children = null }) => {
   const { graphConfig, setGraphConfig } = useGraph();
   const [logError, setLogError] = useState({ x: '', y: '' });
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -383,6 +383,23 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
       <h3 className="text-gray-900 text-lg font-semibold mb-5">Graph Configuration</h3>
 
       <div className="mb-5">
+        <label className="block mb-3 font-medium text-gray-800">
+          <span className="block mb-1 text-sm text-gray-800">Part Number:</span>
+          <input
+            type="text"
+            name="partNumber"
+            value={graphConfig.partNumber || ''}
+            onChange={handleChange}
+            placeholder="Enter part number"
+            className={`w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 ${
+              isPartNumberFromUrl || isPartNumberLocked || isConfigLocked
+                ? 'bg-gray-100 cursor-not-allowed opacity-70'
+                : 'bg-white'
+            }`}
+            readOnly={isPartNumberFromUrl || isPartNumberLocked || isConfigLocked}
+            disabled={isPartNumberFromUrl || isPartNumberLocked || isConfigLocked}
+          />
+        </label>
         <label className="block mb-3 font-medium text-gray-800">
           <span className="block mb-1 text-sm text-gray-800">Graph Title:</span>
           <input

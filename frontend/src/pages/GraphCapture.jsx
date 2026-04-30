@@ -742,6 +742,7 @@ const GraphCapture = () => {
   // State for axis confirmation and freezing (Issue 5 & 7)
   const [isAxisMappingConfirmed, setIsAxisMappingConfirmed] = useState(false);
   const [frozenGraphConfig, setFrozenGraphConfig] = useState(null);
+  const [partNumberLocked, setPartNumberLocked] = useState(false);
   const [showReturnDecisionModal, setShowReturnDecisionModal] = useState(false);
   const [pendingReturnUrl, setPendingReturnUrl] = useState('');
   const savedGraphsSectionRef = useRef(null);
@@ -3322,9 +3323,12 @@ const GraphCapture = () => {
                 initialYTitle={urlParams.y_label}
                 isAxisMappingConfirmed={isAxisMappingConfirmed}
                 isEditingCurve={Boolean(editingCurveId)}
+                isPartNumberFromUrl={Boolean(urlParams.partno)}
+                isPartNumberLocked={partNumberLocked}
                 onConfirmAxisMapping={() => {
                   setIsAxisMappingConfirmed(true);
                   setFrozenGraphConfig({ ...graphConfig });
+                  setPartNumberLocked(true);
                 }}
                 onRetakeAxis={() => {
                   setIsAxisMappingConfirmed(false);
