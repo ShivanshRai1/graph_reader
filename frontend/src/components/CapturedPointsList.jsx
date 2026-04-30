@@ -20,10 +20,10 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false }) => {
   const yUnitLabel = graphConfig.yUnitPrefix ? `(${getUnitSymbol(graphConfig.yUnitPrefix)})` : '';
 
   const urlParams = new URLSearchParams(window.location.search);
-  const xTitle = urlParams.get('x_title') || '';
-  const yTitle = urlParams.get('y_title') || '';
-  const xHeaderLabel = xTitle ? `(${xTitle})` : xUnitLabel;
-  const yHeaderLabel = yTitle ? `(${yTitle})` : yUnitLabel;
+  const xTitle = graphConfig.xLabel || urlParams.get('x_title') || urlParams.get('x_label') || '';
+  const yTitle = graphConfig.yLabel || urlParams.get('y_title') || urlParams.get('y_label') || '';
+  const xHeaderLabel = `${xUnitLabel}${xTitle ? `[${xTitle}]` : ''}`;
+  const yHeaderLabel = `${yUnitLabel}${yTitle ? `[${yTitle}]` : ''}`;
 
   const formatDisplayValue = (value) => {
     if (typeof value !== 'number' || !Number.isFinite(value)) return 'Invalid';
