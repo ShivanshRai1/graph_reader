@@ -16,14 +16,25 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false }) => {
     return symbols[prefix] ?? '';
   };
 
-  const xUnitLabel = graphConfig.xUnitPrefix ? `(${getUnitSymbol(graphConfig.xUnitPrefix)})` : '';
-  const yUnitLabel = graphConfig.yUnitPrefix ? `(${getUnitSymbol(graphConfig.yUnitPrefix)})` : '';
+  const xUnitSymbol = getUnitSymbol(graphConfig.xUnitPrefix);
+  const yUnitSymbol = getUnitSymbol(graphConfig.yUnitPrefix);
+  const xTitle = graphConfig.xLabel || '';
+  const yTitle = graphConfig.yLabel || '';
 
-  const urlParams = new URLSearchParams(window.location.search);
-  const xTitle = graphConfig.xLabel || urlParams.get('x_title') || urlParams.get('x_label') || '';
-  const yTitle = graphConfig.yLabel || urlParams.get('y_title') || urlParams.get('y_label') || '';
-  const xHeaderLabel = `${xUnitLabel}${xTitle ? `[${xTitle}]` : ''}`;
-  const yHeaderLabel = `${yUnitLabel}${yTitle ? `[${yTitle}]` : ''}`;
+  // Build header in format: X(unit)[title] or just X if no unit/title
+  let xHeaderLabel = '';
+  if (xUnitSymbol || xTitle) {
+    const unitPart = xUnitSymbol ? `(${xUnitSymbol})` : '';
+    const titlePart = xTitle ? `[${xTitle}]` : '';
+    xHeaderLabel = `${unitPart}${titlePart}`;
+  }
+
+  let yHeaderLabel = '';
+  if (yUnitSymbol || yTitle) {
+    const unitPart = yUnitSymbol ? `(${yUnitSymbol})` : '';
+    const titlePart = yTitle ? `[${yTitle}]` : '';
+    yHeaderLabel = `${unitPart}${titlePart}`;
+  }
 
   const formatDisplayValue = (value) => {
     if (typeof value !== 'number' || !Number.isFinite(value)) return 'Invalid';
@@ -231,7 +242,9 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false }) => {
       alert('No data points to copy');
       return;
     }
-    const header = ['#', 'X', 'Y'];
+    const xHeader = xHeaderLabel ? `X${xHeaderLabel}` : 'X';
+    const yHeader = yHeaderLabel ? `Y${yHeaderLabel}` : 'Y';
+    const header = ['#', xHeader, yHeader];
     const rows = dataPoints.map((point, idx) => {
       const recalculated = getRecalculatedPoint(point);
       return [
@@ -316,10 +329,10 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false }) => {
               <tr className="border-b-2 border-gray-300">
                 <th className="text-right px-3 py-2 text-sm font-semibold text-gray-900 bg-blue-50 border-r border-gray-300">#</th>
                 <th className="text-right px-3 py-2 text-sm font-semibold text-gray-900 bg-blue-50 border-r border-gray-300">
-                  X Value {xHeaderLabel && <span className="text-blue-600">{xHeaderLabel}</span>}
+                  X {xHeaderLabel && <span className="text-blue-600">{xHeaderLabel}</span>}
                 </th>
                 <th className="text-right px-3 py-2 text-sm font-semibold text-gray-900 bg-blue-50 border-r border-gray-300">
-                  Y Value {yHeaderLabel && <span className="text-blue-600">{yHeaderLabel}</span>}
+                  Y {yHeaderLabel && <span className="text-blue-600">{yHeaderLabel}</span>}
                 </th>
                 <th className="text-center px-3 py-2 text-sm font-semibold text-gray-900 bg-blue-50">Actions</th>
               </tr>
