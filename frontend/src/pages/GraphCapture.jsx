@@ -3919,8 +3919,8 @@ const GraphCapture = () => {
                 type="button"
                 onClick={() => {
                   const cfg = normalizeCurveConfig(selectedCurve);
-                  const xHdr = cfg.xLabel || 'X';
-                  const yHdr = cfg.yLabel || 'Y';
+                  const xHdr = cfg.xLabel ? `X[${cfg.xLabel}]` : 'X';
+                  const yHdr = cfg.yLabel ? `Y[${cfg.yLabel}]` : 'Y';
                   const headers = [xHdr, yHdr];
                   const rows = selectedCurvePoints.map((pt) => [
                     formatDisplayValue(pt.x_value ?? pt.x),
@@ -3951,8 +3951,8 @@ const GraphCapture = () => {
             <table className="mt-2 w-full text-xs border" style={{ borderColor: 'var(--color-border)', marginTop: 12 }}>
               <thead>
                 <tr style={{ backgroundColor: '#222', color: '#fff' }}>
-                  <th className="px-2 py-1 border" style={{ borderColor: 'var(--color-border)', color: '#fff' }}>{normalizeCurveConfig(selectedCurve).xLabel || 'X'}</th>
-                  <th className="px-2 py-1 border" style={{ borderColor: 'var(--color-border)', color: '#fff' }}>{normalizeCurveConfig(selectedCurve).yLabel || 'Y'}</th>
+                  <th className="px-2 py-1 border" style={{ borderColor: 'var(--color-border)', color: '#fff' }}>{normalizeCurveConfig(selectedCurve).xLabel ? `X[${normalizeCurveConfig(selectedCurve).xLabel}]` : 'X'}</th>
+                  <th className="px-2 py-1 border" style={{ borderColor: 'var(--color-border)', color: '#fff' }}>{normalizeCurveConfig(selectedCurve).yLabel ? `Y[${normalizeCurveConfig(selectedCurve).yLabel}]` : 'Y'}</th>
                 </tr>
               </thead>
               <tbody>
