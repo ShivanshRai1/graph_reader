@@ -138,10 +138,10 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   }, [graphArea, dataPoints, showFixPoints, hoveredHandle, resizeMode, previewMousePos, connectSortByX, isAxisMappingConfirmed, graphConfig.xMin, graphConfig.xMax, graphConfig.yMin, graphConfig.yMax, graphConfig.xScale, graphConfig.yScale]);
 
   // Keep live refs always in sync with latest state
+  const graphConfigRef = useRef(graphConfig);
   useEffect(() => { graphAreaRef.current = graphArea; }, [graphArea]);
   useEffect(() => { dataPointsRef.current = dataPoints; }, [dataPoints]);
-  const convertCanvasToGraphCoordinatesRef = useRef(convertCanvasToGraphCoordinates);
-  useEffect(() => { convertCanvasToGraphCoordinatesRef.current = convertCanvasToGraphCoordinates; }, [convertCanvasToGraphCoordinates]);
+  useEffect(() => { graphConfigRef.current = graphConfig; }, [graphConfig]);
 
   // Set box to transparent when points are captured (manually or imported)
   useEffect(() => {
@@ -150,12 +150,42 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     }
   }, [dataPoints.length]);
 
-  // After resize finishes, recalculate graph values from original canvas positions and remove out-of-bounds points
+  // After resize finishes, recalculate graph values from original canvas positions and remove out-of-bounds points.
+  // All values are read from refs (never from stale closures) so timing with React renders is irrelevant.
   useEffect(() => {
     if (prevIsResizingRef.current === true && isResizing === false) {
       const box = normalizeArea(graphAreaRef.current);
       const pts = dataPointsRef.current;
-      const toGraph = convertCanvasToGraphCoordinatesRef.current;
+      const cfg = graphConfigRef.current;
+
+      // Inline canvasToGraph using only refs — no function ref timing issues
+      const canvasToGraph = (cx, cy) => {
+        if (box.width === 0 || box.height === 0) return { x: 0, y: 0 };
+        let xMin = parseFloat(cfg.xMin); if (isNaN(xMin)) xMin = 0;
+        let xMax = parseFloat(cfg.xMax); if (isNaN(xMax)) xMax = 100;
+        let yMin = parseFloat(cfg.yMin); if (isNaN(yMin)) yMin = 0;
+        let yMax = parseFloat(cfg.yMax); if (isNaN(yMax)) yMax = 100;
+        const xRatio = (cx - box.x) / box.width;
+        const yRatio = (cy - box.y) / box.height;
+        let gx, gy;
+        if (cfg.xScale === 'Logarithmic') {
+          const safeXMin = xMin > 0 ? xMin : 1e-12;
+          const safeXMax = (xMax > 0 && xMax > safeXMin) ? xMax : safeXMin * 10;
+          gx = Math.pow(10, Math.log10(safeXMin) + xRatio * (Math.log10(safeXMax) - Math.log10(safeXMin)));
+        } else {
+          gx = xMin + xRatio * (xMax - xMin);
+        }
+        if (cfg.yScale === 'Logarithmic') {
+          const safeYMin = yMin > 0 ? yMin : 1e-12;
+          const safeYMax = (yMax > 0 && yMax > safeYMin) ? yMax : safeYMin * 10;
+          const logYMin = Math.log10(safeYMin);
+          const logYMax = Math.log10(safeYMax);
+          gy = Math.pow(10, logYMax - yRatio * (logYMax - logYMin));
+        } else {
+          gy = yMax - yRatio * (yMax - yMin);
+        }
+        return { x: gx, y: gy };
+      };
 
       // Filter to points whose original pixel is inside the new box
       const kept = pts.filter(
@@ -165,10 +195,10 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       );
       const removedCount = pts.length - kept.length;
 
-      // Recalculate graph values from original canvas positions using the new box
+      // Recalculate graph values from original canvas positions using the new box + config
       const updated = kept.map((p) => {
         if (p.imported || !Number.isFinite(p.canvasX) || !Number.isFinite(p.canvasY)) return p;
-        const { x, y } = toGraph(p.canvasX, p.canvasY);
+        const { x, y } = canvasToGraph(p.canvasX, p.canvasY);
         return { ...p, x, y };
       });
 
