@@ -140,6 +140,8 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   // Keep live refs always in sync with latest state
   useEffect(() => { graphAreaRef.current = graphArea; }, [graphArea]);
   useEffect(() => { dataPointsRef.current = dataPoints; }, [dataPoints]);
+  const convertCanvasToGraphCoordinatesRef = useRef(convertCanvasToGraphCoordinates);
+  useEffect(() => { convertCanvasToGraphCoordinatesRef.current = convertCanvasToGraphCoordinates; }, [convertCanvasToGraphCoordinates]);
 
   // Set box to transparent when points are captured (manually or imported)
   useEffect(() => {
@@ -148,25 +150,32 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     }
   }, [dataPoints.length]);
 
-  // After resize finishes, remove points whose original click pixel is outside the new box
+  // After resize finishes, recalculate graph values from original canvas positions and remove out-of-bounds points
   useEffect(() => {
     if (prevIsResizingRef.current === true && isResizing === false) {
       const box = normalizeArea(graphAreaRef.current);
       const pts = dataPointsRef.current;
-      const outside = pts.filter(
-        (p) => !p.imported &&
-          Number.isFinite(p.canvasX) && Number.isFinite(p.canvasY) &&
-          (p.canvasX < box.x || p.canvasX > box.x + box.width ||
-           p.canvasY < box.y || p.canvasY > box.y + box.height)
+      const toGraph = convertCanvasToGraphCoordinatesRef.current;
+
+      // Filter to points whose original pixel is inside the new box
+      const kept = pts.filter(
+        (p) => p.imported || !Number.isFinite(p.canvasX) || !Number.isFinite(p.canvasY) ||
+          (p.canvasX >= box.x && p.canvasX <= box.x + box.width &&
+           p.canvasY >= box.y && p.canvasY <= box.y + box.height)
       );
-      if (outside.length > 0) {
-        const kept = pts.filter(
-          (p) => p.imported || !Number.isFinite(p.canvasX) || !Number.isFinite(p.canvasY) ||
-            (p.canvasX >= box.x && p.canvasX <= box.x + box.width &&
-             p.canvasY >= box.y && p.canvasY <= box.y + box.height)
-        );
-        replaceDataPoints(kept);
-        const msg = `${outside.length} point${outside.length > 1 ? 's' : ''} removed — outside the resized box`;
+      const removedCount = pts.length - kept.length;
+
+      // Recalculate graph values from original canvas positions using the new box
+      const updated = kept.map((p) => {
+        if (p.imported || !Number.isFinite(p.canvasX) || !Number.isFinite(p.canvasY)) return p;
+        const { x, y } = toGraph(p.canvasX, p.canvasY);
+        return { ...p, x, y };
+      });
+
+      replaceDataPoints(updated);
+
+      if (removedCount > 0) {
+        const msg = `${removedCount} point${removedCount > 1 ? 's' : ''} removed — outside the resized box`;
         setRemovedPointsMsg(msg);
         if (removedMsgTimeoutRef.current) clearTimeout(removedMsgTimeoutRef.current);
         removedMsgTimeoutRef.current = setTimeout(() => setRemovedPointsMsg(''), 4000);
