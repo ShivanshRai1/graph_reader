@@ -743,6 +743,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
               Confirm the values below. If you continue, axis mapping is locked and point capture begins.
             </div>
             <div className="text-sm" style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: 12 }}>
+              {graphConfig.partNumber && <div className="mb-2"><strong>Part Number:</strong> {graphConfig.partNumber}</div>}
               <div className="mb-2"><strong>Graph Title:</strong> {graphConfig.graphTitle || '-'}</div>
               <div className="mb-2"><strong>Curve or Line Name:</strong> {graphConfig.curveName || '-'}</div>
               <div className="mb-2"><strong>X Title:</strong> {graphConfig.xLabel || '-'}</div>
