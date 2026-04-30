@@ -2,7 +2,7 @@ import { useRef, useState, useEffect } from 'react';
 import { useGraph } from '../context/GraphContext';
 
 const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', isAxisMappingConfirmed = false, hasReturnUrl = false }) => {
-  const { uploadedImage, graphArea, setGraphArea, dataPoints, addDataPoint, clearDataPoints, graphConfig, deleteDataPoint, convertGraphToCanvasCoordinates, convertCanvasToGraphCoordinates } = useGraph();
+  const { uploadedImage, graphArea, setGraphArea, dataPoints, addDataPoint, clearDataPoints, graphConfig, deleteDataPoint, convertGraphToCanvasCoordinates, convertCanvasToGraphCoordinates, replaceDataPoints } = useGraph();
   const [showRedrawMsg, setShowRedrawMsg] = useState(false);
   const canvasRef = useRef(null);
   const magnifierRef = useRef(null);
@@ -25,6 +25,9 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   const [initialMouse, setInitialMouse] = useState({ x: 0, y: 0 });
   const [isResizing, setIsResizing] = useState(false);
   const justFinishedResizingRef = useRef(false);
+  const prevIsResizingRef = useRef(false);
+  const [removedPointsMsg, setRemovedPointsMsg] = useState('');
+  const removedMsgTimeoutRef = useRef(null);
   const [hoveredHandle, setHoveredHandle] = useState(null);
   const prevCanvasPosRef = useRef(null);
   const prevGraphPosRef = useRef(null);
@@ -138,6 +141,32 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       setBoxTransparent(true);
     }
   }, [dataPoints.length]);
+
+  // After resize finishes, remove points whose original click pixel is outside the new box
+  useEffect(() => {
+    if (prevIsResizingRef.current === true && isResizing === false) {
+      const box = normalizeArea(graphArea);
+      const outside = dataPoints.filter(
+        (p) => !p.imported &&
+          Number.isFinite(p.canvasX) && Number.isFinite(p.canvasY) &&
+          (p.canvasX < box.x || p.canvasX > box.x + box.width ||
+           p.canvasY < box.y || p.canvasY > box.y + box.height)
+      );
+      if (outside.length > 0) {
+        const kept = dataPoints.filter(
+          (p) => p.imported || !Number.isFinite(p.canvasX) || !Number.isFinite(p.canvasY) ||
+            (p.canvasX >= box.x && p.canvasX <= box.x + box.width &&
+             p.canvasY >= box.y && p.canvasY <= box.y + box.height)
+        );
+        replaceDataPoints(kept);
+        const msg = `${outside.length} point${outside.length > 1 ? 's' : ''} removed — outside the resized box`;
+        setRemovedPointsMsg(msg);
+        if (removedMsgTimeoutRef.current) clearTimeout(removedMsgTimeoutRef.current);
+        removedMsgTimeoutRef.current = setTimeout(() => setRemovedPointsMsg(''), 4000);
+      }
+    }
+    prevIsResizingRef.current = isResizing;
+  }, [isResizing]);
 
   useEffect(() => () => {
     if (coordinateUpdateTimeoutRef.current) {
@@ -955,6 +984,11 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
         {showRedrawMsg && (
           <div className="text-red-600 font-bold mt-2">
             Please redraw the axis box
+          </div>
+        )}
+        {removedPointsMsg && (
+          <div className="text-orange-600 font-bold mt-2">
+            ⚠️ {removedPointsMsg}
           </div>
         )}
       </div>
