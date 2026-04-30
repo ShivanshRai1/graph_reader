@@ -26,6 +26,8 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   const [isResizing, setIsResizing] = useState(false);
   const justFinishedResizingRef = useRef(false);
   const prevIsResizingRef = useRef(false);
+  const graphAreaRef = useRef(graphArea);
+  const dataPointsRef = useRef(dataPoints);
   const [removedPointsMsg, setRemovedPointsMsg] = useState('');
   const removedMsgTimeoutRef = useRef(null);
   const [hoveredHandle, setHoveredHandle] = useState(null);
@@ -135,6 +137,10 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     if (showFixPoints) drawFixPoints(ctx);
   }, [graphArea, dataPoints, showFixPoints, hoveredHandle, resizeMode, previewMousePos, connectSortByX, isAxisMappingConfirmed, graphConfig.xMin, graphConfig.xMax, graphConfig.yMin, graphConfig.yMax, graphConfig.xScale, graphConfig.yScale]);
 
+  // Keep live refs always in sync with latest state
+  useEffect(() => { graphAreaRef.current = graphArea; }, [graphArea]);
+  useEffect(() => { dataPointsRef.current = dataPoints; }, [dataPoints]);
+
   // Set box to transparent when points are captured (manually or imported)
   useEffect(() => {
     if (dataPoints.length > 0) {
@@ -145,15 +151,16 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   // After resize finishes, remove points whose original click pixel is outside the new box
   useEffect(() => {
     if (prevIsResizingRef.current === true && isResizing === false) {
-      const box = normalizeArea(graphArea);
-      const outside = dataPoints.filter(
+      const box = normalizeArea(graphAreaRef.current);
+      const pts = dataPointsRef.current;
+      const outside = pts.filter(
         (p) => !p.imported &&
           Number.isFinite(p.canvasX) && Number.isFinite(p.canvasY) &&
           (p.canvasX < box.x || p.canvasX > box.x + box.width ||
            p.canvasY < box.y || p.canvasY > box.y + box.height)
       );
       if (outside.length > 0) {
-        const kept = dataPoints.filter(
+        const kept = pts.filter(
           (p) => p.imported || !Number.isFinite(p.canvasX) || !Number.isFinite(p.canvasY) ||
             (p.canvasX >= box.x && p.canvasX <= box.x + box.width &&
              p.canvasY >= box.y && p.canvasY <= box.y + box.height)
