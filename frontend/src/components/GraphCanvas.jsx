@@ -214,6 +214,52 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     prevIsResizingRef.current = isResizing;
   }, [isResizing]);
 
+  // When axis config changes (min/max/scale), recalculate point graph values from original
+  // canvas positions so dots stay on the curve regardless of axis range changes.
+  // Uses only refs — no stale closure issues.
+  useEffect(() => {
+    if (isAxisMappingConfirmed) return;
+    const pts = dataPointsRef.current;
+    if (pts.length === 0) return;
+    const box = normalizeArea(graphAreaRef.current);
+    if (box.width === 0 || box.height === 0) return;
+    const cfg = graphConfigRef.current;
+
+    const canvasToGraph = (cx, cy) => {
+      let xMin = parseFloat(cfg.xMin); if (isNaN(xMin)) xMin = 0;
+      let xMax = parseFloat(cfg.xMax); if (isNaN(xMax)) xMax = 100;
+      let yMin = parseFloat(cfg.yMin); if (isNaN(yMin)) yMin = 0;
+      let yMax = parseFloat(cfg.yMax); if (isNaN(yMax)) yMax = 100;
+      const xRatio = (cx - box.x) / box.width;
+      const yRatio = (cy - box.y) / box.height;
+      let gx, gy;
+      if (cfg.xScale === 'Logarithmic') {
+        const safeXMin = xMin > 0 ? xMin : 1e-12;
+        const safeXMax = (xMax > 0 && xMax > safeXMin) ? xMax : safeXMin * 10;
+        gx = Math.pow(10, Math.log10(safeXMin) + xRatio * (Math.log10(safeXMax) - Math.log10(safeXMin)));
+      } else {
+        gx = xMin + xRatio * (xMax - xMin);
+      }
+      if (cfg.yScale === 'Logarithmic') {
+        const safeYMin = yMin > 0 ? yMin : 1e-12;
+        const safeYMax = (yMax > 0 && yMax > safeYMin) ? yMax : safeYMin * 10;
+        const logYMin = Math.log10(safeYMin);
+        const logYMax = Math.log10(safeYMax);
+        gy = Math.pow(10, logYMax - yRatio * (logYMax - logYMin));
+      } else {
+        gy = yMax - yRatio * (yMax - yMin);
+      }
+      return { x: gx, y: gy };
+    };
+
+    const updated = pts.map((p) => {
+      if (p.imported || !Number.isFinite(p.canvasX) || !Number.isFinite(p.canvasY)) return p;
+      const { x, y } = canvasToGraph(p.canvasX, p.canvasY);
+      return { ...p, x, y };
+    });
+    replaceDataPoints(updated);
+  }, [graphConfig.xMin, graphConfig.xMax, graphConfig.yMin, graphConfig.yMax, graphConfig.xScale, graphConfig.yScale]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => () => {
     if (coordinateUpdateTimeoutRef.current) {
       clearTimeout(coordinateUpdateTimeoutRef.current);
