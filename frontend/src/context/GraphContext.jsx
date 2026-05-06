@@ -23,6 +23,8 @@ export const GraphProvider = ({ children }) => {
   // Graph configuration state
   const [graphConfig, setGraphConfig] = useState({
     partNumber: '',
+    manufacturer: '',
+    username: '',
     curveName: '',
     graphTitle: '',
     xLabel: '',

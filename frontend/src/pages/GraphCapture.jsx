@@ -487,6 +487,7 @@ const GraphCapture = () => {
   const [urlParams, setUrlParams] = useState({
     partno: '',
     manufacturer: '',
+    username: '',
     graph_title: '',
     curve_title: '',
     x_label: '',
@@ -1899,7 +1900,8 @@ const GraphCapture = () => {
     setReturnParams(returnParamsObj);
 
     const partno = searchParams.get('partno') || '';
-    const manufacturer = searchParams.get('manufacturer') || searchParams.get('manf') || '';
+    const manufacturer = searchParams.get('manufacturer') || searchParams.get('manufactuer') || searchParams.get('manf') || '';
+    const username = searchParams.get('username') || searchParams.get('uname') || '';
     const curveTitle = searchParams.get('curve_title') || '';
     const graphTitle = searchParams.get('graph_title') || '';
     const tctjValue = detectedTemperatureValue;
@@ -1914,6 +1916,7 @@ const GraphCapture = () => {
     setUrlParams({
       partno,
       manufacturer,
+      username,
       graph_title: graphTitle,
       curve_title: curveTitle,
       x_label: xTitleFromUrl,
@@ -1935,6 +1938,8 @@ const GraphCapture = () => {
     // Auto-populate graphConfig with URL parameters
     setGraphConfig((prevConfig) => ({
       ...prevConfig,
+      manufacturer: manufacturer || prevConfig.manufacturer,
+      username: username || prevConfig.username,
       curveName: curveTitle || prevConfig.curveName,
       graphTitle: graphTitle || prevConfig.graphTitle,
       xLabel: xTitleFromUrl || prevConfig.xLabel,
@@ -2416,7 +2421,7 @@ const GraphCapture = () => {
         y_min: parseFloat(graphConfig.yMin),
         y_max: parseFloat(graphConfig.yMax),
         temperature: resolvedTemperature,
-        manufacturer: urlParams.manufacturer || null,
+        manufacturer: urlParams.manufacturer || graphConfig.manufacturer || null,
         graph_title: graphConfig.graphTitle || urlParams.graph_title || null,
         x_label: graphConfig.xLabel || urlParams.x_label || null,
         y_label: graphConfig.yLabel || urlParams.y_label || null,
@@ -2843,7 +2848,8 @@ const GraphCapture = () => {
           discoveree_cat_id: urlParams.discoveree_cat_id ? String(urlParams.discoveree_cat_id) : '',
           identifier: resolvedOutgoingIdentifier,
           partno: urlParams.partno || '',
-          manf: urlParams.manufacturer || '',
+          manf: urlParams.manufacturer || graphConfig.manufacturer || '',
+          manufacturer: urlParams.manufacturer || graphConfig.manufacturer || '',
           graph_title: graphConfig.graphTitle || urlParams.graph_title || '',
           curve_title: urlParams.curve_title || graphConfig.curveName || '',
           x_title: graphConfig.xLabel || urlParams.x_label || '',
@@ -2851,6 +2857,8 @@ const GraphCapture = () => {
           graph_img: graphImageUrl || '',
           mark_review: '1',
           testuser_id: urlParams.testuser_id || '',
+          uname: urlParams.username || graphConfig.username || '',
+          username: urlParams.username || graphConfig.username || '',
         },
         details: [detailPayload],
       };
@@ -3307,7 +3315,7 @@ const GraphCapture = () => {
         {(uploadedImage || urlParams.graph_id) && (
           <div ref={graphWorkspaceRef} className="flex flex-col lg:flex-row gap-8">
             <div className="w-full lg:w-2/5 flex flex-col gap-4">
-              <GraphCanvas isReadOnly={isReadOnly} partNumber={urlParams.partno} manufacturer={urlParams.manufacturer} isAxisMappingConfirmed={isAxisMappingConfirmed} hasReturnUrl={!!urlParams.return_url} />
+              <GraphCanvas isReadOnly={isReadOnly} partNumber={urlParams.partno} manufacturer={urlParams.manufacturer || graphConfig.manufacturer} isAxisMappingConfirmed={isAxisMappingConfirmed} hasReturnUrl={!!urlParams.return_url} />
               <CapturedPointsList isReadOnly={isReadOnly} hasReturnUrl={!!urlParams.return_url} />
             </div>
             <div className="w-full lg:w-3/5">
@@ -3325,6 +3333,8 @@ const GraphCapture = () => {
                 isEditingCurve={Boolean(editingCurveId)}
                 isPartNumberFromUrl={Boolean(urlParams.partno)}
                 isPartNumberLocked={partNumberLocked}
+                showManufacturerField={!Boolean(urlParams.manufacturer)}
+                showUsernameField={!Boolean(urlParams.username)}
                 onConfirmAxisMapping={() => {
                   setIsAxisMappingConfirmed(true);
                   setFrozenGraphConfig({ ...graphConfig });
