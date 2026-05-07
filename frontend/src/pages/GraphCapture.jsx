@@ -757,15 +757,20 @@ const GraphCapture = () => {
     const activeSessionIdentifierRef = useRef('');
   const [singleModalPos, setSingleModalPos] = useState(null);
   const [combinedModalPos, setCombinedModalPos] = useState(null);
+  const [showAllCombinedModal, setShowAllCombinedModal] = useState(false);
   const singleModalRef = useRef(null);
   const combinedModalRef = useRef(null);
   const singleDragRef = useRef({ wasDragged: false });
   const combinedDragRef = useRef({ wasDragged: false });
 
   const selectedCurve = savedCurves.find((curve) => curve.id === selectedCurveId);
-  const groupedCurves = useMemo(() => {
+  const uniqueSavedCurves = useMemo(() => {
     if (!Array.isArray(savedCurves)) return [];
-    const uniqueCurves = dedupeCurves(savedCurves);
+    return dedupeCurves(savedCurves);
+  }, [savedCurves]);
+
+  const groupedCurves = useMemo(() => {
+    const uniqueCurves = uniqueSavedCurves;
     const groups = new Map();
 
     uniqueCurves.forEach((curve, index) => {
@@ -782,7 +787,27 @@ const GraphCapture = () => {
     });
 
     return Array.from(groups.values());
-  }, [savedCurves]);
+  }, [uniqueSavedCurves]);
+
+  const allScaleGroupedCurves = useMemo(() => {
+    const groups = new Map();
+    uniqueSavedCurves.forEach((curve, index) => {
+      const xScale = curve?.config?.xScale || curve?.x_scale || 'Linear';
+      const yScale = curve?.config?.yScale || curve?.y_scale || 'Linear';
+      const key = `${xScale}__${yScale}`;
+      const existing = groups.get(key) || {
+        id: key,
+        xScale,
+        yScale,
+        curves: [],
+      };
+      existing.curves.push(curve);
+      groups.set(key, existing);
+    });
+
+    return Array.from(groups.values()).sort((a, b) => a.id.localeCompare(b.id));
+  }, [uniqueSavedCurves]);
+
   const selectedGroup = groupedCurves.find((group) => group.id === combinedGroupId);
   const selectedCurvePoints = selectedCurve?.points ?? selectedCurve?.data_points ?? [];
   const hasTemperatureInOtherSymbols = isTemperatureSymbol(urlParams.other_symbols);
@@ -3439,6 +3464,14 @@ const GraphCapture = () => {
                   <h2 className="text-lg font-bold mb-4" style={{ color: '#213547' }}>
                     Saved Graphs
                   </h2>
+                  <div className="mb-3">
+                    <button
+                      className="px-3 py-1 rounded bg-gray-900 text-white text-xs"
+                      onClick={() => setShowAllCombinedModal(true)}
+                    >
+                      View all graphs combined
+                    </button>
+                  </div>
                   <div className="flex flex-col gap-4 max-h-80 overflow-y-auto pr-2">
                     {groupedCurves.map((group, groupIndex) => (
                       <div key={group.id} className="rounded p-3" style={{ border: '1px solid var(--color-border)', background: '#ffffff' }}>
@@ -4185,6 +4218,121 @@ const GraphCapture = () => {
                 />
               )}
             </div>
+          </div>
+        </div>
+      )}
+      {showAllCombinedModal && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            background: 'rgba(0,0,0,0.35)',
+            zIndex: 1000,
+          }}
+          onClick={() => setShowAllCombinedModal(false)}
+        >
+          <div
+            style={{
+              background: '#fff',
+              color: '#213547',
+              borderRadius: 8,
+              minWidth: 560,
+              maxWidth: 860,
+              maxHeight: '88vh',
+              overflowY: 'auto',
+              boxShadow: '0 4px 32px rgba(0,0,0,0.18)',
+              padding: 24,
+              position: 'fixed',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              style={{
+                position: 'absolute',
+                top: 8,
+                right: 12,
+                background: 'none',
+                border: 'none',
+                fontSize: 30,
+                width: 36,
+                height: 36,
+                lineHeight: 1,
+                color: '#888',
+                cursor: 'pointer',
+              }}
+              onClick={() => setShowAllCombinedModal(false)}
+              aria-label="Close"
+            >
+              ×
+            </button>
+            <div className="font-semibold mb-3" style={{ color: '#213547', fontSize: 18 }}>
+              View all graphs combined ({uniqueSavedCurves.length} curves)
+            </div>
+            <div className="text-xs mb-3" style={{ color: '#4b5563' }}>
+              Curves are grouped automatically by axis scale.
+            </div>
+            <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 12, color: '#374151', fontWeight: 600 }}>Point order:</span>
+              <div style={{ display: 'inline-flex', border: '1px solid #cbd5e1', borderRadius: 6, overflow: 'hidden' }}>
+                <button
+                  type="button"
+                  onClick={() => setPreviewSortByX(false)}
+                  style={{
+                    border: 'none',
+                    padding: '4px 10px',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    background: previewSortByX ? '#475569' : '#1d4ed8',
+                    color: previewSortByX ? '#ffffff' : '#fde047',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Capture Order
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewSortByX(true)}
+                  style={{
+                    border: 'none',
+                    borderLeft: '1px solid #94a3b8',
+                    padding: '4px 10px',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    background: previewSortByX ? '#1d4ed8' : '#475569',
+                    color: previewSortByX ? '#fde047' : '#ffffff',
+                    cursor: 'pointer',
+                  }}
+                >
+                  X-Sorted
+                </button>
+              </div>
+            </div>
+            {allScaleGroupedCurves.map((scaleGroup, idx) => (
+              <div key={scaleGroup.id} style={{ marginBottom: 18, border: '1px solid var(--color-border)', borderRadius: 8, padding: 12, background: '#ffffff' }}>
+                <div className="font-semibold mb-2" style={{ color: '#213547', fontSize: 14 }}>
+                  Group {idx + 1}: X {scaleGroup.xScale}, Y {scaleGroup.yScale} ({scaleGroup.curves.length} curves)
+                </div>
+                <SavedGraphCombinedPreview
+                  curves={scaleGroup.curves}
+                  config={{
+                    ...normalizeCurveConfig(scaleGroup.curves[0]),
+                    xScale: scaleGroup.xScale,
+                    yScale: scaleGroup.yScale,
+                    xLabel: normalizeCurveConfig(scaleGroup.curves[0]).xLabel || urlParams.x_label,
+                    yLabel: normalizeCurveConfig(scaleGroup.curves[0]).yLabel || urlParams.y_label,
+                  }}
+                  width={760}
+                  height={300}
+                  sortByX={previewSortByX}
+                />
+              </div>
+            ))}
           </div>
         </div>
       )}

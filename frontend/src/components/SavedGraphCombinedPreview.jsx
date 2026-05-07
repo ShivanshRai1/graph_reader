@@ -135,9 +135,14 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260, 
         plotY: toPlotY(point.y),
       }));
 
+      const curveName = curve?.config?.curveName || curve?.curve_name || curve?.name || `Curve ${curveIndex + 1}`;
+      const graphTitle = curve?.config?.graphTitle || curve?.graph_title || curve?.name || `Graph ${curveIndex + 1}`;
+
       return {
         id: curve.id ?? curveIndex,
-        label: curve.name || curve.curve_name || curve.graph_title || `Curve ${curveIndex + 1}`,
+        label: curveName,
+        curveName,
+        graphTitle,
         color: palette[curveIndex % palette.length],
         logModeX: curveLogModeX,
         logModeY: curveLogModeY,
@@ -256,7 +261,13 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260, 
         const dy = point.svgY - mouseY;
         const distance = Math.hypot(dx, dy);
         if (distance < maxDistance && distance < nearestDistance) {
-          nearest = { ...point, curveLabel: curve.label, color: curve.color };
+          nearest = {
+            ...point,
+            curveLabel: curve.label,
+            curveName: curve.curveName,
+            graphTitle: curve.graphTitle,
+            color: curve.color,
+          };
           nearestDistance = distance;
         }
       });
@@ -431,21 +442,24 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260, 
           <rect
             x={Math.min(hoveredPoint.svgX + 8, width - 180)}
             y={Math.max(hoveredPoint.svgY - 40, 8)}
-            width={172}
-            height={44}
+            width={220}
+            height={58}
             rx={6}
             fill="#f8fafc"
             stroke="#111827"
             strokeWidth="1"
             opacity="0.98"
           />
-          <text x={Math.min(hoveredPoint.svgX + 14, width - 174)} y={Math.max(hoveredPoint.svgY - 22, 24)} fontSize="10" fill="#111827" fontWeight="600">
-            {hoveredPoint.curveLabel}
+          <text x={Math.min(hoveredPoint.svgX + 14, width - 214)} y={Math.max(hoveredPoint.svgY - 27, 20)} fontSize="9" fill="#111827" fontWeight="600">
+            Graph: {hoveredPoint.graphTitle || '-'}
           </text>
-          <text x={Math.min(hoveredPoint.svgX + 14, width - 174)} y={Math.max(hoveredPoint.svgY - 8, 38)} fontSize="10" fill="#111827" fontWeight="600">
+          <text x={Math.min(hoveredPoint.svgX + 14, width - 214)} y={Math.max(hoveredPoint.svgY - 14, 33)} fontSize="9" fill="#111827" fontWeight="600">
+            Curve: {hoveredPoint.curveName || hoveredPoint.curveLabel || '-'}
+          </text>
+          <text x={Math.min(hoveredPoint.svgX + 14, width - 214)} y={Math.max(hoveredPoint.svgY - 1, 46)} fontSize="9" fill="#111827" fontWeight="600">
             X: {Number.isFinite(hoveredPoint.x) ? hoveredPoint.x.toFixed(2) : ''}
           </text>
-          <text x={Math.min(hoveredPoint.svgX + 88, width - 100)} y={Math.max(hoveredPoint.svgY - 8, 38)} fontSize="10" fill="#111827" fontWeight="600">
+          <text x={Math.min(hoveredPoint.svgX + 110, width - 118)} y={Math.max(hoveredPoint.svgY - 1, 46)} fontSize="9" fill="#111827" fontWeight="600">
             Y: {Number.isFinite(hoveredPoint.y) ? hoveredPoint.y.toFixed(2) : ''}
           </text>
         </g>
