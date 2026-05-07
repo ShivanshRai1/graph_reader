@@ -3486,6 +3486,7 @@ const GraphCapture = () => {
                   <div className="mb-3">
                     <button
                       className="px-3 py-1 rounded bg-yellow-400 text-black text-xs"
+                      style={{ backgroundColor: '#facc15', color: '#111827', borderColor: '#facc15' }}
                       onClick={() => setShowAllCombinedModal(true)}
                     >
                       View all graphs combined
