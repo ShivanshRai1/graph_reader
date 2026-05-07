@@ -72,10 +72,18 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260, 
   const baseConfig = config || {};
   const xScale = baseConfig.xScale ?? baseConfig.x_scale ?? 'Linear';
   const yScale = baseConfig.yScale ?? baseConfig.y_scale ?? 'Linear';
-  const xAxisTitle = (baseConfig.xLabel ?? baseConfig.xTitle ?? baseConfig.x_label ?? baseConfig.x_title ?? safeCurves[0]?.x_label ?? safeCurves[0]?.x_title ?? '').toString().trim();
-  const yAxisTitle = (baseConfig.yLabel ?? baseConfig.yTitle ?? baseConfig.y_label ?? baseConfig.y_title ?? safeCurves[0]?.y_label ?? safeCurves[0]?.y_title ?? '').toString().trim();
-  const xAxisLabel = xAxisTitle && !/^x(\s+axis)?$/i.test(xAxisTitle) ? `X (${xAxisTitle})` : 'X';
-  const yAxisLabel = yAxisTitle && !/^y(\s+axis)?$/i.test(yAxisTitle) ? `Y (${yAxisTitle})` : 'Y';
+  const allCurveXTitles = [...new Set(
+    safeCurves
+      .map((c) => (c?.config?.xLabel ?? c?.config?.x_label ?? c?.x_label ?? c?.x_title ?? baseConfig.xLabel ?? baseConfig.x_label ?? '').toString().trim())
+      .filter(Boolean)
+  )];
+  const allCurveYTitles = [...new Set(
+    safeCurves
+      .map((c) => (c?.config?.yLabel ?? c?.config?.y_label ?? c?.y_label ?? c?.y_title ?? baseConfig.yLabel ?? baseConfig.y_label ?? '').toString().trim())
+      .filter(Boolean)
+  )];
+  const xAxisLabel = allCurveXTitles.length > 0 ? `X (${allCurveXTitles.join(' / ')})` : 'X';
+  const yAxisLabel = allCurveYTitles.length > 0 ? `Y (${allCurveYTitles.join(' / ')})` : 'Y';
   const baseLogModeX = xScale !== 'Logarithmic'
     ? 'linear'
     : (baseConfig.logDataModeX === 'actual' || baseConfig.logDataModeX === 'exponent'
@@ -137,12 +145,16 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260, 
 
       const curveName = curve?.config?.curveName || curve?.curve_name || curve?.name || `Curve ${curveIndex + 1}`;
       const graphTitle = curve?.config?.graphTitle || curve?.graph_title || curve?.name || `Graph ${curveIndex + 1}`;
+      const curveXLabel = (curve?.config?.xLabel ?? curve?.config?.x_label ?? curve?.x_label ?? curve?.x_title ?? '').toString().trim();
+      const curveYLabel = (curve?.config?.yLabel ?? curve?.config?.y_label ?? curve?.y_label ?? curve?.y_title ?? '').toString().trim();
 
       return {
         id: curve.id ?? curveIndex,
         label: curveName,
         curveName,
         graphTitle,
+        xLabel: curveXLabel,
+        yLabel: curveYLabel,
         color: palette[curveIndex % palette.length],
         logModeX: curveLogModeX,
         logModeY: curveLogModeY,
@@ -266,6 +278,8 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260, 
             curveLabel: curve.label,
             curveName: curve.curveName,
             graphTitle: curve.graphTitle,
+            xLabel: curve.xLabel,
+            yLabel: curve.yLabel,
             color: curve.color,
           };
           nearestDistance = distance;
@@ -443,7 +457,7 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260, 
             x={Math.min(hoveredPoint.svgX + 8, width - 180)}
             y={Math.max(hoveredPoint.svgY - 40, 8)}
             width={220}
-            height={58}
+            height={72}
             rx={6}
             fill="#f8fafc"
             stroke="#111827"
@@ -457,10 +471,10 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260, 
             Curve: {hoveredPoint.curveName || hoveredPoint.curveLabel || '-'}
           </text>
           <text x={Math.min(hoveredPoint.svgX + 14, width - 214)} y={Math.max(hoveredPoint.svgY - 1, 46)} fontSize="9" fill="#111827" fontWeight="600">
-            X: {Number.isFinite(hoveredPoint.x) ? hoveredPoint.x.toFixed(2) : ''}
+            X{hoveredPoint.xLabel ? ` (${hoveredPoint.xLabel})` : ''}: {Number.isFinite(hoveredPoint.x) ? hoveredPoint.x.toFixed(4) : ''}
           </text>
-          <text x={Math.min(hoveredPoint.svgX + 110, width - 118)} y={Math.max(hoveredPoint.svgY - 1, 46)} fontSize="9" fill="#111827" fontWeight="600">
-            Y: {Number.isFinite(hoveredPoint.y) ? hoveredPoint.y.toFixed(2) : ''}
+          <text x={Math.min(hoveredPoint.svgX + 14, width - 214)} y={Math.max(hoveredPoint.svgY + 12, 59)} fontSize="9" fill="#111827" fontWeight="600">
+            Y{hoveredPoint.yLabel ? ` (${hoveredPoint.yLabel})` : ''}: {Number.isFinite(hoveredPoint.y) ? hoveredPoint.y.toFixed(4) : ''}
           </text>
         </g>
       ) : null}
