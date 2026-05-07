@@ -455,25 +455,25 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260, 
         <g>
           <rect
             x={Math.min(hoveredPoint.svgX + 8, width - 180)}
-            y={Math.max(hoveredPoint.svgY - 40, 8)}
-            width={220}
-            height={72}
+            y={Math.max(hoveredPoint.svgY - 46, 8)}
+            width={250}
+            height={90}
             rx={6}
             fill="#f8fafc"
             stroke="#111827"
             strokeWidth="1"
             opacity="0.98"
           />
-          <text x={Math.min(hoveredPoint.svgX + 14, width - 214)} y={Math.max(hoveredPoint.svgY - 27, 20)} fontSize="9" fill="#111827" fontWeight="600">
+          <text x={Math.min(hoveredPoint.svgX + 14, width - 244)} y={Math.max(hoveredPoint.svgY - 30, 22)} fontSize="11" fill="#111827" fontWeight="700">
             Graph: {hoveredPoint.graphTitle || '-'}
           </text>
-          <text x={Math.min(hoveredPoint.svgX + 14, width - 214)} y={Math.max(hoveredPoint.svgY - 14, 33)} fontSize="9" fill="#111827" fontWeight="600">
+          <text x={Math.min(hoveredPoint.svgX + 14, width - 244)} y={Math.max(hoveredPoint.svgY - 14, 38)} fontSize="11" fill="#111827" fontWeight="700">
             Curve: {hoveredPoint.curveName || hoveredPoint.curveLabel || '-'}
           </text>
-          <text x={Math.min(hoveredPoint.svgX + 14, width - 214)} y={Math.max(hoveredPoint.svgY - 1, 46)} fontSize="9" fill="#111827" fontWeight="600">
+          <text x={Math.min(hoveredPoint.svgX + 14, width - 244)} y={Math.max(hoveredPoint.svgY + 2, 54)} fontSize="11" fill="#111827" fontWeight="700">
             X{hoveredPoint.xLabel ? ` (${hoveredPoint.xLabel})` : ''}: {Number.isFinite(hoveredPoint.x) ? hoveredPoint.x.toFixed(4) : ''}
           </text>
-          <text x={Math.min(hoveredPoint.svgX + 14, width - 214)} y={Math.max(hoveredPoint.svgY + 12, 59)} fontSize="9" fill="#111827" fontWeight="600">
+          <text x={Math.min(hoveredPoint.svgX + 14, width - 244)} y={Math.max(hoveredPoint.svgY + 18, 70)} fontSize="11" fill="#111827" fontWeight="700">
             Y{hoveredPoint.yLabel ? ` (${hoveredPoint.yLabel})` : ''}: {Number.isFinite(hoveredPoint.y) ? hoveredPoint.y.toFixed(4) : ''}
           </text>
         </g>
