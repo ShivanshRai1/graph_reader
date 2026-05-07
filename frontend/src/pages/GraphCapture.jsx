@@ -468,8 +468,23 @@ const GraphCapture = () => {
     // A user-uploaded image starts a fresh capture context.
     clearGraphIdContext();
     setGraphTitleUnlocked(true);
+    setUrlParams((prev) => ({
+      ...prev,
+      x_label: '',
+      y_label: '',
+    }));
     setIsXTitleUrlLocked(false);
     setIsYTitleUrlLocked(false);
+
+    const currentUrl = new URL(window.location.href);
+    currentUrl.searchParams.delete('x_label');
+    currentUrl.searchParams.delete('x_title');
+    currentUrl.searchParams.delete('xlabel');
+    currentUrl.searchParams.delete('y_label');
+    currentUrl.searchParams.delete('y_title');
+    currentUrl.searchParams.delete('ylabel');
+    window.history.replaceState({}, '', currentUrl.toString());
+
     scrollToGraphWorkspace();
   };
   const [isSaving, setIsSaving] = useState(false);
