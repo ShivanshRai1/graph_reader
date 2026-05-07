@@ -467,6 +467,9 @@ const GraphCapture = () => {
   const handleUserImageLoaded = () => {
     // A user-uploaded image starts a fresh capture context.
     clearGraphIdContext();
+    setGraphTitleUnlocked(true);
+    setIsXTitleUrlLocked(false);
+    setIsYTitleUrlLocked(false);
     scrollToGraphWorkspace();
   };
   const [isSaving, setIsSaving] = useState(false);
@@ -502,6 +505,7 @@ const GraphCapture = () => {
   });
   const [isXTitleUrlLocked, setIsXTitleUrlLocked] = useState(false);
   const [isYTitleUrlLocked, setIsYTitleUrlLocked] = useState(false);
+  const [graphTitleUnlocked, setGraphTitleUnlocked] = useState(false);
   const [symbolValues, setSymbolValues] = useState({});
   const [symbolNames, setSymbolNames] = useState([]);
   const [returnParams, setReturnParams] = useState({});
@@ -3346,7 +3350,7 @@ const GraphCapture = () => {
             <div className="w-full lg:w-3/5">
               <GraphConfig 
                 showTctj={shouldShowTemperatureInput} 
-                isGraphTitleReadOnly={Boolean(urlParams.graph_id || urlParams.graph_title)} 
+                isGraphTitleReadOnly={Boolean(urlParams.graph_id || urlParams.graph_title) && !graphTitleUnlocked} 
                 isCurveNameReadOnly={false} 
                 isXTitleReadOnly={isXTitleUrlLocked}
                 isYTitleReadOnly={isYTitleUrlLocked}
