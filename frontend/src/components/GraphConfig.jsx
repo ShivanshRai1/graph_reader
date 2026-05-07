@@ -383,36 +383,6 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
       <h3 className="text-gray-900 text-lg font-semibold mb-5">Graph Configuration</h3>
 
       <div className="mb-5">
-        {showManufacturerField && (
-          <label className="block mb-3 font-medium text-gray-800">
-            <span className="block mb-1 text-sm text-gray-800">Manufacturer:</span>
-            <input
-              type="text"
-              name="manufacturer"
-              value={graphConfig.manufacturer || ''}
-              onChange={handleChange}
-              placeholder="Enter manufacturer"
-              className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed"
-              readOnly={isConfigLocked}
-              disabled={isConfigLocked}
-            />
-          </label>
-        )}
-        {showUsernameField && (
-          <label className="block mb-3 font-medium text-gray-800">
-            <span className="block mb-1 text-sm text-gray-800">Username:</span>
-            <input
-              type="text"
-              name="username"
-              value={graphConfig.username || ''}
-              onChange={handleChange}
-              placeholder="Enter username((Email Id)"
-              className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed"
-              readOnly={isConfigLocked}
-              disabled={isConfigLocked}
-            />
-          </label>
-        )}
         <label className="block mb-3 font-medium text-gray-800">
           <span className="block mb-1 text-sm text-gray-800">Graph Title:</span>
           <input
@@ -443,6 +413,36 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             disabled={isConfigLocked || isCurveNameReadOnly}
           />
         </label>
+        {showManufacturerField && (
+          <label className="block mb-3 font-medium text-gray-800">
+            <span className="block mb-1 text-sm text-gray-800">Manufacturer:</span>
+            <input
+              type="text"
+              name="manufacturer"
+              value={graphConfig.manufacturer || ''}
+              onChange={handleChange}
+              placeholder="Enter manufacturer"
+              className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed"
+              readOnly={isConfigLocked}
+              disabled={isConfigLocked}
+            />
+          </label>
+        )}
+        {showUsernameField && (
+          <label className="block mb-3 font-medium text-gray-800">
+            <span className="block mb-1 text-sm text-gray-800">Username:</span>
+            <input
+              type="text"
+              name="username"
+              value={graphConfig.username || ''}
+              onChange={handleChange}
+              placeholder="Enter username((Email Id)"
+              className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed"
+              readOnly={isConfigLocked}
+              disabled={isConfigLocked}
+            />
+          </label>
+        )}
         <label className="block mb-3 font-medium text-gray-800">
           <span className="block mb-1 text-sm text-gray-800">Part Number:</span>
           <input
