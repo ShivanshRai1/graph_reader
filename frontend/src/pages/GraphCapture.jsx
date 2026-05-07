@@ -3936,10 +3936,11 @@ const GraphCapture = () => {
               View graph in new tab
             </a>
             <div style={{ marginTop: 12, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 12, color: '#374151', fontWeight: 600 }}>Point order:</span>
+              <span style={{ fontSize: 12, color: '#374151', fontWeight: 600 }}>Point order (display only):</span>
               <div style={{ display: 'inline-flex', border: '1px solid #cbd5e1', borderRadius: 6, overflow: 'hidden' }}>
                 <button
                   type="button"
+                  title="Use original capture sequence (the order you clicked points)"
                   onClick={() => setPreviewSortByX(false)}
                   style={{
                     border: 'none',
@@ -3955,6 +3956,7 @@ const GraphCapture = () => {
                 </button>
                 <button
                   type="button"
+                  title="Sort points left-to-right by X value"
                   onClick={() => setPreviewSortByX(true)}
                   style={{
                     border: 'none',
@@ -3970,6 +3972,9 @@ const GraphCapture = () => {
                   X-Sorted
                 </button>
               </div>
+            </div>
+            <div className="text-xs" style={{ color: '#6b7280', marginBottom: 8 }}>
+              Capture Order keeps the click sequence; X-Sorted reorders by X ascending. This changes display order only.
             </div>
             <div style={{ marginTop: 12 }}>
               <SavedGraphPreview
@@ -4175,10 +4180,11 @@ const GraphCapture = () => {
               );
             })()}
             <div style={{ marginTop: 12, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 12, color: '#374151', fontWeight: 600 }}>Point order:</span>
+              <span style={{ fontSize: 12, color: '#374151', fontWeight: 600 }}>Point order (display only):</span>
               <div style={{ display: 'inline-flex', border: '1px solid #cbd5e1', borderRadius: 6, overflow: 'hidden' }}>
                 <button
                   type="button"
+                  title="Use original capture sequence (the order you clicked points)"
                   onClick={() => setPreviewSortByX(false)}
                   style={{
                     border: 'none',
@@ -4194,6 +4200,7 @@ const GraphCapture = () => {
                 </button>
                 <button
                   type="button"
+                  title="Sort points left-to-right by X value"
                   onClick={() => setPreviewSortByX(true)}
                   style={{
                     border: 'none',
@@ -4209,6 +4216,9 @@ const GraphCapture = () => {
                   X-Sorted
                 </button>
               </div>
+            </div>
+            <div className="text-xs" style={{ color: '#6b7280', marginBottom: 8 }}>
+              Capture Order keeps the click sequence; X-Sorted reorders by X ascending. This changes display order only.
             </div>
             <div style={{ marginTop: 12 }}>
               {selectedGroup.curves.length === 1 ? (
@@ -4298,10 +4308,11 @@ const GraphCapture = () => {
               Curves are grouped automatically by axis scale.
             </div>
             <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 12, color: '#374151', fontWeight: 600 }}>Point order:</span>
+              <span style={{ fontSize: 12, color: '#374151', fontWeight: 600 }}>Point order (display only):</span>
               <div style={{ display: 'inline-flex', border: '1px solid #cbd5e1', borderRadius: 6, overflow: 'hidden' }}>
                 <button
                   type="button"
+                  title="Use original capture sequence (the order you clicked points)"
                   onClick={() => setPreviewSortByX(false)}
                   style={{
                     border: 'none',
@@ -4317,6 +4328,7 @@ const GraphCapture = () => {
                 </button>
                 <button
                   type="button"
+                  title="Sort points left-to-right by X value"
                   onClick={() => setPreviewSortByX(true)}
                   style={{
                     border: 'none',
@@ -4332,6 +4344,9 @@ const GraphCapture = () => {
                   X-Sorted
                 </button>
               </div>
+            </div>
+            <div className="text-xs" style={{ color: '#6b7280', marginBottom: 10 }}>
+              Capture Order keeps the click sequence; X-Sorted reorders by X ascending. This changes display order only.
             </div>
             {allScaleGroupedCurves.map((scaleGroup, idx) => (
               <div key={scaleGroup.id} style={{ marginBottom: 18, border: '1px solid var(--color-border)', borderRadius: 8, padding: 12, background: '#ffffff' }}>
