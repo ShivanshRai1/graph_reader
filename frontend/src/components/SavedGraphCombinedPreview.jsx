@@ -145,8 +145,8 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260, 
 
       const curveName = curve?.config?.curveName || curve?.curve_name || curve?.name || `Curve ${curveIndex + 1}`;
       const graphTitle = curve?.config?.graphTitle || curve?.graph_title || curve?.name || `Graph ${curveIndex + 1}`;
-      const curveXLabel = (curve?.config?.xLabel ?? curve?.config?.x_label ?? curve?.x_label ?? curve?.x_title ?? '').toString().trim();
-      const curveYLabel = (curve?.config?.yLabel ?? curve?.config?.y_label ?? curve?.y_label ?? curve?.y_title ?? '').toString().trim();
+      const curveXLabel = (curve?.config?.xLabel ?? curve?.config?.x_label ?? curve?.x_label ?? curve?.x_title ?? baseConfig.xLabel ?? baseConfig.x_label ?? '').toString().trim();
+      const curveYLabel = (curve?.config?.yLabel ?? curve?.config?.y_label ?? curve?.y_label ?? curve?.y_title ?? baseConfig.yLabel ?? baseConfig.y_label ?? '').toString().trim();
 
       return {
         id: curve.id ?? curveIndex,
