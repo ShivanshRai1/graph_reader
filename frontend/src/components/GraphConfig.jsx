@@ -1,5 +1,6 @@
 import { useGraph } from '../context/GraphContext';
 import { useState, useEffect, useRef } from 'react';
+import { flushSync } from 'react-dom';
 
 const LOG_FIELDS = ['xMin', 'xMax', 'yMin', 'yMax'];
 
@@ -347,6 +348,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
               inputMode="decimal"
               value={logPairInputs[field].exponent}
               onChange={(e) => handleLogExponentChange(field, e.target.value)}
+              onMouseDown={() => { if (!isAxisMappingConfirmed && !isEditingCurve && activeMode !== 'exponent') { flushSync(() => handleLogInputModeChange(field, 'exponent')); } }}
               onFocus={() => !isAxisMappingConfirmed && !isEditingCurve && handleLogInputModeChange(field, 'exponent')}
               disabled={isAxisMappingConfirmed || isEditingCurve}
               placeholder={placeholderExponent}
@@ -360,6 +362,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             inputMode="decimal"
             value={logPairInputs[field].value}
             onChange={(e) => handleLogActualValueChange(field, e.target.value)}
+            onMouseDown={() => { if (!isAxisMappingConfirmed && !isEditingCurve && activeMode !== 'value') { flushSync(() => handleLogInputModeChange(field, 'value')); } }}
             onFocus={() => !isAxisMappingConfirmed && !isEditingCurve && handleLogInputModeChange(field, 'value')}
             disabled={isAxisMappingConfirmed || isEditingCurve}
             placeholder={placeholderValue}
