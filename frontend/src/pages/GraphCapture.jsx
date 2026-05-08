@@ -487,6 +487,11 @@ const GraphCapture = () => {
 
     const companyUrl = 'https://www.discoveree.io/vision_upload.php';
 
+    const formData = new FormData();
+    Object.entries(requestPayload).forEach(([key, value]) => {
+      formData.append(key, value);
+    });
+
     console.log('=== AI EXTRACTION REQUEST ===', {
       url: companyUrl,
       method: 'POST',
@@ -496,10 +501,7 @@ const GraphCapture = () => {
     try {
       const response = await fetch(companyUrl, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestPayload),
+        body: formData,
       });
 
       const rawText = await response.text();
