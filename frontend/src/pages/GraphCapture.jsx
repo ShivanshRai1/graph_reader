@@ -464,6 +464,79 @@ const GraphCapture = () => {
     convertCanvasToGraphCoordinates,
   } = useGraph();
   const graphWorkspaceRef = useRef(null);
+  const handleAiExtensionCapture = async (imageBase64, source = '') => {
+    const searchParams = new URLSearchParams(window.location.search);
+    const uniqueKeys = Array.from(new Set(Array.from(searchParams.keys())));
+
+    const queryParams = new URLSearchParams();
+    uniqueKeys.forEach((key) => {
+      searchParams.getAll(key).forEach((value) => {
+        queryParams.append(key, String(value || ''));
+      });
+    });
+    queryParams.set('type', 'ai_extension');
+
+    const urlParameters = {};
+    uniqueKeys.forEach((key) => {
+      const values = searchParams.getAll(key).map((value) => String(value || ''));
+      if (values.length > 1) {
+        urlParameters[key] = values;
+      } else if (values.length === 1) {
+        urlParameters[key] = values[0];
+      }
+    });
+
+    const requestPayload = {
+      ...urlParameters,
+      type: 'ai_extension',
+      image_base64: String(imageBase64 || ''),
+      source: String(source || ''),
+    };
+
+    const companyUrl = `https://www.discoveree.io/graph_capture_api.php?${queryParams.toString()}`;
+
+    console.log('=== AI EXTENSION REQUEST ===', {
+      url: companyUrl,
+      method: 'POST',
+      payload: requestPayload,
+    });
+
+    try {
+      const response = await fetch(companyUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestPayload),
+      });
+
+      const rawText = await response.text();
+      let result = {};
+      try {
+        result = rawText ? parseCompanyApiText(rawText) : {};
+      } catch {
+        result = rawText;
+      }
+
+      console.log('=== AI EXTENSION RESPONSE ===', {
+        url: companyUrl,
+        status: response.status,
+        ok: response.ok,
+        rawText,
+        response: result,
+      });
+
+      if (!response.ok) {
+        throw new Error(`AI extension API request failed (${response.status})`);
+      }
+
+      alert('Image sent for AI extraction successfully.');
+    } catch (error) {
+      console.error('AI extension request failed:', error);
+      alert(`Failed to send image for AI extraction: ${error?.message || 'Unknown error'}`);
+    }
+  };
+
   const handleUserImageLoaded = () => {
     // A user-uploaded image starts a fresh capture context.
     clearGraphIdContext();
@@ -3372,7 +3445,7 @@ const GraphCapture = () => {
       </header>
 
       <div className="flex flex-col gap-8">
-        <ImageUpload onImageLoaded={handleUserImageLoaded} />
+        <ImageUpload onImageLoaded={handleUserImageLoaded} onAiExtensionCapture={handleAiExtensionCapture} />
         {(uploadedImage || urlParams.graph_id) && (
           <div ref={graphWorkspaceRef} className="flex flex-col lg:flex-row gap-8">
             <div className="w-full lg:w-2/5 flex flex-col gap-4">
