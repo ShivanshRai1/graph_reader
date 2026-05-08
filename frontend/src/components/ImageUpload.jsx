@@ -1,19 +1,10 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { useGraph } from '../context/GraphContext';
 
 const ImageUpload = ({ onImageLoaded, onAiExtensionCapture }) => {
   const { setUploadedImage, clearDataPoints, setGraphConfig, setGraphArea } = useGraph();
   const fileInputRef = useRef(null);
-
-  const askCaptureMode = () => {
-    const choice = window.prompt(
-      'Choose capture mode:\n1 = Capture manually\n2 = Capture with AI extension',
-      '1'
-    );
-
-    if (choice === null) return null;
-    return String(choice).trim() === '2' ? 'ai_extension' : 'manual';
-  };
+  const [pendingCapture, setPendingCapture] = useState(null);
 
   const resetGraphForManualCapture = (clearImageFirst = false) => {
     if (clearImageFirst) {
@@ -38,21 +29,23 @@ const ImageUpload = ({ onImageLoaded, onAiExtensionCapture }) => {
     const reader = new FileReader();
     reader.onload = async (ev) => {
       const imageBase64 = ev.target.result;
-      const selectedMode = askCaptureMode();
-      if (!selectedMode) {
-        return;
-      }
-
-      if (selectedMode === 'ai_extension') {
-        await onAiExtensionCapture?.(imageBase64, source);
-        return;
-      }
-
-      resetGraphForManualCapture(source === 'paste');
-      setUploadedImage(imageBase64);
-      onImageLoaded?.();
+      setPendingCapture({ imageBase64, source });
     };
     reader.readAsDataURL(blob);
+  };
+
+  const handleCaptureManually = () => {
+    if (!pendingCapture?.imageBase64) return;
+    resetGraphForManualCapture(pendingCapture.source === 'paste');
+    setUploadedImage(pendingCapture.imageBase64);
+    onImageLoaded?.();
+    setPendingCapture(null);
+  };
+
+  const handleCaptureWithAiExtension = async () => {
+    if (!pendingCapture?.imageBase64) return;
+    await onAiExtensionCapture?.(pendingCapture.imageBase64, pendingCapture.source);
+    setPendingCapture(null);
   };
 
   const handlePaste = (e) => {
@@ -99,6 +92,22 @@ const ImageUpload = ({ onImageLoaded, onAiExtensionCapture }) => {
       >
         📁 Browse Files
       </button>
+      {pendingCapture && (
+        <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <button
+            onClick={handleCaptureManually}
+            className="w-full px-4 py-2 rounded bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors"
+          >
+            Capture Manually
+          </button>
+          <button
+            onClick={handleCaptureWithAiExtension}
+            className="w-full px-4 py-2 rounded bg-emerald-600 text-white font-medium hover:bg-emerald-700 transition-colors"
+          >
+            Capture with AI Extension
+          </button>
+        </div>
+      )}
     </div>
   );
 };
