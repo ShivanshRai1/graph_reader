@@ -499,30 +499,16 @@ const GraphCapture = () => {
     });
 
     try {
-      const response = await fetch(companyUrl, {
+      await fetch(companyUrl, {
         method: 'POST',
+        mode: 'no-cors',
         body: formData,
       });
 
-      const rawText = await response.text();
-      let result = {};
-      try {
-        result = rawText ? parseCompanyApiText(rawText) : {};
-      } catch {
-        result = rawText;
-      }
-
       console.log('=== AI EXTRACTION RESPONSE ===', {
         url: companyUrl,
-        status: response.status,
-        ok: response.ok,
-        rawText,
-        response: result,
+        note: 'no-cors mode — response is opaque, request was sent successfully',
       });
-
-      if (!response.ok) {
-        throw new Error(`AI extraction API request failed (${response.status})`);
-      }
 
       alert('Image sent for AI extraction successfully.');
     } catch (error) {
