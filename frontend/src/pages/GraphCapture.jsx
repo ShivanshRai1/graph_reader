@@ -495,7 +495,7 @@ const GraphCapture = () => {
 
     const companyUrl = `https://www.discoveree.io/graph_capture_api.php?${queryParams.toString()}`;
 
-    console.log('=== AI EXTENSION REQUEST ===', {
+    console.log('=== AI EXTRACTION REQUEST ===', {
       url: companyUrl,
       method: 'POST',
       payload: requestPayload,
@@ -518,7 +518,7 @@ const GraphCapture = () => {
         result = rawText;
       }
 
-      console.log('=== AI EXTENSION RESPONSE ===', {
+      console.log('=== AI EXTRACTION RESPONSE ===', {
         url: companyUrl,
         status: response.status,
         ok: response.ok,
@@ -527,12 +527,12 @@ const GraphCapture = () => {
       });
 
       if (!response.ok) {
-        throw new Error(`AI extension API request failed (${response.status})`);
+        throw new Error(`AI extraction API request failed (${response.status})`);
       }
 
       alert('Image sent for AI extraction successfully.');
     } catch (error) {
-      console.error('AI extension request failed:', error);
+      console.error('AI extraction request failed:', error);
       alert(`Failed to send image for AI extraction: ${error?.message || 'Unknown error'}`);
     }
   };

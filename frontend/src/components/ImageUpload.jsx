@@ -104,7 +104,7 @@ const ImageUpload = ({ onImageLoaded, onAiExtensionCapture }) => {
             onClick={handleCaptureWithAiExtension}
             className="w-full px-4 py-2 rounded bg-emerald-600 text-white font-medium hover:bg-emerald-700 transition-colors"
           >
-            Capture with AI Extension
+            Capture with AI Extraction
           </button>
         </div>
       )}
