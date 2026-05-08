@@ -1431,6 +1431,21 @@ const GraphCapture = () => {
     );
     const hasXyChanges = havePointsChanged(currentPoints, nextPoints);
 
+    const changedPoints = (() => {
+      const maxLen = Math.max(currentPoints.length, nextPoints.length);
+      const diffs = [];
+      for (let i = 0; i < maxLen; i++) {
+        const oldPt = currentPoints[i];
+        const newPt = nextPoints[i];
+        if (!oldPt || !newPt) {
+          diffs.push({ index: i, old_x: oldPt?.x ?? null, old_y: oldPt?.y ?? null, new_x: newPt?.x ?? null, new_y: newPt?.y ?? null });
+        } else if (oldPt.x !== newPt.x || oldPt.y !== newPt.y) {
+          diffs.push({ index: i, old_x: oldPt.x, old_y: oldPt.y, new_x: newPt.x, new_y: newPt.y });
+        }
+      }
+      return diffs;
+    })();
+
     const hasLocalChanges = hasMetaChanges || hasLegacyTemperatureChange || hasXyChanges;
     const hasCompanyChanges = hasMetaChanges || hasLegacyTemperatureChange || hasSymbolValueChanges || hasXyChanges;
 
@@ -1468,6 +1483,7 @@ const GraphCapture = () => {
         url: localUrl,
         method: 'PUT',
         payload: localPayload,
+        changed_points: changedPoints,
       });
 
       const localResponse = await fetch(localUrl, {
@@ -1517,6 +1533,7 @@ const GraphCapture = () => {
     if (currentMeta.yUnitPrefix !== nextMeta.yUnitPrefix) detailPayload.yunit = nextMeta.yUnitPrefix || '1';
     if (hasXyChanges) {
       detailPayload.xy = buildCompanyXyString(nextPoints);
+      detailPayload.changed_points = changedPoints;
     }
 
     const payload = {
