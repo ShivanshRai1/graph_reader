@@ -465,16 +465,24 @@ const GraphCapture = () => {
   } = useGraph();
   const graphWorkspaceRef = useRef(null);
   const handleAiExtensionCapture = async (imageBase64, source = '') => {
-    const searchParams = new URLSearchParams(window.location.search);
-
     const requestPayload = {
       action: 'graphcapture',
       base64image: String(imageBase64 || ''),
-      graph_id: searchParams.get('graph_id') || '',
-      discoveree_cat_id: searchParams.get('discoveree_cat_id') || '',
-      partno: searchParams.get('partno') || '',
-      manf: searchParams.get('manf') || searchParams.get('manufacturer') || '',
-      testuser_id: searchParams.get('testuser_id') || '',
+      graph_id: String(urlParams.graph_id || ''),
+      discoveree_cat_id: String(urlParams.discoveree_cat_id || ''),
+      partno: String(urlParams.partno || ''),
+      manf: String(urlParams.manufacturer || ''),
+      manufacturer: String(urlParams.manufacturer || ''),
+      username: String(urlParams.username || ''),
+      graph_title: String(urlParams.graph_title || ''),
+      curve_title: String(urlParams.curve_title || ''),
+      x_label: String(urlParams.x_label || ''),
+      y_label: String(urlParams.y_label || ''),
+      other_symbols: String(urlParams.other_symbols || ''),
+      identifier: String(urlParams.identifier || ''),
+      testuser_id: String(urlParams.testuser_id || ''),
+      tctj: String(urlParams.tctj || ''),
+      return_url: String(urlParams.return_url || ''),
     };
 
     const companyUrl = 'https://www.discoveree.io/vision_upload.php';
