@@ -466,34 +466,18 @@ const GraphCapture = () => {
   const graphWorkspaceRef = useRef(null);
   const handleAiExtensionCapture = async (imageBase64, source = '') => {
     const searchParams = new URLSearchParams(window.location.search);
-    const uniqueKeys = Array.from(new Set(Array.from(searchParams.keys())));
-
-    const queryParams = new URLSearchParams();
-    uniqueKeys.forEach((key) => {
-      searchParams.getAll(key).forEach((value) => {
-        queryParams.append(key, String(value || ''));
-      });
-    });
-    queryParams.set('type', 'ai_extension');
-
-    const urlParameters = {};
-    uniqueKeys.forEach((key) => {
-      const values = searchParams.getAll(key).map((value) => String(value || ''));
-      if (values.length > 1) {
-        urlParameters[key] = values;
-      } else if (values.length === 1) {
-        urlParameters[key] = values[0];
-      }
-    });
 
     const requestPayload = {
-      ...urlParameters,
-      type: 'ai_extension',
-      image_base64: String(imageBase64 || ''),
-      source: String(source || ''),
+      action: 'graphcapture',
+      base64image: String(imageBase64 || ''),
+      graph_id: searchParams.get('graph_id') || '',
+      discoveree_cat_id: searchParams.get('discoveree_cat_id') || '',
+      partno: searchParams.get('partno') || '',
+      manf: searchParams.get('manf') || searchParams.get('manufacturer') || '',
+      testuser_id: searchParams.get('testuser_id') || '',
     };
 
-    const companyUrl = `https://www.discoveree.io/graph_capture_api.php?${queryParams.toString()}`;
+    const companyUrl = 'https://www.discoveree.io/vision_upload.php';
 
     console.log('=== AI EXTRACTION REQUEST ===', {
       url: companyUrl,
