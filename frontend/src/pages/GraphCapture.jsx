@@ -3434,7 +3434,7 @@ const GraphCapture = () => {
       {isAiExtractionLoading && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
           <div className="rounded-md bg-white px-5 py-3 text-sm font-medium" style={{ color: '#213547' }}>
-            Processing AI extraction...
+            Loading, please wait...
           </div>
         </div>
       )}
