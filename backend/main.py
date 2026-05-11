@@ -10,11 +10,8 @@ import json
 import os
 import threading
 import time
-import uuid
 from sqlalchemy import inspect, text
-from urllib import error as urllib_error
-from urllib import parse as urllib_parse
-from urllib import request as urllib_request
+import requests
 
 # Create tables
 Base.metadata.create_all(bind=engine)
@@ -99,24 +96,6 @@ def parse_company_api_text(raw_text: str):
     return json.loads(raw_text[match_start:match_end + 1])
 
 
-def encode_multipart_formdata(fields: dict):
-    boundary = f"----GraphCaptureBoundary{uuid.uuid4().hex}"
-    lines = []
-
-    for name, value in fields.items():
-        lines.append(f"--{boundary}")
-        lines.append(f'Content-Disposition: form-data; name="{name}"')
-        lines.append("")
-        lines.append("" if value is None else str(value))
-
-    lines.append(f"--{boundary}--")
-    lines.append("")
-
-    body = "\r\n".join(lines).encode("utf-8")
-    content_type = f"multipart/form-data; boundary={boundary}"
-    return body, content_type
-
-
 @app.post("/api/ai-extraction")
 def relay_ai_extraction(payload: dict):
     company_url = "https://www.discoveree.io/vision_upload.php"
@@ -124,62 +103,36 @@ def relay_ai_extraction(payload: dict):
         str(key): "" if value is None else str(value)
         for key, value in (payload or {}).items()
     }
-    encoded_payload, content_type = encode_multipart_formdata(normalized_payload)
-    request_headers = {
-        "Content-Type": content_type,
-        "Accept": "application/json, text/plain, */*",
-    }
-    upstream_request = urllib_request.Request(
-        company_url,
-        data=encoded_payload,
-        headers=request_headers,
-        method="POST",
-    )
 
     try:
-        with urllib_request.urlopen(upstream_request, timeout=120) as upstream_response:
-            raw_text = upstream_response.read().decode(
-                upstream_response.headers.get_content_charset() or "utf-8",
-                errors="replace",
-            )
-            try:
-                parsed_response = parse_company_api_text(raw_text)
-            except Exception:
-                parsed_response = raw_text
-
-            return JSONResponse(
-                status_code=upstream_response.status,
-                content={
-                    "target_url": company_url,
-                    "upstream_status": upstream_response.status,
-                    "upstream_ok": 200 <= upstream_response.status < 300,
-                    "content_type": upstream_response.headers.get("Content-Type", ""),
-                    "raw_text": raw_text,
-                    "response": parsed_response,
-                },
-            )
-    except urllib_error.HTTPError as error:
-        raw_text = error.read().decode("utf-8", errors="replace")
+        response = requests.post(
+            company_url,
+            data=normalized_payload,
+            timeout=120,
+            headers={"Accept": "application/json, text/plain, */*"},
+        )
+        raw_text = response.text
+        
         try:
             parsed_response = parse_company_api_text(raw_text)
         except Exception:
             parsed_response = raw_text
 
         return JSONResponse(
-            status_code=error.code,
+            status_code=response.status_code,
             content={
                 "target_url": company_url,
-                "upstream_status": error.code,
-                "upstream_ok": False,
-                "content_type": error.headers.get("Content-Type", "") if error.headers else "",
+                "upstream_status": response.status_code,
+                "upstream_ok": response.ok,
+                "content_type": response.headers.get("Content-Type", ""),
                 "raw_text": raw_text,
                 "response": parsed_response,
             },
         )
-    except Exception as error:
+    except requests.exceptions.RequestException as error:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"AI extraction relay failed: {error}"
+            detail=f"AI extraction relay failed: {str(error)}"
         )
 
 # ============= CURVE ENDPOINTS =============
