@@ -450,6 +450,63 @@ const parseCompanyApiText = (rawText) => {
   const match = rawText.match(/[{\[][\s\S]*[}\]]/);
   return JSON.parse(match ? match[0] : rawText);
 };
+const resolveIntegerGraphIdFromAiResponse = (responsePayload) => {
+  if (!responsePayload || typeof responsePayload !== 'object') return '';
+
+  const candidateValues = [
+    responsePayload?.graph_id,
+    responsePayload?.graphId,
+    responsePayload?.id,
+    responsePayload?.graph?.graph_id,
+    responsePayload?.graph?.graphId,
+    responsePayload?.graph?.id,
+  ];
+
+  for (const candidate of candidateValues) {
+    const normalized = String(candidate ?? '').trim();
+    if (!normalized) continue;
+    const asNumber = Number(normalized);
+    if (Number.isInteger(asNumber) && asNumber > 0) {
+      return String(asNumber);
+    }
+  }
+
+  return '';
+};
+
+const hasCurveLineInAiResponse = (responsePayload) => {
+  if (!responsePayload || typeof responsePayload !== 'object') return false;
+
+  const details = Array.isArray(responsePayload?.details)
+    ? responsePayload.details
+    : Array.isArray(responsePayload?.graph?.details)
+      ? responsePayload.graph.details
+      : [];
+
+  if (details.length === 0) return false;
+
+  return details.some((detail) => {
+    const xyText = String(detail?.xy || '').trim();
+    if (xyText) {
+      const matches = [...xyText.matchAll(/\{\s*x:\s*([^,}]+)\s*,\s*y:\s*([^}]+)\s*\}/g)];
+      if (matches.length >= 2) return true;
+    }
+
+    const points = Array.isArray(detail?.points)
+      ? detail.points
+      : Array.isArray(detail?.data_points)
+        ? detail.data_points
+        : [];
+
+    const validPoints = points.filter((point) => {
+      const x = Number(point?.x_value ?? point?.x);
+      const y = Number(point?.y_value ?? point?.y);
+      return Number.isFinite(x) && Number.isFinite(y);
+    });
+
+    return validPoints.length >= 2;
+  });
+};
 
 const GraphCapture = () => {
   const {
@@ -529,7 +586,41 @@ const GraphCapture = () => {
         return;
       }
 
-      alert('Image sent for AI extraction successfully.');
+      const aiResponsePayload = result?.response && typeof result.response === 'object'
+        ? result.response
+        : {};
+      const validGraphId = resolveIntegerGraphIdFromAiResponse(aiResponsePayload);
+      if (!validGraphId) {
+        console.log('=== AI EXTRACTION DECISION ===', {
+          action: 'stay',
+          reason: 'Missing valid integer graph_id in response',
+          response: aiResponsePayload,
+        });
+        alert('AI extraction completed, but no valid graph ID was returned. Staying on this page.');
+        return;
+      }
+
+      const curveLineExists = hasCurveLineInAiResponse(aiResponsePayload);
+      if (!curveLineExists) {
+        console.log('=== AI EXTRACTION DECISION ===', {
+          action: 'stay',
+          reason: 'No curve line found in response details',
+          graph_id: validGraphId,
+          response: aiResponsePayload,
+        });
+        alert(`AI extraction returned graph ID ${validGraphId}, but no curve line was found. Staying on this page.`);
+        return;
+      }
+
+      console.log('=== AI EXTRACTION DECISION ===', {
+        action: 'redirect',
+        reason: 'Valid graph_id and curve line found',
+        graph_id: validGraphId,
+      });
+
+      const redirectUrl = new URL(window.location.href);
+      redirectUrl.searchParams.set('graph_id', validGraphId);
+      window.location.href = redirectUrl.toString();
     } catch (error) {
       console.error('AI extraction request failed:', error);
       alert(`Failed to send image for AI extraction: ${error?.message || 'Unknown error'}`);
