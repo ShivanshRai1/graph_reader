@@ -85,57 +85,95 @@ def health_check():
 
 
 def parse_company_api_text(raw_text: str):
-    match_start = max(raw_text.find("{"), raw_text.find("["))
-    if match_start == -1:
+    object_start = raw_text.find("{")
+    array_start = raw_text.find("[")
+    start_candidates = [index for index in [object_start, array_start] if index >= 0]
+    if not start_candidates:
         raise ValueError("No JSON payload found in response text")
+    match_start = min(start_candidates)
 
-    match_end = max(raw_text.rfind("}"), raw_text.rfind("]"))
+    object_end = raw_text.rfind("}")
+    array_end = raw_text.rfind("]")
+    end_candidates = [index for index in [object_end, array_end] if index >= 0]
+    if not end_candidates:
+        raise ValueError("No complete JSON payload found in response text")
+    match_end = max(end_candidates)
     if match_end == -1 or match_end < match_start:
         raise ValueError("No complete JSON payload found in response text")
 
     return json.loads(raw_text[match_start:match_end + 1])
 
 
+def post_ai_extraction_to_company(target_url: str, normalized_payload: dict):
+    # Use files= to send multipart/form-data, matching browser FormData semantics.
+    multipart_fields = {key: (None, value) for key, value in normalized_payload.items()}
+    response = requests.post(
+        target_url,
+        files=multipart_fields,
+        timeout=120,
+        headers={
+            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "Origin": "https://graph-capture.netlify.app",
+            "Referer": "https://graph-capture.netlify.app/",
+        },
+    )
+
+    raw_text = response.text
+    try:
+        parsed_response = parse_company_api_text(raw_text)
+    except Exception:
+        parsed_response = raw_text
+
+    return {
+        "target_url": target_url,
+        "upstream_status": response.status_code,
+        "upstream_ok": response.ok,
+        "content_type": response.headers.get("Content-Type", ""),
+        "response_headers": dict(response.headers),
+        "raw_text": raw_text,
+        "response": parsed_response,
+    }
+
+
 @app.post("/api/ai-extraction")
 def relay_ai_extraction(payload: dict):
-    company_url = "https://www.discoveree.io/vision_upload.php"
     normalized_payload = {
         str(key): "" if value is None else str(value)
         for key, value in (payload or {}).items()
     }
+    if not normalized_payload.get("action"):
+        normalized_payload["action"] = "graphcapture"
+
+    primary_url = "https://www.discoveree.io/vision_upload.php"
+    fallback_url = "https://www.discoveree.io/graph_capture_api.php"
 
     try:
-        # Use files= to send as multipart/form-data, exactly like browser FormData
-        multipart_fields = {key: (None, value) for key, value in normalized_payload.items()}
-        response = requests.post(
-            company_url,
-            files=multipart_fields,
-            timeout=120,
-            headers={
-                "Accept": "application/json, text/plain, */*",
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-                "Origin": "https://graph-capture.netlify.app",
-                "Referer": "https://graph-capture.netlify.app/",
-            },
+        attempts = []
+
+        primary_result = post_ai_extraction_to_company(primary_url, normalized_payload)
+        attempts.append(primary_result)
+
+        should_try_fallback = (
+            not primary_result.get("upstream_ok")
+            and int(primary_result.get("upstream_status") or 0) >= 500
+            and not str(primary_result.get("raw_text") or "").strip()
         )
-        raw_text = response.text
-        
-        try:
-            parsed_response = parse_company_api_text(raw_text)
-        except Exception:
-            parsed_response = raw_text
+
+        final_result = primary_result
+        if should_try_fallback:
+            fallback_result = post_ai_extraction_to_company(fallback_url, normalized_payload)
+            attempts.append(fallback_result)
+            final_result = fallback_result
+
+        response_content = {
+            **final_result,
+            "attempts": attempts,
+        }
 
         return JSONResponse(
-            status_code=response.status_code,
-            content={
-                "target_url": company_url,
-                "upstream_status": response.status_code,
-                "upstream_ok": response.ok,
-                "content_type": response.headers.get("Content-Type", ""),
-                "response_headers": dict(response.headers),
-                "raw_text": raw_text,
-                "response": parsed_response,
-            },
+            status_code=int(final_result.get("upstream_status") or status.HTTP_502_BAD_GATEWAY),
+            content=response_content,
         )
     except requests.exceptions.RequestException as error:
         raise HTTPException(

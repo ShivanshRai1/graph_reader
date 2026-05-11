@@ -495,6 +495,7 @@ const GraphCapture = () => {
       payload: requestPayload,
     });
 
+    setIsAiExtractionLoading(true);
     try {
       const response = await fetch(relayUrl, {
         method: 'POST',
@@ -532,6 +533,8 @@ const GraphCapture = () => {
     } catch (error) {
       console.error('AI extraction request failed:', error);
       alert(`Failed to send image for AI extraction: ${error?.message || 'Unknown error'}`);
+    } finally {
+      setIsAiExtractionLoading(false);
     }
   };
 
@@ -563,6 +566,7 @@ const GraphCapture = () => {
   const [savedCurves, setSavedCurves] = useState([]);
   const [combinedGroupId, setCombinedGroupId] = useState('');
   const [isFetchingSaved, setIsFetchingSaved] = useState(false);
+  const [isAiExtractionLoading, setIsAiExtractionLoading] = useState(false);
   const [savedCurvesError, setSavedCurvesError] = useState('');
   const [selectedCurveId, setSelectedCurveId] = useState('');
   const [isLoadingSavedCurve, setIsLoadingSavedCurve] = useState(false);
@@ -3427,6 +3431,13 @@ const GraphCapture = () => {
 
   return (
     <div className="w-full min-h-screen p-8" style={{ backgroundColor: '#ffffff', color: '#213547' }}>
+      {isAiExtractionLoading && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+          <div className="rounded-md bg-white px-5 py-3 text-sm font-medium" style={{ color: '#213547' }}>
+            Processing AI extraction...
+          </div>
+        </div>
+      )}
       <header className="mb-8 flex items-start justify-between gap-4">
         <h1 className="text-2xl font-bold mb-2" style={{ color: '#213547' }}>
           Graph Capture Tool
@@ -3443,7 +3454,11 @@ const GraphCapture = () => {
       </header>
 
       <div className="flex flex-col gap-8">
-        <ImageUpload onImageLoaded={handleUserImageLoaded} onAiExtensionCapture={handleAiExtensionCapture} />
+        <ImageUpload
+          onImageLoaded={handleUserImageLoaded}
+          onAiExtensionCapture={handleAiExtensionCapture}
+          isAiExtractionLoading={isAiExtractionLoading}
+        />
         {(uploadedImage || urlParams.graph_id) && (
           <div ref={graphWorkspaceRef} className="flex flex-col lg:flex-row gap-8">
             <div className="w-full lg:w-2/5 flex flex-col gap-4">

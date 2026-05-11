@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { useGraph } from '../context/GraphContext';
 
-const ImageUpload = ({ onImageLoaded, onAiExtensionCapture }) => {
+const ImageUpload = ({ onImageLoaded, onAiExtensionCapture, isAiExtractionLoading = false }) => {
   const { setUploadedImage, clearDataPoints, setGraphConfig, setGraphArea } = useGraph();
   const fileInputRef = useRef(null);
   const [pendingCapture, setPendingCapture] = useState(null);
@@ -43,7 +43,7 @@ const ImageUpload = ({ onImageLoaded, onAiExtensionCapture }) => {
   };
 
   const handleCaptureWithAiExtension = async () => {
-    if (!pendingCapture?.imageBase64) return;
+    if (!pendingCapture?.imageBase64 || isAiExtractionLoading) return;
     await onAiExtensionCapture?.(pendingCapture.imageBase64, pendingCapture.source);
     setPendingCapture(null);
   };
@@ -102,9 +102,10 @@ const ImageUpload = ({ onImageLoaded, onAiExtensionCapture }) => {
           </button>
           <button
             onClick={handleCaptureWithAiExtension}
+            disabled={isAiExtractionLoading}
             className="w-full px-4 py-2 rounded bg-emerald-600 text-white font-medium hover:bg-emerald-700 transition-colors"
           >
-            Capture with AI Extraction
+            {isAiExtractionLoading ? 'Processing AI Extraction...' : 'Capture with AI Extraction'}
           </button>
         </div>
       )}
