@@ -10,6 +10,7 @@ import json
 import os
 import threading
 import time
+import uuid
 from sqlalchemy import inspect, text
 from urllib import error as urllib_error
 from urllib import parse as urllib_parse
@@ -98,6 +99,24 @@ def parse_company_api_text(raw_text: str):
     return json.loads(raw_text[match_start:match_end + 1])
 
 
+def encode_multipart_formdata(fields: dict):
+    boundary = f"----GraphCaptureBoundary{uuid.uuid4().hex}"
+    lines = []
+
+    for name, value in fields.items():
+        lines.append(f"--{boundary}")
+        lines.append(f'Content-Disposition: form-data; name="{name}"')
+        lines.append("")
+        lines.append("" if value is None else str(value))
+
+    lines.append(f"--{boundary}--")
+    lines.append("")
+
+    body = "\r\n".join(lines).encode("utf-8")
+    content_type = f"multipart/form-data; boundary={boundary}"
+    return body, content_type
+
+
 @app.post("/api/ai-extraction")
 def relay_ai_extraction(payload: dict):
     company_url = "https://www.discoveree.io/vision_upload.php"
@@ -105,9 +124,9 @@ def relay_ai_extraction(payload: dict):
         str(key): "" if value is None else str(value)
         for key, value in (payload or {}).items()
     }
-    encoded_payload = urllib_parse.urlencode(normalized_payload).encode("utf-8")
+    encoded_payload, content_type = encode_multipart_formdata(normalized_payload)
     request_headers = {
-        "Content-Type": "application/x-www-form-urlencoded",
+        "Content-Type": content_type,
         "Accept": "application/json, text/plain, */*",
     }
     upstream_request = urllib_request.Request(
