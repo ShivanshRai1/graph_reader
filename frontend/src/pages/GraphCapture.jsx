@@ -465,9 +465,11 @@ const GraphCapture = () => {
   } = useGraph();
   const graphWorkspaceRef = useRef(null);
   const handleAiExtensionCapture = async (imageBase64, source = '') => {
+    // Strip data URI prefix (e.g. "data:image/png;base64,") — PHP expects raw base64 only
+    const rawBase64 = String(imageBase64 || '').replace(/^data:[^;]+;base64,/, '');
     const requestPayload = {
       action: 'graphcapture',
-      base64image: String(imageBase64 || ''),
+      base64image: rawBase64,
       graph_id: String(urlParams.graph_id || ''),
       discoveree_cat_id: String(urlParams.discoveree_cat_id || ''),
       partno: String(urlParams.partno || ''),
