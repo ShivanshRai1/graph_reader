@@ -105,11 +105,18 @@ def relay_ai_extraction(payload: dict):
     }
 
     try:
+        # Use files= to send as multipart/form-data, exactly like browser FormData
+        multipart_fields = {key: (None, value) for key, value in normalized_payload.items()}
         response = requests.post(
             company_url,
-            data=normalized_payload,
+            files=multipart_fields,
             timeout=120,
-            headers={"Accept": "application/json, text/plain, */*"},
+            headers={
+                "Accept": "application/json, text/plain, */*",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                "Origin": "https://graph-capture.netlify.app",
+                "Referer": "https://graph-capture.netlify.app/",
+            },
         )
         raw_text = response.text
         
