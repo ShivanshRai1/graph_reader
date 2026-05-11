@@ -508,16 +508,24 @@ const GraphCapture = () => {
 
       console.log('=== AI EXTRACTION RESPONSE ===', {
         url: relayUrl,
-        status: response.status,
-        ok: response.ok,
+        relayStatus: response.status,
         upstreamStatus: result?.upstream_status,
         upstreamOk: result?.upstream_ok,
+        contentType: result?.content_type,
         rawText: result?.raw_text,
-        response: result?.response,
+        parsedResponse: result?.response,
       });
 
-      if (!response.ok || result?.upstream_ok === false) {
-        throw new Error(`AI extraction API request failed (${result?.upstream_status || response.status})`);
+      if (!response.ok) {
+        // Relay itself failed (502/503) — network/server issue
+        throw new Error(`Relay error (${response.status}): ${JSON.stringify(result)}`);
+      }
+
+      // Upstream responded (even 4xx/5xx) — log and surface to user
+      if (!result?.upstream_ok) {
+        console.warn('=== AI EXTRACTION UPSTREAM ERROR ===', result?.raw_text || `HTTP ${result?.upstream_status}`);
+        alert(`AI extraction server responded with status ${result?.upstream_status}.\nResponse: ${result?.raw_text || '(empty)'}\nCheck console for full details.`);
+        return;
       }
 
       alert('Image sent for AI extraction successfully.');

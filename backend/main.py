@@ -132,6 +132,7 @@ def relay_ai_extraction(payload: dict):
                 "upstream_status": response.status_code,
                 "upstream_ok": response.ok,
                 "content_type": response.headers.get("Content-Type", ""),
+                "response_headers": dict(response.headers),
                 "raw_text": raw_text,
                 "response": parsed_response,
             },
