@@ -726,6 +726,9 @@ const GraphCapture = () => {
   const [selectedCurveId, setSelectedCurveId] = useState('');
   const [isLoadingSavedCurve, setIsLoadingSavedCurve] = useState(false);
   const [shouldSkipCaptureChoiceAfterAi, setShouldSkipCaptureChoiceAfterAi] = useState(false);
+  const [isInitialGraphFetchPending, setIsInitialGraphFetchPending] = useState(
+    () => Boolean(new URLSearchParams(window.location.search).get('graph_id'))
+  );
   const [savedCurvesSource, setSavedCurvesSource] = useState('company');
   const [showSavedPanel, setShowSavedPanel] = useState(false);
   const [previewSortByX, setPreviewSortByX] = useState(false);
@@ -2554,7 +2557,7 @@ const GraphCapture = () => {
         console.error('[DEBUG] Error in fetchGraphById:', error);
       }
     };
-    fetchGraphById();
+    fetchGraphById().finally(() => setIsInitialGraphFetchPending(false));
   }, []); // graphId is parsed from URL directly
 
   // Auto-load graph context (image + axis settings) but keep points empty until View/Edit is clicked.
@@ -3619,7 +3622,7 @@ const GraphCapture = () => {
           isAiExtractionLoading={isAiExtractionLoading}
           skipCaptureChoice={shouldSkipCaptureChoiceAfterAi}
         />
-        {(uploadedImage || (urlParams.graph_id && !shouldSkipCaptureChoiceAfterAi)) && (
+        {(uploadedImage || (urlParams.graph_id && !shouldSkipCaptureChoiceAfterAi && !isInitialGraphFetchPending)) && (
           <div ref={graphWorkspaceRef} className="flex flex-col lg:flex-row gap-8">
             <div className="w-full lg:w-2/5 flex flex-col gap-4">
               <GraphCanvas isReadOnly={isReadOnly} partNumber={urlParams.partno} manufacturer={urlParams.manufacturer || graphConfig.manufacturer} isAxisMappingConfirmed={isAxisMappingConfirmed} hasReturnUrl={!!urlParams.return_url} />
