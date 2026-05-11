@@ -526,6 +526,8 @@ const GraphCapture = () => {
     const rawBase64 = String(imageBase64 || '').replace(/^data:[^;]+;base64,/, '');
     const requestPayload = {
       action: 'graphcapture',
+      type: 'ai_extraction',
+      ai_extraction_id: crypto.randomUUID(),
       base64image: rawBase64,
       graph_id: String(urlParams.graph_id || ''),
       discoveree_cat_id: String(urlParams.discoveree_cat_id || ''),
@@ -538,7 +540,7 @@ const GraphCapture = () => {
       x_label: String(urlParams.x_label || ''),
       y_label: String(urlParams.y_label || ''),
       other_symbols: String(urlParams.other_symbols || ''),
-      identifier: String(urlParams.identifier || ''),
+      identifier: String(urlParams.identifier || crypto.randomUUID()),
       testuser_id: String(urlParams.testuser_id || ''),
       tctj: String(urlParams.tctj || ''),
       return_url: String(urlParams.return_url || ''),
