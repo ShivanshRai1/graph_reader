@@ -477,6 +477,19 @@ const resolveIntegerGraphIdFromAiResponse = (responsePayload) => {
 const hasCurveLineInAiResponse = (responsePayload) => {
   if (!responsePayload || typeof responsePayload !== 'object') return false;
 
+  const topLevelCurveNameCandidates = [
+    responsePayload?.curve_title,
+    responsePayload?.curve_name,
+    responsePayload?.line_name,
+    responsePayload?.graph?.curve_title,
+    responsePayload?.graph?.curve_name,
+    responsePayload?.graph?.line_name,
+  ];
+
+  if (topLevelCurveNameCandidates.some((value) => String(value ?? '').trim())) {
+    return true;
+  }
+
   const details = Array.isArray(responsePayload?.details)
     ? responsePayload.details
     : Array.isArray(responsePayload?.graph?.details)
@@ -486,25 +499,15 @@ const hasCurveLineInAiResponse = (responsePayload) => {
   if (details.length === 0) return false;
 
   return details.some((detail) => {
-    const xyText = String(detail?.xy || '').trim();
-    if (xyText) {
-      const matches = [...xyText.matchAll(/\{\s*x:\s*([^,}]+)\s*,\s*y:\s*([^}]+)\s*\}/g)];
-      if (matches.length >= 2) return true;
-    }
+    const curveNameCandidates = [
+      detail?.curve_title,
+      detail?.curve_name,
+      detail?.line_name,
+      detail?.name,
+      detail?.title,
+    ];
 
-    const points = Array.isArray(detail?.points)
-      ? detail.points
-      : Array.isArray(detail?.data_points)
-        ? detail.data_points
-        : [];
-
-    const validPoints = points.filter((point) => {
-      const x = Number(point?.x_value ?? point?.x);
-      const y = Number(point?.y_value ?? point?.y);
-      return Number.isFinite(x) && Number.isFinite(y);
-    });
-
-    return validPoints.length >= 2;
+    return curveNameCandidates.some((value) => String(value ?? '').trim());
   });
 };
 
@@ -606,10 +609,10 @@ const GraphCapture = () => {
       if (!curveLineExists) {
         console.log('=== AI EXTRACTION DECISION ===', {
           action: 'stay',
-          reason: 'No curve line found in response details',
+          reason: 'No curve or line name found in response details',
           response: aiResponsePayload,
         });
-        console.warn('AI extraction returned a valid graph ID, but no curve line was found. Staying on this page.');
+        console.warn('AI extraction returned a valid graph ID, but no curve or line name was found. Staying on this page.');
         return;
       }
 
