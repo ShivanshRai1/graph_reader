@@ -2460,6 +2460,7 @@ const GraphCapture = () => {
 
             setSavedCurves([]);
             setSavedCurvesSource('company');
+            setShouldSkipCaptureChoiceAfterAi(true);
             activateAppendSession(discovereeGraph.graph_id, graphImageUrl, 'fetchGraphById-emptyDetails');
 
             if (graphImageUrl) {
