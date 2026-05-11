@@ -568,7 +568,7 @@ const GraphCapture = () => {
       x_label: String(urlParams.x_label || ''),
       y_label: String(urlParams.y_label || ''),
       other_symbols: String(urlParams.other_symbols || ''),
-      identifier: String(urlParams.identifier || ''),
+      identifier: String(urlParams.identifier || crypto.randomUUID()),
       testuser_id: String(urlParams.testuser_id || ''),
       tctj: String(urlParams.tctj || ''),
       return_url: String(urlParams.return_url || ''),
