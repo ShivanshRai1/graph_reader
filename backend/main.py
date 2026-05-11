@@ -104,20 +104,30 @@ def parse_company_api_text(raw_text: str):
     return json.loads(raw_text[match_start:match_end + 1])
 
 
-def post_ai_extraction_to_company(target_url: str, normalized_payload: dict):
-    # Use files= to send multipart/form-data, matching browser FormData semantics.
-    multipart_fields = {key: (None, value) for key, value in normalized_payload.items()}
-    response = requests.post(
-        target_url,
-        files=multipart_fields,
-        timeout=120,
-        headers={
-            "Accept": "application/json, text/plain, */*",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-            "Origin": "https://graph-capture.netlify.app",
-            "Referer": "https://graph-capture.netlify.app/",
-        },
-    )
+def post_ai_extraction_to_company(target_url: str, normalized_payload: dict, send_as_json: bool = False):
+    request_headers = {
+        "Accept": "application/json, text/plain, */*",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Origin": "https://graph-capture.netlify.app",
+        "Referer": "https://graph-capture.netlify.app/",
+    }
+
+    if send_as_json:
+        response = requests.post(
+            target_url,
+            json=normalized_payload,
+            timeout=120,
+            headers=request_headers,
+        )
+    else:
+        # Use files= to send multipart/form-data, matching browser FormData semantics.
+        multipart_fields = {key: (None, value) for key, value in normalized_payload.items()}
+        response = requests.post(
+            target_url,
+            files=multipart_fields,
+            timeout=120,
+            headers=request_headers,
+        )
 
     raw_text = response.text
     try:
@@ -162,7 +172,7 @@ def relay_ai_extraction(payload: dict):
 
         final_result = primary_result
         if should_try_fallback:
-            fallback_result = post_ai_extraction_to_company(fallback_url, normalized_payload)
+            fallback_result = post_ai_extraction_to_company(fallback_url, normalized_payload, send_as_json=True)
             attempts.append(fallback_result)
             final_result = fallback_result
 
