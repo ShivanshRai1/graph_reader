@@ -1,14 +1,19 @@
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from typing import List
 from database import engine, get_db, Base
 from models import Curve, DataPoint
 from schemas import CurveCreate, CurveResponse, CurveUpdate, DataPointCreate, DataPointResponse
+import json
 import os
 import threading
 import time
 from sqlalchemy import inspect, text
+from urllib import error as urllib_error
+from urllib import parse as urllib_parse
+from urllib import request as urllib_request
 
 # Create tables
 Base.metadata.create_all(bind=engine)
@@ -79,6 +84,84 @@ def read_root():
 @app.head("/health")
 def health_check():
     return {"status": "healthy"}
+
+
+def parse_company_api_text(raw_text: str):
+    match_start = max(raw_text.find("{"), raw_text.find("["))
+    if match_start == -1:
+        raise ValueError("No JSON payload found in response text")
+
+    match_end = max(raw_text.rfind("}"), raw_text.rfind("]"))
+    if match_end == -1 or match_end < match_start:
+        raise ValueError("No complete JSON payload found in response text")
+
+    return json.loads(raw_text[match_start:match_end + 1])
+
+
+@app.post("/api/ai-extraction")
+def relay_ai_extraction(payload: dict):
+    company_url = "https://www.discoveree.io/vision_upload.php"
+    normalized_payload = {
+        str(key): "" if value is None else str(value)
+        for key, value in (payload or {}).items()
+    }
+    encoded_payload = urllib_parse.urlencode(normalized_payload).encode("utf-8")
+    request_headers = {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Accept": "application/json, text/plain, */*",
+    }
+    upstream_request = urllib_request.Request(
+        company_url,
+        data=encoded_payload,
+        headers=request_headers,
+        method="POST",
+    )
+
+    try:
+        with urllib_request.urlopen(upstream_request, timeout=120) as upstream_response:
+            raw_text = upstream_response.read().decode(
+                upstream_response.headers.get_content_charset() or "utf-8",
+                errors="replace",
+            )
+            try:
+                parsed_response = parse_company_api_text(raw_text)
+            except Exception:
+                parsed_response = raw_text
+
+            return JSONResponse(
+                status_code=upstream_response.status,
+                content={
+                    "target_url": company_url,
+                    "upstream_status": upstream_response.status,
+                    "upstream_ok": 200 <= upstream_response.status < 300,
+                    "content_type": upstream_response.headers.get("Content-Type", ""),
+                    "raw_text": raw_text,
+                    "response": parsed_response,
+                },
+            )
+    except urllib_error.HTTPError as error:
+        raw_text = error.read().decode("utf-8", errors="replace")
+        try:
+            parsed_response = parse_company_api_text(raw_text)
+        except Exception:
+            parsed_response = raw_text
+
+        return JSONResponse(
+            status_code=error.code,
+            content={
+                "target_url": company_url,
+                "upstream_status": error.code,
+                "upstream_ok": False,
+                "content_type": error.headers.get("Content-Type", "") if error.headers else "",
+                "raw_text": raw_text,
+                "response": parsed_response,
+            },
+        )
+    except Exception as error:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"AI extraction relay failed: {error}"
+        )
 
 # ============= CURVE ENDPOINTS =============
 

@@ -485,43 +485,37 @@ const GraphCapture = () => {
       return_url: String(urlParams.return_url || ''),
     };
 
-    const companyUrl = 'https://www.discoveree.io/vision_upload.php';
-
-    const formData = new FormData();
-    Object.entries(requestPayload).forEach(([key, value]) => {
-      formData.append(key, value);
-    });
+    const relayUrl = `${apiUrl}/api/ai-extraction`;
 
     console.log('=== AI EXTRACTION REQUEST ===', {
-      url: companyUrl,
+      url: relayUrl,
       method: 'POST',
       payload: requestPayload,
     });
 
     try {
-      const response = await fetch(companyUrl, {
+      const response = await fetch(relayUrl, {
         method: 'POST',
-        body: formData,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestPayload),
       });
 
-      const rawText = await response.text();
-      let result = {};
-      try {
-        result = rawText ? parseCompanyApiText(rawText) : {};
-      } catch {
-        result = rawText;
-      }
+      const result = await response.json();
 
       console.log('=== AI EXTRACTION RESPONSE ===', {
-        url: companyUrl,
+        url: relayUrl,
         status: response.status,
         ok: response.ok,
-        rawText,
-        response: result,
+        upstreamStatus: result?.upstream_status,
+        upstreamOk: result?.upstream_ok,
+        rawText: result?.raw_text,
+        response: result?.response,
       });
 
-      if (!response.ok) {
-        throw new Error(`AI extraction API request failed (${response.status})`);
+      if (!response.ok || result?.upstream_ok === false) {
+        throw new Error(`AI extraction API request failed (${result?.upstream_status || response.status})`);
       }
 
       alert('Image sent for AI extraction successfully.');
