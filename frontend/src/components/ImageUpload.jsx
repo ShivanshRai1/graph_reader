@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { useGraph } from '../context/GraphContext';
 
-const ImageUpload = ({ onImageLoaded, onAiExtensionCapture, isAiExtractionLoading = false }) => {
+const ImageUpload = ({ onImageLoaded, onAiExtensionCapture, isAiExtractionLoading = false, skipCaptureChoice = false }) => {
   const { setUploadedImage, clearDataPoints, setGraphConfig, setGraphArea } = useGraph();
   const fileInputRef = useRef(null);
   const [pendingCapture, setPendingCapture] = useState(null);
@@ -23,12 +23,24 @@ const ImageUpload = ({ onImageLoaded, onAiExtensionCapture, isAiExtractionLoadin
     }));
   };
 
+  const triggerManualCapture = (imageBase64, source, preserveGraphContext = false) => {
+    if (!imageBase64) return;
+    resetGraphForManualCapture(source === 'paste');
+    setUploadedImage(imageBase64);
+    onImageLoaded?.({ source, preserveGraphContext });
+  };
+
   const processImage = async (blob, source) => {
     if (!blob) return;
 
     const reader = new FileReader();
     reader.onload = async (ev) => {
       const imageBase64 = ev.target.result;
+      if (skipCaptureChoice) {
+        triggerManualCapture(imageBase64, source, true);
+        setPendingCapture(null);
+        return;
+      }
       setPendingCapture({ imageBase64, source });
     };
     reader.readAsDataURL(blob);
@@ -36,9 +48,7 @@ const ImageUpload = ({ onImageLoaded, onAiExtensionCapture, isAiExtractionLoadin
 
   const handleCaptureManually = () => {
     if (!pendingCapture?.imageBase64) return;
-    resetGraphForManualCapture(pendingCapture.source === 'paste');
-    setUploadedImage(pendingCapture.imageBase64);
-    onImageLoaded?.();
+    triggerManualCapture(pendingCapture.imageBase64, pendingCapture.source, false);
     setPendingCapture(null);
   };
 

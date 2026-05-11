@@ -450,6 +450,31 @@ const parseCompanyApiText = (rawText) => {
   const match = rawText.match(/[{\[][\s\S]*[}\]]/);
   return JSON.parse(match ? match[0] : rawText);
 };
+const AI_DIRECT_CAPTURE_PARAM = 'ai_direct_capture';
+
+const checkGraphHasCapturedCurves = async (graphId) => {
+  const normalizedGraphId = String(graphId || '').trim();
+  if (!normalizedGraphId) return false;
+
+  const response = await fetch(
+    `https://www.discoveree.io/graph_capture_api.php?graph_id=${encodeURIComponent(normalizedGraphId)}`
+  );
+
+  if (!response.ok) {
+    throw new Error(`Graph check failed with status ${response.status}`);
+  }
+
+  const rawText = await response.text();
+  const parsed = parseCompanyApiText(rawText);
+  const details = Array.isArray(parsed?.details)
+    ? parsed.details
+    : Array.isArray(parsed?.graph?.details)
+      ? parsed.graph.details
+      : [];
+
+  return details.length > 0;
+};
+
 const resolveIntegerGraphIdFromAiResponse = (responsePayload) => {
   if (!responsePayload || typeof responsePayload !== 'object') return '';
 
@@ -605,25 +630,53 @@ const GraphCapture = () => {
         return;
       }
 
-      const curveLineExists = hasCurveLineInAiResponse(aiResponsePayload);
-      if (!curveLineExists) {
+      const currentUrlGraphId = String(urlParams.graph_id || '').trim();
+      const graphIdForFlow = currentUrlGraphId || validGraphId;
+
+      if (!currentUrlGraphId) {
         console.log('=== AI EXTRACTION DECISION ===', {
-          action: 'stay',
-          reason: 'No curve or line name found in response details',
-          response: aiResponsePayload,
+          action: 'reload_with_graph_id',
+          reason: 'Missing graph_id in URL; using graph_id returned by AI extraction',
+          graph_id: graphIdForFlow,
         });
-        console.warn('AI extraction returned a valid graph ID, but no curve or line name was found. Staying on this page.');
+
+        const refreshUrl = new URL(window.location.href);
+        refreshUrl.searchParams.set('graph_id', graphIdForFlow);
+        refreshUrl.searchParams.set(AI_DIRECT_CAPTURE_PARAM, '1');
+        window.location.href = refreshUrl.toString();
+        return;
+      }
+
+      let hasCapturedCurves = false;
+      try {
+        hasCapturedCurves = await checkGraphHasCapturedCurves(graphIdForFlow);
+      } catch (error) {
+        console.warn('Unable to check captured curves by graph_id. Falling back to AI response metadata.', error);
+        hasCapturedCurves = hasCurveLineInAiResponse(aiResponsePayload);
+      }
+
+      const redirectUrl = new URL(window.location.href);
+      redirectUrl.searchParams.set('graph_id', graphIdForFlow);
+
+      if (!hasCapturedCurves) {
+        console.log('=== AI EXTRACTION DECISION ===', {
+          action: 'reload_for_direct_capture',
+          reason: 'graph_id exists but has no captured curves yet',
+          graph_id: graphIdForFlow,
+        });
+
+        redirectUrl.searchParams.set(AI_DIRECT_CAPTURE_PARAM, '1');
+        window.location.href = redirectUrl.toString();
         return;
       }
 
       console.log('=== AI EXTRACTION DECISION ===', {
         action: 'redirect',
-        reason: 'Valid graph_id and curve line found',
-        graph_id: validGraphId,
+        reason: 'Valid graph_id found and existing captured curves detected',
+        graph_id: graphIdForFlow,
       });
 
-      const redirectUrl = new URL(window.location.href);
-      redirectUrl.searchParams.set('graph_id', validGraphId);
+      redirectUrl.searchParams.delete(AI_DIRECT_CAPTURE_PARAM);
       window.location.href = redirectUrl.toString();
     } catch (error) {
       console.error('AI extraction request failed:', error);
@@ -633,9 +686,11 @@ const GraphCapture = () => {
     }
   };
 
-  const handleUserImageLoaded = () => {
-    // A user-uploaded image starts a fresh capture context.
-    clearGraphIdContext();
+  const handleUserImageLoaded = ({ preserveGraphContext = false } = {}) => {
+    // A user-uploaded image starts a fresh capture context unless we're in AI-direct capture flow.
+    if (!preserveGraphContext) {
+      clearGraphIdContext();
+    }
     setGraphTitleUnlocked(true);
     setUrlParams((prev) => ({
       ...prev,
@@ -652,7 +707,12 @@ const GraphCapture = () => {
     currentUrl.searchParams.delete('y_label');
     currentUrl.searchParams.delete('y_title');
     currentUrl.searchParams.delete('ylabel');
+    currentUrl.searchParams.delete(AI_DIRECT_CAPTURE_PARAM);
     window.history.replaceState({}, '', currentUrl.toString());
+
+    if (preserveGraphContext) {
+      setShouldSkipCaptureChoiceAfterAi(false);
+    }
 
     scrollToGraphWorkspace();
   };
@@ -665,6 +725,7 @@ const GraphCapture = () => {
   const [savedCurvesError, setSavedCurvesError] = useState('');
   const [selectedCurveId, setSelectedCurveId] = useState('');
   const [isLoadingSavedCurve, setIsLoadingSavedCurve] = useState(false);
+  const [shouldSkipCaptureChoiceAfterAi, setShouldSkipCaptureChoiceAfterAi] = useState(false);
   const [savedCurvesSource, setSavedCurvesSource] = useState('company');
   const [showSavedPanel, setShowSavedPanel] = useState(false);
   const [previewSortByX, setPreviewSortByX] = useState(false);
@@ -2140,6 +2201,7 @@ const GraphCapture = () => {
       getLastNonEmptyQueryValue(searchParams, 'graph_id') ||
       getLastNonEmptyQueryValue(searchParams, 'return_graph_id') ||
       '';
+    const hasAiDirectCaptureFlag = searchParams.get(AI_DIRECT_CAPTURE_PARAM) === '1';
 
     const xTitleFromUrl = (searchParams.get('x_label') || searchParams.get('x_title') || searchParams.get('xlabel') || '').trim();
     const yTitleFromUrl = (searchParams.get('y_label') || searchParams.get('y_title') || searchParams.get('ylabel') || '').trim();
@@ -2162,6 +2224,7 @@ const GraphCapture = () => {
       return_url: searchParams.get('return_url') || '',
       graph_id: graphIdFromUrl,
     });
+    setShouldSkipCaptureChoiceAfterAi(hasAiDirectCaptureFlag);
 
     setIsXTitleUrlLocked(Boolean(xTitleFromUrl));
     setIsYTitleUrlLocked(Boolean(yTitleFromUrl));
@@ -3553,8 +3616,9 @@ const GraphCapture = () => {
           onImageLoaded={handleUserImageLoaded}
           onAiExtensionCapture={handleAiExtensionCapture}
           isAiExtractionLoading={isAiExtractionLoading}
+          skipCaptureChoice={shouldSkipCaptureChoiceAfterAi}
         />
-        {(uploadedImage || urlParams.graph_id) && (
+        {(uploadedImage || (urlParams.graph_id && !shouldSkipCaptureChoiceAfterAi)) && (
           <div ref={graphWorkspaceRef} className="flex flex-col lg:flex-row gap-8">
             <div className="w-full lg:w-2/5 flex flex-col gap-4">
               <GraphCanvas isReadOnly={isReadOnly} partNumber={urlParams.partno} manufacturer={urlParams.manufacturer || graphConfig.manufacturer} isAxisMappingConfirmed={isAxisMappingConfirmed} hasReturnUrl={!!urlParams.return_url} />
