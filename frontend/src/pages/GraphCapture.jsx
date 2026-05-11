@@ -596,7 +596,7 @@ const GraphCapture = () => {
           reason: 'Missing valid integer graph_id in response',
           response: aiResponsePayload,
         });
-        alert('AI extraction completed, but no valid graph ID was returned. Staying on this page.');
+        console.warn('AI extraction completed, but no valid graph ID was returned. Staying on this page.');
         return;
       }
 
@@ -605,10 +605,9 @@ const GraphCapture = () => {
         console.log('=== AI EXTRACTION DECISION ===', {
           action: 'stay',
           reason: 'No curve line found in response details',
-          graph_id: validGraphId,
           response: aiResponsePayload,
         });
-        alert(`AI extraction returned graph ID ${validGraphId}, but no curve line was found. Staying on this page.`);
+        console.warn('AI extraction returned a valid graph ID, but no curve line was found. Staying on this page.');
         return;
       }
 
