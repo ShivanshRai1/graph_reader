@@ -164,10 +164,15 @@ def relay_ai_extraction(payload: dict):
         primary_result = post_ai_extraction_to_company(primary_url, normalized_payload)
         attempts.append(primary_result)
 
+        primary_content_type = str(primary_result.get("content_type") or "").lower()
+        primary_response_is_html = "text/html" in primary_content_type
         should_try_fallback = (
-            not primary_result.get("upstream_ok")
-            and int(primary_result.get("upstream_status") or 0) >= 500
-            and not str(primary_result.get("raw_text") or "").strip()
+            primary_response_is_html
+            or (
+                not primary_result.get("upstream_ok")
+                and int(primary_result.get("upstream_status") or 0) >= 500
+                and not str(primary_result.get("raw_text") or "").strip()
+            )
         )
 
         final_result = primary_result
