@@ -736,18 +736,18 @@ const GraphCapture = () => {
 
       const aiResponsePayload = normalizeAiResponsePayload(result);
       const validGraphId = resolveIntegerGraphIdFromAiResponse(aiResponsePayload);
-      if (!validGraphId) {
-        console.log('=== AI EXTRACTION DECISION ===', {
-          action: 'stay',
-          reason: 'Missing valid integer graph_id in response',
-          response: aiResponsePayload,
-        });
-        console.warn('AI extraction completed, but no valid graph ID was returned. Staying on this page.');
-        return;
-      }
-
       const currentUrlGraphId = String(urlParams.graph_id || '').trim();
       const graphIdForFlow = currentUrlGraphId || validGraphId;
+
+      if (!graphIdForFlow) {
+        console.log('=== AI EXTRACTION DECISION ===', {
+          action: 'stay',
+          reason: 'Missing graph_id in both URL and AI response',
+          response: aiResponsePayload,
+        });
+        console.warn('AI extraction completed, but no usable graph ID was found. Staying on this page.');
+        return;
+      }
 
       if (!currentUrlGraphId) {
         console.log('=== AI EXTRACTION DECISION ===', {
