@@ -1490,12 +1490,13 @@ const GraphCapture = () => {
       );
 
       if (!response.ok) {
+        // 404 is expected for new graph_ids from AI extraction that aren't in local DB yet
         return null;
       }
 
       return await response.json();
     } catch (error) {
-      console.warn('[DEBUG] Local by-discoveree fallback failed:', error);
+      // Silently fail - network errors are expected as fallback attempt
       return null;
     }
   };
