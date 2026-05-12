@@ -451,7 +451,6 @@ const parseCompanyApiText = (rawText) => {
   return JSON.parse(match ? match[0] : rawText);
 };
 const AI_DIRECT_CAPTURE_PARAM = 'ai_direct_capture';
-const KNOWN_UPSTREAM_DEFAULT_GRAPH_IDS = new Set(['16950']);
 
 const checkGraphHasCapturedCurves = async (graphId) => {
   const normalizedGraphId = String(graphId || '').trim();
@@ -633,16 +632,6 @@ const GraphCapture = () => {
 
       const currentUrlGraphId = String(urlParams.graph_id || '').trim();
       const graphIdForFlow = currentUrlGraphId || validGraphId;
-
-      if (!currentUrlGraphId && KNOWN_UPSTREAM_DEFAULT_GRAPH_IDS.has(String(validGraphId))) {
-        console.log('=== AI EXTRACTION DECISION ===', {
-          action: 'stay',
-          reason: 'Upstream returned known default graph_id fallback',
-          graph_id: validGraphId,
-        });
-        console.warn('AI extraction returned a known upstream fallback graph_id. Keeping page state unchanged.');
-        return;
-      }
 
       if (!currentUrlGraphId) {
         console.log('=== AI EXTRACTION DECISION ===', {
