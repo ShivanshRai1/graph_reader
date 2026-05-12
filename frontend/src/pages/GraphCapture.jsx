@@ -1497,18 +1497,27 @@ const GraphCapture = () => {
           `${apiUrl}/api/curves/by-graph/${encodeURIComponent(normalizedGraphId)}`
         );
         if (byGraphResponse.ok) {
-          return await byGraphResponse.json();
+          const byGraphCurve = await byGraphResponse.json();
+          if (byGraphCurve) {
+            return byGraphCurve;
+          }
         }
       }
 
-      // Only use discoveree_cat_id fallback when graph_id is absent.
-      // discoveree_cat_id can map to multiple graph IDs and return a wrong image.
-      if (!normalizedGraphId && normalizedDiscovereeCatId) {
+      // Fallback to discoveree_cat_id when available and meaningful.
+      // If a mapped discoveree_graph_id exists and doesn't match the requested graph_id, skip it.
+      if (normalizedDiscovereeCatId && normalizedDiscovereeCatId !== '0') {
         const byDiscovereeResponse = await fetch(
           `${apiUrl}/api/curves/by-discoveree/${encodeURIComponent(normalizedDiscovereeCatId)}`
         );
         if (byDiscovereeResponse.ok) {
-          return await byDiscovereeResponse.json();
+          const byDiscovereeCurve = await byDiscovereeResponse.json();
+          if (byDiscovereeCurve) {
+            const mappedGraphId = String(byDiscovereeCurve?.discoveree_graph_id || '').trim();
+            if (!normalizedGraphId || !mappedGraphId || mappedGraphId === normalizedGraphId) {
+              return byDiscovereeCurve;
+            }
+          }
         }
       }
 
