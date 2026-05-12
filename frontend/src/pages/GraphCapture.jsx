@@ -2324,6 +2324,12 @@ const GraphCapture = () => {
     setShouldSkipCaptureChoiceAfterAi(false);
     setRestoredPendingCapture(restoredPending);
 
+    // Immediately persist the pending capture image to localStorage so that fetchGraphById
+    // (which runs in a separate effect with [] deps) can find it via getPersistedGraphImage.
+    if (restoredPending?.imageBase64 && graphIdFromUrl) {
+      persistGraphImage(graphIdFromUrl, restoredPending.imageBase64);
+    }
+
     setIsXTitleUrlLocked(Boolean(xTitleFromUrl));
     setIsYTitleUrlLocked(Boolean(yTitleFromUrl));
 
