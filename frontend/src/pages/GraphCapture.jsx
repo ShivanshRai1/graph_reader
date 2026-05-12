@@ -1859,6 +1859,9 @@ const GraphCapture = () => {
 
     const resolvedOldCurveName = String(curve?.config?.curveName || curve?.curve_name || curve?.name || '');
     const resolvedNewCurveName = newCurveName !== '' ? newCurveName : resolvedOldCurveName;
+    const resolvedGraphImageForEdit = normalizeImageCandidate(
+      curve?.graphImageUrl || curve?.graph_img || uploadedImage || ''
+    );
     const detailPayload = {
       curve_title: resolvedNewCurveName,
     };
@@ -1879,6 +1882,7 @@ const GraphCapture = () => {
         discoveree_cat_id: String(curve?.discoveree_cat_id || urlParams.discoveree_cat_id || ''),
         identifier: String(curve?.identifier || urlParams.identifier || companyGraphId || ''),
         curve_title: resolvedNewCurveName,
+        ...(resolvedGraphImageForEdit ? { graph_img: resolvedGraphImageForEdit } : {}),
         ...(hasCurveNameChange ? { old_curve_name: resolvedOldCurveName, new_curve_name: resolvedNewCurveName } : {}),
       },
       details: [detailPayload],
@@ -2837,7 +2841,9 @@ const GraphCapture = () => {
         other_symbols: urlParams.other_symbols || null,
         discoveree_cat_id: urlParams.discoveree_cat_id ? parseInt(urlParams.discoveree_cat_id) : null,
         discoveree_graph_id: urlParams.graph_id ? String(urlParams.graph_id) : null,
-        graph_image: uploadedImage || null,
+        graph_image:
+          normalizeImageCandidate(uploadedImage || activeSessionImageKeyRef.current || selectedCurve?.graphImageUrl || selectedCurve?.graph_img || '') ||
+          null,
         data_points: uniquePoints.map((point) => ({
           x_value: point.x,
           y_value: point.y,
@@ -2882,8 +2888,10 @@ const GraphCapture = () => {
         alert('Data saved successfully!');
       }
 
-      const graphGroupId = buildGraphGroupId(uploadedImage || '');
-      const graphImageUrl = uploadedImage || '';
+      const graphImageUrl =
+        normalizeImageCandidate(uploadedImage || activeSessionImageKeyRef.current || selectedCurve?.graphImageUrl || selectedCurve?.graph_img || '') ||
+        '';
+      const graphGroupId = buildGraphGroupId(graphImageUrl || '');
       console.log('Local save successful, calling sendToCompanyDatabase...');
       const companyResult = await sendToCompanyDatabase(graphImageUrl, result.id, allowRedirect);
       const companyGraphId = companyResult?.graphId ?? null;
@@ -3264,7 +3272,7 @@ const GraphCapture = () => {
           curve_title: urlParams.curve_title || graphConfig.curveName || '',
           x_title: graphConfig.xLabel || urlParams.x_label || '',
           y_title: graphConfig.yLabel || urlParams.y_label || '',
-          graph_img: graphImageUrl || '',
+          ...(graphImageUrl ? { graph_img: graphImageUrl } : {}),
           mark_review: '1',
           testuser_id: urlParams.testuser_id || '',
           uname: urlParams.username || graphConfig.username || '',
