@@ -1078,6 +1078,7 @@ const GraphCapture = () => {
   const activeSessionGraphIdRef = useRef('');
   const hasActiveAppendSessionRef = useRef(false);
   const activeSessionImageKeyRef = useRef('');
+  const restoredPendingImageRef = useRef('');
   const previousUploadedImageRef = useRef(uploadedImage || '');
   const suppressNextImageSessionResetRef = useRef(false);
     const activeSessionIdentifierRef = useRef('');
@@ -1265,7 +1266,7 @@ const GraphCapture = () => {
     const candidates = [
       ...graphImageCandidates,
       ...detailImageCandidates,
-      getPersistedGraphImage(graphId || graph?.graph_id || graph?.identifier || ''),
+      restoredPendingImageRef.current,
       activeSessionImageKeyRef.current,
       uploadedImage,
     ];
@@ -2335,12 +2336,7 @@ const GraphCapture = () => {
     });
     setShouldSkipCaptureChoiceAfterAi(false);
     setRestoredPendingCapture(restoredPending);
-
-    // Immediately persist the pending capture image to localStorage so that fetchGraphById
-    // (which runs in a separate effect with [] deps) can find it via getPersistedGraphImage.
-    if (restoredPending?.imageBase64 && graphIdFromUrl) {
-      persistGraphImage(graphIdFromUrl, restoredPending.imageBase64);
-    }
+    restoredPendingImageRef.current = String(restoredPending?.imageBase64 || '');
 
     setIsXTitleUrlLocked(Boolean(xTitleFromUrl));
     setIsYTitleUrlLocked(Boolean(yTitleFromUrl));
@@ -2619,12 +2615,13 @@ const GraphCapture = () => {
 
         if (curve) {
           console.log('[DEBUG] Netlify response:', curve);
-          const persistedImage = getPersistedGraphImage(graphId);
-          const resolvedLocalImage = normalizeImageCandidate(curve.graph_image) || persistedImage;
+          const resolvedLocalImage =
+            normalizeImageCandidate(curve.graph_image) ||
+            normalizeImageCandidate(restoredPendingImageRef.current);
           logGraphImageAvailability(graphId, resolvedLocalImage, 'local-backend-fallback', {
             localCurveId: curve.id || '',
             localGraphImagePresent: Boolean(String(curve.graph_image || '').trim()),
-            persistedImagePresent: Boolean(String(persistedImage || '').trim()),
+            restoredPendingImagePresent: Boolean(String(restoredPendingImageRef.current || '').trim()),
           });
           const graphGroupId = buildGraphGroupId(resolvedLocalImage || '');
           const savedCurve = {
@@ -2703,8 +2700,7 @@ const GraphCapture = () => {
         firstCurve.graph_img ||
         (savedCurves.find((curve) => curve?.graphImageUrl || curve?.graph_img)?.graphImageUrl ||
           savedCurves.find((curve) => curve?.graphImageUrl || curve?.graph_img)?.graph_img ||
-          '') ||
-        getPersistedGraphImage(graphId || firstCurve.graphId || getGraphIdForCurve(firstCurve) || '');
+          '');
 
       logGraphImageAvailability(graphId || firstCurve.graphId || getGraphIdForCurve(firstCurve), resolvedSavedImage, 'auto-load-graph-context', {
         firstCurveId: firstCurve.id,
