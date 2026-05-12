@@ -998,6 +998,7 @@ const GraphCapture = () => {
     yUnitPrefix: '1',
   });
   const [editCurveSymbolValues, setEditCurveSymbolValues] = useState({});
+  const [editCurveName, setEditCurveName] = useState('');
   // State for axis confirmation and freezing (Issue 5 & 7)
   const [isAxisMappingConfirmed, setIsAxisMappingConfirmed] = useState(false);
   const [frozenGraphConfig, setFrozenGraphConfig] = useState(null);
@@ -1299,6 +1300,7 @@ const GraphCapture = () => {
       yUnitPrefix: curve.config?.yUnitPrefix || curve.y_unit || '1',
     });
     setEditCurveSymbolValues(normalizeCurveSymbolValues(curve));
+    setEditCurveName(curve.config?.curveName || curve.curve_name || curve.name || '');
     
     // Load saved annotations for this curve
     loadAnnotationsForCurve(curve.id);
@@ -1307,6 +1309,7 @@ const GraphCapture = () => {
   const handleEditCurveCancel = () => {
     setEditingCurveId('');
     setEditCurveSymbolValues({});
+    setEditCurveName('');
     clearDataPoints();
   };
 
@@ -1634,7 +1637,7 @@ const GraphCapture = () => {
     previousUploadedImageRef.current = nextImage;
   }, [uploadedImage]);
 
-  const pushEditedCurveToApi = async (curve, nextMeta, nextSymbols) => {
+  const pushEditedCurveToApi = async (curve, nextMeta, nextSymbols, newCurveName = '') => {
     const currentSymbolPayload = buildDynamicSymbolPayload(
       normalizeCurveSymbolValues(curve),
       symbolLabels,
@@ -1685,8 +1688,10 @@ const GraphCapture = () => {
       return diffs;
     })();
 
-    const hasLocalChanges = hasMetaChanges || hasLegacyTemperatureChange || hasXyChanges;
-    const hasCompanyChanges = hasMetaChanges || hasLegacyTemperatureChange || hasSymbolValueChanges || hasXyChanges;
+    const oldCurveName = String(curve?.config?.curveName || curve?.curve_name || curve?.name || '');
+    const hasCurveNameChange = newCurveName !== '' && newCurveName !== oldCurveName;
+    const hasLocalChanges = hasMetaChanges || hasLegacyTemperatureChange || hasXyChanges || hasCurveNameChange;
+    const hasCompanyChanges = hasMetaChanges || hasLegacyTemperatureChange || hasSymbolValueChanges || hasXyChanges || hasCurveNameChange;
 
     if (!(savedCurvesSource === 'company' ? hasCompanyChanges : hasLocalChanges)) {
       throw new Error('No changes detected to update.');
@@ -1704,6 +1709,7 @@ const GraphCapture = () => {
       if (currentMeta.xUnitPrefix !== nextMeta.xUnitPrefix) localPayload.x_unit = nextMeta.xUnitPrefix;
       if (currentMeta.yUnitPrefix !== nextMeta.yUnitPrefix) localPayload.y_unit = nextMeta.yUnitPrefix;
       if (hasLegacyTemperatureChange) localPayload.temperature = tctjValue;
+      if (hasCurveNameChange) localPayload.curve_name = newCurveName;
       if (hasXyChanges) {
         localPayload.data_points = nextPoints.map((point) => ({
           x_value: point.x,
@@ -1761,8 +1767,10 @@ const GraphCapture = () => {
       throw new Error('Missing company graph_id for update.');
     }
 
+    const resolvedOldCurveName = String(curve?.config?.curveName || curve?.curve_name || curve?.name || '');
+    const resolvedNewCurveName = newCurveName !== '' ? newCurveName : resolvedOldCurveName;
     const detailPayload = {
-      curve_title: String(curve?.config?.curveName || curve?.curve_name || curve?.name || ''),
+      curve_title: resolvedNewCurveName,
     };
     const resolvedDetailId = getDetailIdForCurve(curve);
     if (resolvedDetailId) detailPayload.id = String(resolvedDetailId);
@@ -1780,7 +1788,8 @@ const GraphCapture = () => {
         graph_id: String(companyGraphId),
         discoveree_cat_id: String(curve?.discoveree_cat_id || urlParams.discoveree_cat_id || ''),
         identifier: String(curve?.identifier || urlParams.identifier || companyGraphId || ''),
-        curve_title: String(curve?.config?.curveName || curve?.curve_name || curve?.name || ''),
+        curve_title: resolvedNewCurveName,
+        ...(hasCurveNameChange ? { old_curve_name: resolvedOldCurveName, new_curve_name: resolvedNewCurveName } : {}),
       },
       details: [detailPayload],
     };
@@ -1860,20 +1869,23 @@ const GraphCapture = () => {
 
     setIsUpdatingCurveId(curveId);
     try {
-      await pushEditedCurveToApi(targetCurve, editCurveMeta, editCurveSymbolValues);
+      await pushEditedCurveToApi(targetCurve, editCurveMeta, editCurveSymbolValues, editCurveName);
       syncGraphIdContext(targetCurve.graphId || getGraphIdForCurve(targetCurve));
 
       setSavedCurves((prev) =>
         prev.map((curve) => {
           if (curve.id !== curveId) return curve;
+          const updatedName = editCurveName || curve.name;
           return {
             ...curve,
+            name: updatedName,
             points: normalizePointsForComparison(dataPoints).map((point) => ({
               x_value: point.x,
               y_value: point.y,
             })),
             config: {
               ...(curve.config || {}),
+              curveName: updatedName,
               xScale: editCurveMeta.xScale,
               yScale: editCurveMeta.yScale,
               xUnitPrefix: editCurveMeta.xUnitPrefix,
@@ -1889,6 +1901,7 @@ const GraphCapture = () => {
       );
       setEditingCurveId('');
       setEditCurveSymbolValues({});
+      setEditCurveName('');
       alert('Curve updated successfully.');
     } catch (error) {
       console.error('Edit update API error:', error);
@@ -3811,6 +3824,16 @@ const GraphCapture = () => {
                               })()}
                               {editingCurveId === curve.id ? (
                                 <div className="mt-2">
+                                  <label className="text-xs text-gray-700 block mb-3">
+                                    Curve Name
+                                    <input
+                                      type="text"
+                                      className="w-full mt-1 px-2 py-1 border border-gray-300 rounded text-xs"
+                                      value={editCurveName}
+                                      onChange={(e) => setEditCurveName(e.target.value)}
+                                      placeholder="Enter curve name"
+                                    />
+                                  </label>
                                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                     <label className="text-xs text-gray-700">
                                       Y Scale

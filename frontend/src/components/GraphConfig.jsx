@@ -736,7 +736,6 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
         {isAxisMappingConfirmed && (
           <button
             onClick={() => {
-              setLogPairInputs(EMPTY_LOG_PAIR_INPUTS);
               setLogInputMode(DEFAULT_LOG_INPUT_MODE);
               onRetakeAxis();
             }}
