@@ -710,6 +710,8 @@ const GraphCapture = () => {
     currentUrl.searchParams.delete(AI_DIRECT_CAPTURE_PARAM);
     window.history.replaceState({}, '', currentUrl.toString());
 
+    setSkipCaptureChoiceForUpload(false);
+
     if (preserveGraphContext) {
       setShouldSkipCaptureChoiceAfterAi(false);
     }
@@ -726,6 +728,9 @@ const GraphCapture = () => {
   const [selectedCurveId, setSelectedCurveId] = useState('');
   const [isLoadingSavedCurve, setIsLoadingSavedCurve] = useState(false);
   const [shouldSkipCaptureChoiceAfterAi, setShouldSkipCaptureChoiceAfterAi] = useState(false);
+  const [skipCaptureChoiceForUpload, setSkipCaptureChoiceForUpload] = useState(
+    () => new URLSearchParams(window.location.search).get(AI_DIRECT_CAPTURE_PARAM) === '1'
+  );
   const [isInitialGraphFetchPending, setIsInitialGraphFetchPending] = useState(
     () => Boolean(new URLSearchParams(window.location.search).get('graph_id'))
   );
@@ -3621,7 +3626,7 @@ const GraphCapture = () => {
           onImageLoaded={handleUserImageLoaded}
           onAiExtensionCapture={handleAiExtensionCapture}
           isAiExtractionLoading={isAiExtractionLoading}
-          skipCaptureChoice={shouldSkipCaptureChoiceAfterAi}
+          skipCaptureChoice={skipCaptureChoiceForUpload}
         />
         {(uploadedImage || (urlParams.graph_id && !shouldSkipCaptureChoiceAfterAi && !isInitialGraphFetchPending)) && (
           <div ref={graphWorkspaceRef} className="flex flex-col lg:flex-row gap-8">
