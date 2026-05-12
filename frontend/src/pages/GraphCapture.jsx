@@ -1267,8 +1267,6 @@ const GraphCapture = () => {
       ...graphImageCandidates,
       ...detailImageCandidates,
       restoredPendingImageRef.current,
-      activeSessionImageKeyRef.current,
-      uploadedImage,
     ];
 
     for (const candidate of candidates) {
@@ -1492,17 +1490,7 @@ const GraphCapture = () => {
     }
 
     try {
-      // First try discoveree category lookup (legacy, widely populated in existing rows).
-      if (normalizedDiscovereeCatId) {
-        const byDiscovereeResponse = await fetch(
-          `${apiUrl}/api/curves/by-discoveree/${encodeURIComponent(normalizedDiscovereeCatId)}`
-        );
-        if (byDiscovereeResponse.ok) {
-          return await byDiscovereeResponse.json();
-        }
-      }
-
-      // Then try graph_id lookup for rows created with discoveree_graph_id.
+      // First try graph_id lookup for rows created with discoveree_graph_id.
       if (normalizedGraphId) {
         const byGraphResponse = await fetch(
           `${apiUrl}/api/curves/by-graph/${encodeURIComponent(normalizedGraphId)}`
@@ -1510,13 +1498,16 @@ const GraphCapture = () => {
         if (byGraphResponse.ok) {
           return await byGraphResponse.json();
         }
+      }
 
-        // Final compatibility fallback for older records that accidentally used graph_id in discoveree field.
-        const legacyByGraphAsDiscovereeResponse = await fetch(
-          `${apiUrl}/api/curves/by-discoveree/${encodeURIComponent(normalizedGraphId)}`
+      // Only use discoveree_cat_id fallback when graph_id is absent.
+      // discoveree_cat_id can map to multiple graph IDs and return a wrong image.
+      if (!normalizedGraphId && normalizedDiscovereeCatId) {
+        const byDiscovereeResponse = await fetch(
+          `${apiUrl}/api/curves/by-discoveree/${encodeURIComponent(normalizedDiscovereeCatId)}`
         );
-        if (legacyByGraphAsDiscovereeResponse.ok) {
-          return await legacyByGraphAsDiscovereeResponse.json();
+        if (byDiscovereeResponse.ok) {
+          return await byDiscovereeResponse.json();
         }
       }
 
