@@ -663,7 +663,19 @@ const GraphCapture = () => {
     const navigateWithAiFlowMessage = (message, targetUrl) => {
       setAiFlowStatusMessage(message);
       window.setTimeout(() => {
-        window.location.href = targetUrl;
+        // If the target URL is identical to the current URL, window.location.href assignment
+        // is a no-op in Chrome/Edge and the page never reloads. Force reload in that case.
+        let isSameUrl = false;
+        try {
+          isSameUrl = new URL(targetUrl).href === window.location.href;
+        } catch {
+          isSameUrl = targetUrl === window.location.href;
+        }
+        if (isSameUrl) {
+          window.location.reload();
+        } else {
+          window.location.href = targetUrl;
+        }
       }, 900);
     };
 
