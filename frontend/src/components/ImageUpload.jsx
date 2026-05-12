@@ -103,20 +103,32 @@ const ImageUpload = ({ onImageLoaded, onAiExtensionCapture, isAiExtractionLoadin
         📁 Browse Files
       </button>
       {pendingCapture && (
-        <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <button
-            onClick={handleCaptureManually}
-            className="w-full px-4 py-2 rounded bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors"
-          >
-            Capture Manually
-          </button>
-          <button
-            onClick={handleCaptureWithAiExtension}
-            disabled={isAiExtractionLoading}
-            className="w-full px-4 py-2 rounded bg-emerald-600 text-white font-medium hover:bg-emerald-700 transition-colors"
-          >
+        <div className="mt-3">
+          <div className="flex items-center gap-3 mb-2 p-2 border border-green-300 rounded bg-green-50">
+            <img
+              src={pendingCapture.imageBase64}
+              alt="Pasted preview"
+              className="h-16 w-24 object-contain rounded border border-gray-200 bg-white shrink-0"
+            />
+            <span className="text-sm font-medium text-green-700">
+              ✓ Image ready — choose how to proceed
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <button
+              onClick={handleCaptureManually}
+              className="w-full px-4 py-2 rounded bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors"
+            >
+              Capture Manually
+            </button>
+            <button
+              onClick={handleCaptureWithAiExtension}
+              disabled={isAiExtractionLoading}
+              className="w-full px-4 py-2 rounded bg-emerald-600 text-white font-medium hover:bg-emerald-700 transition-colors"
+            >
               {isAiExtractionLoading ? 'Loading, please wait...' : 'Capture with AI Extraction'}
-          </button>
+            </button>
+          </div>
         </div>
       )}
     </div>
