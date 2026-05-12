@@ -7,9 +7,17 @@ const ImageUpload = ({ onImageLoaded, onAiExtensionCapture, isAiExtractionLoadin
   const [pendingCapture, setPendingCapture] = useState(null);
 
   useEffect(() => {
-    if (!initialPendingCapture?.imageBase64) return;
+    if (!initialPendingCapture?.imageBase64) {
+      console.log('[AI_PENDING] ImageUpload: no initialPendingCapture, skipping restore');
+      return;
+    }
+    console.log('[AI_PENDING] ImageUpload: received initialPendingCapture, restoring');
     setPendingCapture((prev) => {
-      if (prev?.imageBase64) return prev;
+      if (prev?.imageBase64) {
+        console.log('[AI_PENDING] ImageUpload: already has pendingCapture, skipping');
+        return prev;
+      }
+      console.log('[AI_PENDING] ImageUpload: setting pendingCapture and calling onPendingCaptureChange(true)');
       onPendingCaptureChange(true);
       return {
         imageBase64: initialPendingCapture.imageBase64,

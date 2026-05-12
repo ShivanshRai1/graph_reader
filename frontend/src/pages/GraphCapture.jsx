@@ -464,6 +464,12 @@ const persistAiPendingCapture = (imageBase64, source, graphId = '') => {
       ts: Date.now(),
     };
     window.sessionStorage.setItem(AI_PENDING_CAPTURE_STORAGE_KEY, JSON.stringify(payload));
+    console.log('[AI_PENDING] Persisted to sessionStorage:', {
+      hasImage: Boolean(imageBase64),
+      source,
+      graphId,
+      timestampMs: payload.ts,
+    });
   } catch (error) {
     console.warn('Unable to persist AI pending capture image.', error);
   }
@@ -472,20 +478,37 @@ const persistAiPendingCapture = (imageBase64, source, graphId = '') => {
 const consumeAiPendingCapture = (expectedGraphId = '') => {
   try {
     const raw = window.sessionStorage.getItem(AI_PENDING_CAPTURE_STORAGE_KEY);
-    if (!raw) return null;
+    console.log('[AI_PENDING] Attempting to consume from sessionStorage. Found:', Boolean(raw), 'Expected graphId:', expectedGraphId);
+
+    if (!raw) {
+      console.log('[AI_PENDING] No item in sessionStorage, returning null');
+      return null;
+    }
 
     const payload = JSON.parse(raw);
     window.sessionStorage.removeItem(AI_PENDING_CAPTURE_STORAGE_KEY);
 
-    if (!payload?.imageBase64) return null;
-    if (Date.now() - Number(payload?.ts || 0) > AI_PENDING_CAPTURE_TTL_MS) return null;
-
-    const payloadGraphId = String(payload?.graphId || '').trim();
-    const normalizedExpectedGraphId = String(expectedGraphId || '').trim();
-    if (payloadGraphId && normalizedExpectedGraphId && payloadGraphId !== normalizedExpectedGraphId) {
+    if (!payload?.imageBase64) {
+      console.log('[AI_PENDING] Payload has no imageBase64, returning null');
       return null;
     }
 
+    const ttlMs = Date.now() - Number(payload?.ts || 0);
+    if (ttlMs > AI_PENDING_CAPTURE_TTL_MS) {
+      console.log('[AI_PENDING] TTL expired:', ttlMs, 'ms (max:', AI_PENDING_CAPTURE_TTL_MS, 'ms)');
+      return null;
+    }
+
+    const payloadGraphId = String(payload?.graphId || '').trim();
+    const normalizedExpectedGraphId = String(expectedGraphId || '').trim();
+    console.log('[AI_PENDING] GraphId check - stored:', payloadGraphId, 'expected:', normalizedExpectedGraphId);
+
+    if (payloadGraphId && normalizedExpectedGraphId && payloadGraphId !== normalizedExpectedGraphId) {
+      console.log('[AI_PENDING] GraphId mismatch, returning null');
+      return null;
+    }
+
+    console.log('[AI_PENDING] Successfully restored image from sessionStorage');
     return {
       imageBase64: payload.imageBase64,
       source: payload.source || 'upload',
@@ -690,12 +713,14 @@ const GraphCapture = () => {
           action: 'reload_with_graph_id',
           reason: 'Missing graph_id in URL; using graph_id returned by AI extraction',
           graph_id: graphIdForFlow,
+          imageBase64Length: imageBase64?.length,
         });
 
         persistAiPendingCapture(imageBase64, source, graphIdForFlow);
         const refreshUrl = new URL(window.location.href);
         refreshUrl.searchParams.set('graph_id', graphIdForFlow);
         refreshUrl.searchParams.delete(AI_DIRECT_CAPTURE_PARAM);
+        console.log('[AI_PENDING] Case 3: Redirecting to:', refreshUrl.toString());
         navigateWithAiFlowMessage(
           'Graph ID does not exist in URL. Redirecting to graph capture page with returned graph ID...',
           refreshUrl.toString()
@@ -719,10 +744,12 @@ const GraphCapture = () => {
           action: 'reload_for_capture',
           reason: 'graph_id exists but has no captured curves yet',
           graph_id: graphIdForFlow,
+          imageBase64Length: imageBase64?.length,
         });
 
         persistAiPendingCapture(imageBase64, source, graphIdForFlow);
         redirectUrl.searchParams.delete(AI_DIRECT_CAPTURE_PARAM);
+        console.log('[AI_PENDING] Case 2: Redirecting to:', redirectUrl.toString());
         navigateWithAiFlowMessage(
           'No captured curves found. Redirecting to graph capture page...',
           redirectUrl.toString()
@@ -2286,6 +2313,7 @@ const GraphCapture = () => {
       getLastNonEmptyQueryValue(searchParams, 'return_graph_id') ||
       '';
     const restoredPending = consumeAiPendingCapture(graphIdFromUrl);
+    console.log('[AI_PENDING] Page load: graphIdFromUrl=', graphIdFromUrl, 'restoredPending=', Boolean(restoredPending));
 
     const xTitleFromUrl = (searchParams.get('x_label') || searchParams.get('x_title') || searchParams.get('xlabel') || '').trim();
     const yTitleFromUrl = (searchParams.get('y_label') || searchParams.get('y_title') || searchParams.get('ylabel') || '').trim();
