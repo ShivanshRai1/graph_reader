@@ -1,10 +1,21 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useGraph } from '../context/GraphContext';
 
-const ImageUpload = ({ onImageLoaded, onAiExtensionCapture, isAiExtractionLoading = false, skipCaptureChoice = false }) => {
+const ImageUpload = ({ onImageLoaded, onAiExtensionCapture, isAiExtractionLoading = false, skipCaptureChoice = false, initialPendingCapture = null }) => {
   const { setUploadedImage, clearDataPoints, setGraphConfig, setGraphArea } = useGraph();
   const fileInputRef = useRef(null);
   const [pendingCapture, setPendingCapture] = useState(null);
+
+  useEffect(() => {
+    if (!initialPendingCapture?.imageBase64) return;
+    setPendingCapture((prev) => {
+      if (prev?.imageBase64) return prev;
+      return {
+        imageBase64: initialPendingCapture.imageBase64,
+        source: initialPendingCapture.source || 'upload',
+      };
+    });
+  }, [initialPendingCapture]);
 
   const resetGraphForManualCapture = (clearImageFirst = false) => {
     if (clearImageFirst) {

@@ -451,6 +451,50 @@ const parseCompanyApiText = (rawText) => {
   return JSON.parse(match ? match[0] : rawText);
 };
 const AI_DIRECT_CAPTURE_PARAM = 'ai_direct_capture';
+const AI_PENDING_CAPTURE_STORAGE_KEY = 'ai_pending_capture_image';
+const AI_PENDING_CAPTURE_TTL_MS = 5 * 60 * 1000;
+
+const persistAiPendingCapture = (imageBase64, source, graphId = '') => {
+  try {
+    if (!imageBase64) return;
+    const payload = {
+      imageBase64,
+      source: source || 'upload',
+      graphId: String(graphId || ''),
+      ts: Date.now(),
+    };
+    window.sessionStorage.setItem(AI_PENDING_CAPTURE_STORAGE_KEY, JSON.stringify(payload));
+  } catch (error) {
+    console.warn('Unable to persist AI pending capture image.', error);
+  }
+};
+
+const consumeAiPendingCapture = (expectedGraphId = '') => {
+  try {
+    const raw = window.sessionStorage.getItem(AI_PENDING_CAPTURE_STORAGE_KEY);
+    if (!raw) return null;
+
+    const payload = JSON.parse(raw);
+    window.sessionStorage.removeItem(AI_PENDING_CAPTURE_STORAGE_KEY);
+
+    if (!payload?.imageBase64) return null;
+    if (Date.now() - Number(payload?.ts || 0) > AI_PENDING_CAPTURE_TTL_MS) return null;
+
+    const payloadGraphId = String(payload?.graphId || '').trim();
+    const normalizedExpectedGraphId = String(expectedGraphId || '').trim();
+    if (payloadGraphId && normalizedExpectedGraphId && payloadGraphId !== normalizedExpectedGraphId) {
+      return null;
+    }
+
+    return {
+      imageBase64: payload.imageBase64,
+      source: payload.source || 'upload',
+    };
+  } catch (error) {
+    console.warn('Unable to consume AI pending capture image.', error);
+    return null;
+  }
+};
 
 const checkGraphHasCapturedCurves = async (graphId) => {
   const normalizedGraphId = String(graphId || '').trim();
@@ -550,6 +594,14 @@ const GraphCapture = () => {
   } = useGraph();
   const graphWorkspaceRef = useRef(null);
   const handleAiExtensionCapture = async (imageBase64, source = '') => {
+    const navigateWithAiFlowMessage = (message, targetUrl) => {
+      setAiFlowStatusMessage(message);
+      window.setTimeout(() => {
+        window.location.href = targetUrl;
+      }, 900);
+    };
+
+    setAiFlowStatusMessage('');
     // Strip data URI prefix (e.g. "data:image/png;base64,") — PHP expects raw base64 only
     const rawBase64 = String(imageBase64 || '').replace(/^data:[^;]+;base64,/, '');
     const requestPayload = {
@@ -640,10 +692,14 @@ const GraphCapture = () => {
           graph_id: graphIdForFlow,
         });
 
+        persistAiPendingCapture(imageBase64, source, graphIdForFlow);
         const refreshUrl = new URL(window.location.href);
         refreshUrl.searchParams.set('graph_id', graphIdForFlow);
-        refreshUrl.searchParams.set(AI_DIRECT_CAPTURE_PARAM, '1');
-        window.location.href = refreshUrl.toString();
+        refreshUrl.searchParams.delete(AI_DIRECT_CAPTURE_PARAM);
+        navigateWithAiFlowMessage(
+          'Graph ID does not exist in URL. Redirecting to graph capture page with returned graph ID...',
+          refreshUrl.toString()
+        );
         return;
       }
 
@@ -660,13 +716,17 @@ const GraphCapture = () => {
 
       if (!hasCapturedCurves) {
         console.log('=== AI EXTRACTION DECISION ===', {
-          action: 'reload_for_direct_capture',
+          action: 'reload_for_capture',
           reason: 'graph_id exists but has no captured curves yet',
           graph_id: graphIdForFlow,
         });
 
-        redirectUrl.searchParams.set(AI_DIRECT_CAPTURE_PARAM, '1');
-        window.location.href = redirectUrl.toString();
+        persistAiPendingCapture(imageBase64, source, graphIdForFlow);
+        redirectUrl.searchParams.delete(AI_DIRECT_CAPTURE_PARAM);
+        navigateWithAiFlowMessage(
+          'No captured curves found. Redirecting to graph capture page...',
+          redirectUrl.toString()
+        );
         return;
       }
 
@@ -677,7 +737,10 @@ const GraphCapture = () => {
       });
 
       redirectUrl.searchParams.delete(AI_DIRECT_CAPTURE_PARAM);
-      window.location.href = redirectUrl.toString();
+      navigateWithAiFlowMessage(
+        'Curves already exist. Redirecting to curves listing page...',
+        redirectUrl.toString()
+      );
     } catch (error) {
       console.error('AI extraction request failed:', error);
       alert(`Failed to send image for AI extraction: ${error?.message || 'Unknown error'}`);
@@ -709,8 +772,7 @@ const GraphCapture = () => {
     currentUrl.searchParams.delete('ylabel');
     currentUrl.searchParams.delete(AI_DIRECT_CAPTURE_PARAM);
     window.history.replaceState({}, '', currentUrl.toString());
-
-    setSkipCaptureChoiceForUpload(false);
+    setAiFlowStatusMessage('');
 
     if (preserveGraphContext) {
       setShouldSkipCaptureChoiceAfterAi(false);
@@ -728,9 +790,8 @@ const GraphCapture = () => {
   const [selectedCurveId, setSelectedCurveId] = useState('');
   const [isLoadingSavedCurve, setIsLoadingSavedCurve] = useState(false);
   const [shouldSkipCaptureChoiceAfterAi, setShouldSkipCaptureChoiceAfterAi] = useState(false);
-  const [skipCaptureChoiceForUpload, setSkipCaptureChoiceForUpload] = useState(
-    () => new URLSearchParams(window.location.search).get(AI_DIRECT_CAPTURE_PARAM) === '1'
-  );
+  const [aiFlowStatusMessage, setAiFlowStatusMessage] = useState('');
+  const [restoredPendingCapture, setRestoredPendingCapture] = useState(null);
   const [isInitialGraphFetchPending, setIsInitialGraphFetchPending] = useState(
     () => Boolean(new URLSearchParams(window.location.search).get('graph_id'))
   );
@@ -2222,7 +2283,7 @@ const GraphCapture = () => {
       getLastNonEmptyQueryValue(searchParams, 'graph_id') ||
       getLastNonEmptyQueryValue(searchParams, 'return_graph_id') ||
       '';
-    const hasAiDirectCaptureFlag = searchParams.get(AI_DIRECT_CAPTURE_PARAM) === '1';
+    const restoredPending = consumeAiPendingCapture(graphIdFromUrl);
 
     const xTitleFromUrl = (searchParams.get('x_label') || searchParams.get('x_title') || searchParams.get('xlabel') || '').trim();
     const yTitleFromUrl = (searchParams.get('y_label') || searchParams.get('y_title') || searchParams.get('ylabel') || '').trim();
@@ -2245,7 +2306,8 @@ const GraphCapture = () => {
       return_url: searchParams.get('return_url') || '',
       graph_id: graphIdFromUrl,
     });
-    setShouldSkipCaptureChoiceAfterAi(hasAiDirectCaptureFlag);
+    setShouldSkipCaptureChoiceAfterAi(false);
+    setRestoredPendingCapture(restoredPending);
 
     setIsXTitleUrlLocked(Boolean(xTitleFromUrl));
     setIsYTitleUrlLocked(Boolean(yTitleFromUrl));
@@ -3612,10 +3674,10 @@ const GraphCapture = () => {
 
   return (
     <div className="w-full min-h-screen p-8" style={{ backgroundColor: '#ffffff', color: '#213547' }}>
-      {isAiExtractionLoading && (
+      {(isAiExtractionLoading || aiFlowStatusMessage) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
           <div className="rounded-md bg-white px-5 py-3 text-sm font-medium" style={{ color: '#213547' }}>
-            Loading, please wait...
+            {isAiExtractionLoading ? 'Loading, please wait...' : aiFlowStatusMessage}
           </div>
         </div>
       )}
@@ -3639,7 +3701,8 @@ const GraphCapture = () => {
           onImageLoaded={handleUserImageLoaded}
           onAiExtensionCapture={handleAiExtensionCapture}
           isAiExtractionLoading={isAiExtractionLoading}
-          skipCaptureChoice={skipCaptureChoiceForUpload}
+          skipCaptureChoice={false}
+          initialPendingCapture={restoredPendingCapture}
         />
         {(uploadedImage || (urlParams.graph_id && !shouldSkipCaptureChoiceAfterAi && !isInitialGraphFetchPending)) && (
           <div ref={graphWorkspaceRef} className="flex flex-col lg:flex-row gap-8">
