@@ -792,6 +792,7 @@ const GraphCapture = () => {
   const [shouldSkipCaptureChoiceAfterAi, setShouldSkipCaptureChoiceAfterAi] = useState(false);
   const [aiFlowStatusMessage, setAiFlowStatusMessage] = useState('');
   const [restoredPendingCapture, setRestoredPendingCapture] = useState(null);
+  const [hasPendingCaptureChoice, setHasPendingCaptureChoice] = useState(false);
   const [isInitialGraphFetchPending, setIsInitialGraphFetchPending] = useState(
     () => Boolean(new URLSearchParams(window.location.search).get('graph_id'))
   );
@@ -2678,7 +2679,7 @@ const GraphCapture = () => {
         ...prev,
         graphTitle: firstCurve.config?.graphTitle || firstCurve.graph_title || firstCurve.name || '',
         curveName: '',
-        partNumber: firstCurve.config?.partNumber || firstCurve.part_number || '',
+        partNumber: firstCurve.config?.partNumber || firstCurve.part_number || prev.partNumber || '',
         xScale: firstCurve.config?.xScale || firstCurve.x_scale || 'Linear',
         yScale: firstCurve.config?.yScale || firstCurve.y_scale || 'Linear',
         xUnitPrefix: firstCurve.config?.xUnitPrefix || firstCurve.x_unit || '1',
@@ -3703,8 +3704,9 @@ const GraphCapture = () => {
           isAiExtractionLoading={isAiExtractionLoading}
           skipCaptureChoice={false}
           initialPendingCapture={restoredPendingCapture}
+          onPendingCaptureChange={setHasPendingCaptureChoice}
         />
-        {(uploadedImage || (urlParams.graph_id && !shouldSkipCaptureChoiceAfterAi && !isInitialGraphFetchPending)) && (
+        {(uploadedImage || (urlParams.graph_id && !shouldSkipCaptureChoiceAfterAi && !isInitialGraphFetchPending && !hasPendingCaptureChoice)) && (
           <div ref={graphWorkspaceRef} className="flex flex-col lg:flex-row gap-8">
             <div className="w-full lg:w-2/5 flex flex-col gap-4">
               <GraphCanvas isReadOnly={isReadOnly} partNumber={urlParams.partno} manufacturer={urlParams.manufacturer || graphConfig.manufacturer} isAxisMappingConfirmed={isAxisMappingConfirmed} hasReturnUrl={!!urlParams.return_url} />

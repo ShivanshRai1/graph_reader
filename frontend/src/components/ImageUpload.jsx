@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useGraph } from '../context/GraphContext';
 
-const ImageUpload = ({ onImageLoaded, onAiExtensionCapture, isAiExtractionLoading = false, skipCaptureChoice = false, initialPendingCapture = null }) => {
+const ImageUpload = ({ onImageLoaded, onAiExtensionCapture, isAiExtractionLoading = false, skipCaptureChoice = false, initialPendingCapture = null, onPendingCaptureChange = () => {} }) => {
   const { setUploadedImage, clearDataPoints, setGraphConfig, setGraphArea } = useGraph();
   const fileInputRef = useRef(null);
   const [pendingCapture, setPendingCapture] = useState(null);
@@ -10,12 +10,13 @@ const ImageUpload = ({ onImageLoaded, onAiExtensionCapture, isAiExtractionLoadin
     if (!initialPendingCapture?.imageBase64) return;
     setPendingCapture((prev) => {
       if (prev?.imageBase64) return prev;
+      onPendingCaptureChange(true);
       return {
         imageBase64: initialPendingCapture.imageBase64,
         source: initialPendingCapture.source || 'upload',
       };
     });
-  }, [initialPendingCapture]);
+  }, [initialPendingCapture, onPendingCaptureChange]);
 
   const resetGraphForManualCapture = (clearImageFirst = false) => {
     if (clearImageFirst) {
@@ -50,9 +51,11 @@ const ImageUpload = ({ onImageLoaded, onAiExtensionCapture, isAiExtractionLoadin
       if (skipCaptureChoice) {
         triggerManualCapture(imageBase64, source, true);
         setPendingCapture(null);
+        onPendingCaptureChange(false);
         return;
       }
       setPendingCapture({ imageBase64, source });
+      onPendingCaptureChange(true);
     };
     reader.readAsDataURL(blob);
   };
@@ -61,12 +64,14 @@ const ImageUpload = ({ onImageLoaded, onAiExtensionCapture, isAiExtractionLoadin
     if (!pendingCapture?.imageBase64) return;
     triggerManualCapture(pendingCapture.imageBase64, pendingCapture.source, false);
     setPendingCapture(null);
+    onPendingCaptureChange(false);
   };
 
   const handleCaptureWithAiExtension = async () => {
     if (!pendingCapture?.imageBase64 || isAiExtractionLoading) return;
     await onAiExtensionCapture?.(pendingCapture.imageBase64, pendingCapture.source);
     setPendingCapture(null);
+    onPendingCaptureChange(false);
   };
 
   const handlePaste = (e) => {
