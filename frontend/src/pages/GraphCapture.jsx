@@ -580,49 +580,6 @@ const hasCurveLineInAiResponse = (responsePayload) => {
   });
 };
 
-const normalizeAiResponsePayload = (result = {}) => {
-  const responseValue = result?.response;
-
-  if (responseValue && typeof responseValue === 'object' && !Array.isArray(responseValue)) {
-    return responseValue;
-  }
-
-  if (Array.isArray(responseValue) && responseValue.length > 0) {
-    const firstObject = responseValue.find((item) => item && typeof item === 'object');
-    if (firstObject && typeof firstObject === 'object') {
-      return firstObject;
-    }
-  }
-
-  const tryParseTextPayload = (rawText) => {
-    const text = String(rawText || '').trim();
-    if (!text) return null;
-    try {
-      const parsed = parseCompanyApiText(text);
-      if (!parsed || typeof parsed !== 'object') return null;
-      if (Array.isArray(parsed)) {
-        const firstParsedObject = parsed.find((item) => item && typeof item === 'object');
-        return firstParsedObject && typeof firstParsedObject === 'object' ? firstParsedObject : null;
-      }
-      return parsed;
-    } catch {
-      return null;
-    }
-  };
-
-  const parsedFromResponseString = tryParseTextPayload(responseValue);
-  if (parsedFromResponseString) {
-    return parsedFromResponseString;
-  }
-
-  const parsedFromRawText = tryParseTextPayload(result?.raw_text);
-  if (parsedFromRawText) {
-    return parsedFromRawText;
-  }
-
-  return {};
-};
-
 const GraphCapture = () => {
   const {
     uploadedImage,
@@ -640,19 +597,12 @@ const GraphCapture = () => {
     const navigateWithAiFlowMessage = (message, targetUrl) => {
       setAiFlowStatusMessage(message);
       window.setTimeout(() => {
-        // If the target URL is identical to the current URL, window.location.href assignment
-        // is a no-op in Chrome/Edge and the page never reloads. Force reload in that case.
+        // When graph_id is already in the URL, targetUrl equals current URL.
+        // Assigning window.location.href to the same URL is a no-op in Chrome/Edge.
+        // Use reload() instead so sessionStorage image is restored.
         let isSameUrl = false;
-        try {
-          isSameUrl = new URL(targetUrl).href === window.location.href;
-        } catch {
-          isSameUrl = targetUrl === window.location.href;
-        }
-        if (isSameUrl) {
-          window.location.reload();
-        } else {
-          window.location.href = targetUrl;
-        }
+        try { isSameUrl = new URL(targetUrl).href === window.location.href; } catch { isSameUrl = targetUrl === window.location.href; }
+        if (isSameUrl) { window.location.reload(); } else { window.location.href = targetUrl; }
       }, 900);
     };
 
@@ -723,20 +673,22 @@ const GraphCapture = () => {
         return;
       }
 
-      const aiResponsePayload = normalizeAiResponsePayload(result);
+      const aiResponsePayload = result?.response && typeof result.response === 'object'
+        ? result.response
+        : {};
       const validGraphId = resolveIntegerGraphIdFromAiResponse(aiResponsePayload);
-      const currentUrlGraphId = String(urlParams.graph_id || '').trim();
-      const graphIdForFlow = currentUrlGraphId || validGraphId;
-
-      if (!graphIdForFlow) {
+      if (!validGraphId) {
         console.log('=== AI EXTRACTION DECISION ===', {
           action: 'stay',
-          reason: 'Missing graph_id in both URL and AI response',
+          reason: 'Missing valid integer graph_id in response',
           response: aiResponsePayload,
         });
-        console.warn('AI extraction completed, but no usable graph ID was found. Staying on this page.');
+        console.warn('AI extraction completed, but no valid graph ID was returned. Staying on this page.');
         return;
       }
+
+      const currentUrlGraphId = String(urlParams.graph_id || '').trim();
+      const graphIdForFlow = currentUrlGraphId || validGraphId;
 
       if (!currentUrlGraphId) {
         console.log('=== AI EXTRACTION DECISION ===', {
@@ -1543,13 +1495,12 @@ const GraphCapture = () => {
       );
 
       if (!response.ok) {
-        // 404 is expected for new graph_ids from AI extraction that aren't in local DB yet
         return null;
       }
 
       return await response.json();
     } catch (error) {
-      // Silently fail - network errors are expected as fallback attempt
+      console.warn('[DEBUG] Local by-discoveree fallback failed:', error);
       return null;
     }
   };
@@ -3760,7 +3711,7 @@ const GraphCapture = () => {
           initialPendingCapture={restoredPendingCapture}
           onPendingCaptureChange={setHasPendingCaptureChoice}
         />
-        {!hasPendingCaptureChoice && (uploadedImage || (urlParams.graph_id && !shouldSkipCaptureChoiceAfterAi && !isInitialGraphFetchPending)) && (
+        {(uploadedImage || (urlParams.graph_id && !shouldSkipCaptureChoiceAfterAi && !isInitialGraphFetchPending && !hasPendingCaptureChoice)) && (
           <div ref={graphWorkspaceRef} className="flex flex-col lg:flex-row gap-8">
             <div className="w-full lg:w-2/5 flex flex-col gap-4">
               <GraphCanvas isReadOnly={isReadOnly} partNumber={urlParams.partno} manufacturer={urlParams.manufacturer || graphConfig.manufacturer} isAxisMappingConfirmed={isAxisMappingConfirmed} hasReturnUrl={!!urlParams.return_url} />

@@ -70,6 +70,8 @@ const ImageUpload = ({ onImageLoaded, onAiExtensionCapture, isAiExtractionLoadin
   const handleCaptureWithAiExtension = async () => {
     if (!pendingCapture?.imageBase64 || isAiExtractionLoading) return;
     await onAiExtensionCapture?.(pendingCapture.imageBase64, pendingCapture.source);
+    setPendingCapture(null);
+    onPendingCaptureChange(false);
   };
 
   const handlePaste = (e) => {
