@@ -2552,6 +2552,7 @@ const GraphCapture = () => {
             discovereeResponse: 'failed-or-empty',
           });
           console.log('[DEBUG] Netlify also failed');
+          setShouldSkipCaptureChoiceAfterAi(true);
         }
       } catch (error) {
         console.error('[DEBUG] Error in fetchGraphById:', error);
