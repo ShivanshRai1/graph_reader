@@ -7,17 +7,9 @@ const ImageUpload = ({ onImageLoaded, onAiExtensionCapture, isAiExtractionLoadin
   const [pendingCapture, setPendingCapture] = useState(null);
 
   useEffect(() => {
-    if (!initialPendingCapture?.imageBase64) {
-      console.log('[AI_PENDING] ImageUpload: no initialPendingCapture, skipping restore');
-      return;
-    }
-    console.log('[AI_PENDING] ImageUpload: received initialPendingCapture, restoring');
+    if (!initialPendingCapture?.imageBase64) return;
     setPendingCapture((prev) => {
-      if (prev?.imageBase64) {
-        console.log('[AI_PENDING] ImageUpload: already has pendingCapture, skipping');
-        return prev;
-      }
-      console.log('[AI_PENDING] ImageUpload: setting pendingCapture and calling onPendingCaptureChange(true)');
+      if (prev?.imageBase64) return prev;
       onPendingCaptureChange(true);
       return {
         imageBase64: initialPendingCapture.imageBase64,
@@ -76,18 +68,7 @@ const ImageUpload = ({ onImageLoaded, onAiExtensionCapture, isAiExtractionLoadin
   };
 
   const handleCaptureWithAiExtension = async () => {
-    console.log('[AI_CLICK] handleCaptureWithAiExtension called', {
-      hasPendingCapture: Boolean(pendingCapture),
-      hasImageBase64: Boolean(pendingCapture?.imageBase64),
-      imageBase64Length: pendingCapture?.imageBase64?.length ?? 0,
-      isAiExtractionLoading,
-      hasCallback: Boolean(onAiExtensionCapture),
-    });
-    if (!pendingCapture?.imageBase64 || isAiExtractionLoading) {
-      console.log('[AI_CLICK] Guard blocked call. Returning early.');
-      return;
-    }
-    console.log('[AI_CLICK] Calling onAiExtensionCapture...');
+    if (!pendingCapture?.imageBase64 || isAiExtractionLoading) return;
     await onAiExtensionCapture?.(pendingCapture.imageBase64, pendingCapture.source);
   };
 
