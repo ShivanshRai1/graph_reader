@@ -2594,16 +2594,6 @@ const GraphCapture = () => {
           discovereeCatId: discovereeCatIdFromUrl,
         });
 
-        if (!curve) {
-          const backendFallbackUrl = `${apiUrl}/api/curves/${graphId}`;
-          console.log('[DEBUG] Backend fallback URL:', backendFallbackUrl);
-          const localResponse = await fetch(backendFallbackUrl);
-          console.log('[DEBUG] Netlify response status:', localResponse.status);
-          if (localResponse.ok) {
-            curve = await localResponse.json();
-          }
-        }
-
         if (curve) {
           console.log('[DEBUG] Netlify response:', curve);
           const resolvedLocalImage =

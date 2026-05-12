@@ -2,7 +2,7 @@ from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from database import engine, get_db, Base
 from models import Curve, DataPoint
 from schemas import CurveCreate, CurveResponse, CurveUpdate, DataPointCreate, DataPointResponse
@@ -278,16 +278,11 @@ def get_curve(curve_id: int, db: Session = Depends(get_db)):
             detail=f"Error fetching curve: {str(e)}"
         )
 
-@app.get("/api/curves/by-discoveree/{discoveree_id}", response_model=CurveResponse)
+@app.get("/api/curves/by-discoveree/{discoveree_id}", response_model=Optional[CurveResponse])
 def get_curve_by_discoveree_id(discoveree_id: int, db: Session = Depends(get_db)):
     """Get a specific curve by discoveree_cat_id"""
     try:
         curve = db.query(Curve).filter(Curve.discoveree_cat_id == discoveree_id).first()
-        if not curve:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Curve not found"
-            )
         return curve
     except HTTPException:
         raise
@@ -297,16 +292,11 @@ def get_curve_by_discoveree_id(discoveree_id: int, db: Session = Depends(get_db)
             detail=f"Error fetching curve: {str(e)}"
         )
 
-@app.get("/api/curves/by-graph/{graph_id}", response_model=CurveResponse)
+@app.get("/api/curves/by-graph/{graph_id}", response_model=Optional[CurveResponse])
 def get_curve_by_graph_id(graph_id: str, db: Session = Depends(get_db)):
     """Get a specific curve by discoveree_graph_id (the graph_id URL param)"""
     try:
         curve = db.query(Curve).filter(Curve.discoveree_graph_id == str(graph_id)).first()
-        if not curve:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Curve not found"
-            )
         return curve
     except HTTPException:
         raise
