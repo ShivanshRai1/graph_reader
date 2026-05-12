@@ -69,9 +69,9 @@ const ImageUpload = ({ onImageLoaded, onAiExtensionCapture, isAiExtractionLoadin
 
   const handleCaptureWithAiExtension = async () => {
     if (!pendingCapture?.imageBase64 || isAiExtractionLoading) return;
+    // Note: onAiExtensionCapture may redirect the page. Don't update state after calling it
+    // since the component will unmount. State will be fresh on next page load.
     await onAiExtensionCapture?.(pendingCapture.imageBase64, pendingCapture.source);
-    setPendingCapture(null);
-    onPendingCaptureChange(false);
   };
 
   const handlePaste = (e) => {
