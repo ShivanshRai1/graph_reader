@@ -1483,31 +1483,43 @@ const GraphCapture = () => {
     }
   };
 
-  const fetchLocalCurveByDiscovereeId = async (graphId) => {
+  const fetchLocalCurveByDiscovereeId = async ({ graphId = '', discovereeCatId = '' } = {}) => {
     const normalizedGraphId = String(graphId || '').trim();
-    if (!normalizedGraphId) {
+    const normalizedDiscovereeCatId = String(discovereeCatId || '').trim();
+    if (!normalizedGraphId && !normalizedDiscovereeCatId) {
       return null;
     }
 
     try {
-      // First try the new by-graph endpoint which matches on the actual graph_id URL param
-      const byGraphResponse = await fetch(
-        `${apiUrl}/api/curves/by-graph/${encodeURIComponent(normalizedGraphId)}`
-      );
-      if (byGraphResponse.ok) {
-        return await byGraphResponse.json();
+      // First try discoveree category lookup (legacy, widely populated in existing rows).
+      if (normalizedDiscovereeCatId) {
+        const byDiscovereeResponse = await fetch(
+          `${apiUrl}/api/curves/by-discoveree/${encodeURIComponent(normalizedDiscovereeCatId)}`
+        );
+        if (byDiscovereeResponse.ok) {
+          return await byDiscovereeResponse.json();
+        }
       }
 
-      // Fall back to the old by-discoveree endpoint (matches discoveree_cat_id)
-      const response = await fetch(
-        `${apiUrl}/api/curves/by-discoveree/${encodeURIComponent(normalizedGraphId)}`
-      );
+      // Then try graph_id lookup for rows created with discoveree_graph_id.
+      if (normalizedGraphId) {
+        const byGraphResponse = await fetch(
+          `${apiUrl}/api/curves/by-graph/${encodeURIComponent(normalizedGraphId)}`
+        );
+        if (byGraphResponse.ok) {
+          return await byGraphResponse.json();
+        }
 
-      if (!response.ok) {
-        return null;
+        // Final compatibility fallback for older records that accidentally used graph_id in discoveree field.
+        const legacyByGraphAsDiscovereeResponse = await fetch(
+          `${apiUrl}/api/curves/by-discoveree/${encodeURIComponent(normalizedGraphId)}`
+        );
+        if (legacyByGraphAsDiscovereeResponse.ok) {
+          return await legacyByGraphAsDiscovereeResponse.json();
+        }
       }
 
-      return await response.json();
+      return null;
     } catch (error) {
       console.warn('[DEBUG] Local by-discoveree fallback failed:', error);
       return null;
@@ -2387,6 +2399,7 @@ const GraphCapture = () => {
     // Parse graph_id directly from URL to avoid timing issues with state
     const searchParams = new URLSearchParams(window.location.search);
     const graphId = searchParams.get('graph_id');
+    const discovereeCatIdFromUrl = searchParams.get('discoveree_cat_id') || '';
     const hydratedSymbolNames =
       Array.isArray(symbolNames) && symbolNames.length > 0
         ? symbolNames
@@ -2430,7 +2443,10 @@ const GraphCapture = () => {
           if (result.status === 'success' && discovereeGraph && discovereeDetails.length > 0) {
             console.log('[DEBUG] Successfully parsed DiscoverEE data, details count:', discovereeDetails.length);
             console.log('[DEBUG] discovereeGraph all fields:', JSON.stringify(discovereeGraph, null, 2));
-            const localFallbackCurve = await fetchLocalCurveByDiscovereeId(graphId);
+            const localFallbackCurve = await fetchLocalCurveByDiscovereeId({
+              graphId,
+              discovereeCatId: discovereeGraph?.discoveree_cat_id || result?.discoveree_cat_id || discovereeCatIdFromUrl,
+            });
             const graphImageUrl =
               resolveGraphImageUrl(discovereeGraph, discovereeDetails, graphId) ||
               normalizeImageCandidate(localFallbackCurve?.graph_image);
@@ -2547,7 +2563,10 @@ const GraphCapture = () => {
 
           if (result.status === 'success' && discovereeGraph) {
             console.log('[DEBUG] DiscoverEE graph found but details are empty. Preserving graph context.');
-            const localFallbackCurve = await fetchLocalCurveByDiscovereeId(graphId);
+            const localFallbackCurve = await fetchLocalCurveByDiscovereeId({
+              graphId,
+              discovereeCatId: discovereeGraph?.discoveree_cat_id || result?.discoveree_cat_id || discovereeCatIdFromUrl,
+            });
             const graphImageUrl =
               resolveGraphImageUrl(discovereeGraph, discovereeDetails, graphId) ||
               normalizeImageCandidate(localFallbackCurve?.graph_image);
@@ -2583,7 +2602,10 @@ const GraphCapture = () => {
 
         // Fallback: Try Netlify deployed backend (same domain)
         console.log('[DEBUG] DiscoverEE failed or returned no data, trying Netlify fallback...');
-        let curve = await fetchLocalCurveByDiscovereeId(graphId);
+        let curve = await fetchLocalCurveByDiscovereeId({
+          graphId,
+          discovereeCatId: discovereeCatIdFromUrl,
+        });
 
         if (!curve) {
           const backendFallbackUrl = `${apiUrl}/api/curves/${graphId}`;
