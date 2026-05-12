@@ -1478,7 +1478,8 @@ const GraphCapture = () => {
     if (hasImage) {
       // console.log('[GRAPH_IMAGE] AVAILABLE', payload);
     } else {
-      console.warn('[GRAPH_IMAGE] MISSING', payload);
+      // Missing image is expected for graph IDs that do not exist upstream/local yet.
+      console.debug('[GRAPH_IMAGE] MISSING', payload);
     }
   };
 
@@ -2652,7 +2653,7 @@ const GraphCapture = () => {
           logGraphImageAvailability(graphId, '', 'all-fallbacks-failed', {
             discovereeResponse: 'failed-or-empty',
           });
-          console.log('[DEBUG] Netlify also failed');
+          console.log('[DEBUG] No local curve found for graph_id; leaving upload panel empty.');
           setShouldSkipCaptureChoiceAfterAi(true);
         }
       } catch (error) {
