@@ -603,6 +603,49 @@ const hasCurveLineInAiResponse = (responsePayload) => {
   });
 };
 
+const normalizeAiResponsePayload = (result = {}) => {
+  const responseValue = result?.response;
+
+  if (responseValue && typeof responseValue === 'object' && !Array.isArray(responseValue)) {
+    return responseValue;
+  }
+
+  if (Array.isArray(responseValue) && responseValue.length > 0) {
+    const firstObject = responseValue.find((item) => item && typeof item === 'object');
+    if (firstObject && typeof firstObject === 'object') {
+      return firstObject;
+    }
+  }
+
+  const tryParseTextPayload = (rawText) => {
+    const text = String(rawText || '').trim();
+    if (!text) return null;
+    try {
+      const parsed = parseCompanyApiText(text);
+      if (!parsed || typeof parsed !== 'object') return null;
+      if (Array.isArray(parsed)) {
+        const firstParsedObject = parsed.find((item) => item && typeof item === 'object');
+        return firstParsedObject && typeof firstParsedObject === 'object' ? firstParsedObject : null;
+      }
+      return parsed;
+    } catch {
+      return null;
+    }
+  };
+
+  const parsedFromResponseString = tryParseTextPayload(responseValue);
+  if (parsedFromResponseString) {
+    return parsedFromResponseString;
+  }
+
+  const parsedFromRawText = tryParseTextPayload(result?.raw_text);
+  if (parsedFromRawText) {
+    return parsedFromRawText;
+  }
+
+  return {};
+};
+
 const GraphCapture = () => {
   const {
     uploadedImage,
@@ -691,9 +734,7 @@ const GraphCapture = () => {
         return;
       }
 
-      const aiResponsePayload = result?.response && typeof result.response === 'object'
-        ? result.response
-        : {};
+      const aiResponsePayload = normalizeAiResponsePayload(result);
       const validGraphId = resolveIntegerGraphIdFromAiResponse(aiResponsePayload);
       if (!validGraphId) {
         console.log('=== AI EXTRACTION DECISION ===', {
