@@ -2822,6 +2822,21 @@ const GraphCapture = () => {
         shouldDefaultRoomTemperature: shouldShowTemperatureInput,
       });
 
+      // When appending to an existing graph (graph_id in URL), try to preserve the existing image
+      const existingCurveForGraphId = urlParams.graph_id
+        ? savedCurves.find((curve) => (curve.graphId || getGraphIdForCurve(curve)) === String(urlParams.graph_id))
+        : null;
+      
+      const resolvedGraphImage = normalizeImageCandidate(
+        uploadedImage ||
+        activeSessionImageKeyRef.current ||
+        selectedCurve?.graphImageUrl ||
+        selectedCurve?.graph_img ||
+        existingCurveForGraphId?.graphImageUrl ||
+        existingCurveForGraphId?.graph_img ||
+        ''
+      ) || null;
+
       const payload = {
         part_number: urlParams.partno || graphConfig.partNumber || null,
         curve_name: urlParams.curve_title || graphConfig.curveName,
@@ -2841,9 +2856,7 @@ const GraphCapture = () => {
         other_symbols: urlParams.other_symbols || null,
         discoveree_cat_id: urlParams.discoveree_cat_id ? parseInt(urlParams.discoveree_cat_id) : null,
         discoveree_graph_id: urlParams.graph_id ? String(urlParams.graph_id) : null,
-        graph_image:
-          normalizeImageCandidate(uploadedImage || activeSessionImageKeyRef.current || selectedCurve?.graphImageUrl || selectedCurve?.graph_img || '') ||
-          null,
+        graph_image: resolvedGraphImage,
         data_points: uniquePoints.map((point) => ({
           x_value: point.x,
           y_value: point.y,
@@ -2888,9 +2901,21 @@ const GraphCapture = () => {
         alert('Data saved successfully!');
       }
 
+      // When appending to an existing graph (graph_id in URL), try to preserve the existing image
+      const existingCurveForCompanyPayload = urlParams.graph_id
+        ? savedCurves.find((curve) => (curve.graphId || getGraphIdForCurve(curve)) === String(urlParams.graph_id))
+        : null;
+
       const graphImageUrl =
-        normalizeImageCandidate(uploadedImage || activeSessionImageKeyRef.current || selectedCurve?.graphImageUrl || selectedCurve?.graph_img || '') ||
-        '';
+        normalizeImageCandidate(
+          uploadedImage ||
+          activeSessionImageKeyRef.current ||
+          selectedCurve?.graphImageUrl ||
+          selectedCurve?.graph_img ||
+          existingCurveForCompanyPayload?.graphImageUrl ||
+          existingCurveForCompanyPayload?.graph_img ||
+          ''
+        ) || '';
       const graphGroupId = buildGraphGroupId(graphImageUrl || '');
       console.log('Local save successful, calling sendToCompanyDatabase...');
       const companyResult = await sendToCompanyDatabase(graphImageUrl, result.id, allowRedirect);
