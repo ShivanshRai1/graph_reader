@@ -76,9 +76,18 @@ const ImageUpload = ({ onImageLoaded, onAiExtensionCapture, isAiExtractionLoadin
   };
 
   const handleCaptureWithAiExtension = async () => {
-    if (!pendingCapture?.imageBase64 || isAiExtractionLoading) return;
-    // Note: onAiExtensionCapture may redirect the page. Don't update state after calling it
-    // since the component will unmount. State will be fresh on next page load.
+    console.log('[AI_CLICK] handleCaptureWithAiExtension called', {
+      hasPendingCapture: Boolean(pendingCapture),
+      hasImageBase64: Boolean(pendingCapture?.imageBase64),
+      imageBase64Length: pendingCapture?.imageBase64?.length ?? 0,
+      isAiExtractionLoading,
+      hasCallback: Boolean(onAiExtensionCapture),
+    });
+    if (!pendingCapture?.imageBase64 || isAiExtractionLoading) {
+      console.log('[AI_CLICK] Guard blocked call. Returning early.');
+      return;
+    }
+    console.log('[AI_CLICK] Calling onAiExtensionCapture...');
     await onAiExtensionCapture?.(pendingCapture.imageBase64, pendingCapture.source);
   };
 
