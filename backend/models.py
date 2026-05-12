@@ -25,6 +25,7 @@ class Curve(Base):
     y_label = Column(String(255))
     other_symbols = Column(Text)
     discoveree_cat_id = Column(Integer)
+    discoveree_graph_id = Column(String(64))
     graph_image = Column(Text().with_variant(mysql.LONGTEXT, "mysql"))
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

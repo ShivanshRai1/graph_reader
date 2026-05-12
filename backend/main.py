@@ -30,11 +30,16 @@ def ensure_optional_curve_columns():
                     connection.execute(text("ALTER TABLE curves ADD COLUMN graph_image LONGTEXT"))
                 else:
                     connection.execute(text("ALTER TABLE curves MODIFY COLUMN graph_image LONGTEXT"))
+                if "discoveree_graph_id" not in existing_columns:
+                    connection.execute(text("ALTER TABLE curves ADD COLUMN discoveree_graph_id VARCHAR(64)"))
             return
 
         if "graph_image" not in existing_columns:
             with engine.begin() as connection:
                 connection.execute(text("ALTER TABLE curves ADD COLUMN graph_image TEXT"))
+        if "discoveree_graph_id" not in existing_columns:
+            with engine.begin() as connection:
+                connection.execute(text("ALTER TABLE curves ADD COLUMN discoveree_graph_id VARCHAR(64)"))
     except Exception as error:
         print(f"[SchemaMigration] Optional curve column migration skipped: {error}")
 
@@ -221,6 +226,7 @@ def create_curve(curve: CurveCreate, db: Session = Depends(get_db)):
             y_label=curve.y_label,
             other_symbols=curve.other_symbols,
             discoveree_cat_id=curve.discoveree_cat_id,
+            discoveree_graph_id=curve.discoveree_graph_id,
             graph_image=curve.graph_image,
         )
         # Add data points
@@ -277,6 +283,25 @@ def get_curve_by_discoveree_id(discoveree_id: int, db: Session = Depends(get_db)
     """Get a specific curve by discoveree_cat_id"""
     try:
         curve = db.query(Curve).filter(Curve.discoveree_cat_id == discoveree_id).first()
+        if not curve:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Curve not found"
+            )
+        return curve
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching curve: {str(e)}"
+        )
+
+@app.get("/api/curves/by-graph/{graph_id}", response_model=CurveResponse)
+def get_curve_by_graph_id(graph_id: str, db: Session = Depends(get_db)):
+    """Get a specific curve by discoveree_graph_id (the graph_id URL param)"""
+    try:
+        curve = db.query(Curve).filter(Curve.discoveree_graph_id == str(graph_id)).first()
         if not curve:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

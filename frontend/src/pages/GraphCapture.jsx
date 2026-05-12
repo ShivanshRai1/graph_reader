@@ -1490,6 +1490,15 @@ const GraphCapture = () => {
     }
 
     try {
+      // First try the new by-graph endpoint which matches on the actual graph_id URL param
+      const byGraphResponse = await fetch(
+        `${apiUrl}/api/curves/by-graph/${encodeURIComponent(normalizedGraphId)}`
+      );
+      if (byGraphResponse.ok) {
+        return await byGraphResponse.json();
+      }
+
+      // Fall back to the old by-discoveree endpoint (matches discoveree_cat_id)
       const response = await fetch(
         `${apiUrl}/api/curves/by-discoveree/${encodeURIComponent(normalizedGraphId)}`
       );
@@ -2812,6 +2821,7 @@ const GraphCapture = () => {
         y_label: graphConfig.yLabel || urlParams.y_label || null,
         other_symbols: urlParams.other_symbols || null,
         discoveree_cat_id: urlParams.discoveree_cat_id ? parseInt(urlParams.discoveree_cat_id) : null,
+        discoveree_graph_id: urlParams.graph_id ? String(urlParams.graph_id) : null,
         graph_image: uploadedImage || null,
         data_points: uniquePoints.map((point) => ({
           x_value: point.x,
