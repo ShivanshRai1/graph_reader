@@ -619,6 +619,11 @@ const GraphCapture = () => {
   } = useGraph();
   const graphWorkspaceRef = useRef(null);
   const handleAiExtensionCapture = async (imageBase64, source = '') => {
+    try {
+      const _u = new URL(window.location.href);
+      _u.searchParams.set('type', 'ai_extraction');
+      window.history.replaceState(null, '', _u.toString());
+    } catch (_e) {}
     const navigateWithAiFlowMessage = (message, targetUrl, delayMs = 900) => {
       setAiFlowStatusMessage(message);
       window.setTimeout(() => {
@@ -2843,12 +2848,7 @@ const GraphCapture = () => {
       alert('X-axis: Min must be less than Max');
       return null;
     }
-    if (yMin >= yMax) {
-      console.error('Validation failed: Y-axis min >= max');
-      alert('Y-axis: Min must be less than Max');
-      return null;
-    }
-    console.log('All validations passed');
+    if (yMin >=
 
     setIsSaving(true);
     try {
