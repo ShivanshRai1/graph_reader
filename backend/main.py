@@ -8,6 +8,7 @@ from models import Curve, DataPoint
 from schemas import CurveCreate, CurveResponse, CurveUpdate, DataPointCreate, DataPointResponse
 import json
 import os
+import re
 import threading
 import time
 from sqlalchemy import inspect, text
@@ -159,6 +160,15 @@ def relay_ai_extraction(payload: dict):
     }
     if not normalized_payload.get("action"):
         normalized_payload["action"] = "graphcapture"
+
+    base64image = str(normalized_payload.get("base64image") or "")
+    base64image = re.sub(r"^data:[^;]+;base64,", "", base64image).strip()
+    if not base64image:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Missing required field: base64image"
+        )
+    normalized_payload["base64image"] = base64image
 
     primary_url = "https://www.discoveree.io/vision_upload.php"
     fallback_url = "https://www.discoveree.io/graph_capture_api.php"

@@ -106,6 +106,12 @@ const normalizeImageCandidate = (rawValue) => {
     return `https://www.discoveree.io/${value.replace(/^\/+/, '')}`;
   }
 
+  // Some DiscoverEE payloads return only a bare filename (no leading path).
+  // Treat common image filenames as hosted on discoveree root.
+  if (!value.includes('/') && /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(value)) {
+    return `https://www.discoveree.io/${value}`;
+  }
+
   return value;
 };
 
@@ -609,6 +615,10 @@ const GraphCapture = () => {
     setAiFlowStatusMessage('');
     // Strip data URI prefix (e.g. "data:image/png;base64,") — PHP expects raw base64 only
     const rawBase64 = String(imageBase64 || '').replace(/^data:[^;]+;base64,/, '');
+    if (!rawBase64.trim()) {
+      alert('No valid image data found for AI extraction. Please paste or upload an image and try again.');
+      return;
+    }
     const requestPayload = {
       action: 'graphcapture',
       type: 'ai_extraction',
@@ -3765,7 +3775,7 @@ const GraphCapture = () => {
           onImageLoaded={handleUserImageLoaded}
           onAiExtensionCapture={handleAiExtensionCapture}
           isAiExtractionLoading={isAiExtractionLoading}
-          skipCaptureChoice={false}
+          skipCaptureChoice={shouldSkipCaptureChoiceAfterAi}
           initialPendingCapture={restoredPendingCapture}
           onPendingCaptureChange={setHasPendingCaptureChoice}
         />
