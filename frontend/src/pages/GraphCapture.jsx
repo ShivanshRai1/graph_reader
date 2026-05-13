@@ -2848,7 +2848,11 @@ const GraphCapture = () => {
       alert('X-axis: Min must be less than Max');
       return null;
     }
-    if (yMin >=
+    if (yMin >= yMax) {
+      console.error('Validation failed: Y-axis min >= max');
+      alert('Y-axis: Min must be less than Max');
+      return null;
+    }
 
     setIsSaving(true);
     try {
