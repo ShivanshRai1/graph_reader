@@ -2487,7 +2487,9 @@ const GraphCapture = () => {
               graphId,
               discovereeCatId: discovereeGraph?.discoveree_cat_id || result?.discoveree_cat_id || discovereeCatIdFromUrl,
             });
+            const restoredPendingImage = normalizeImageCandidate(restoredPendingImageRef.current);
             const graphImageUrl =
+              restoredPendingImage ||
               resolveGraphImageUrl(discovereeGraph, discovereeDetails, graphId) ||
               normalizeImageCandidate(localFallbackCurve?.graph_image);
             logGraphImageAvailability(discovereeGraph.graph_id || graphId, graphImageUrl, 'discoveree-success-with-details', {
@@ -2607,7 +2609,9 @@ const GraphCapture = () => {
               graphId,
               discovereeCatId: discovereeGraph?.discoveree_cat_id || result?.discoveree_cat_id || discovereeCatIdFromUrl,
             });
+            const restoredPendingImage = normalizeImageCandidate(restoredPendingImageRef.current);
             const graphImageUrl =
+              restoredPendingImage ||
               resolveGraphImageUrl(discovereeGraph, discovereeDetails, graphId) ||
               normalizeImageCandidate(localFallbackCurve?.graph_image);
             logGraphImageAvailability(discovereeGraph.graph_id || graphId, graphImageUrl, 'discoveree-success-empty-details', {
@@ -2650,8 +2654,8 @@ const GraphCapture = () => {
         if (curve) {
           console.log('[DEBUG] Netlify response:', curve);
           const resolvedLocalImage =
-            normalizeImageCandidate(curve.graph_image) ||
-            normalizeImageCandidate(restoredPendingImageRef.current);
+            normalizeImageCandidate(restoredPendingImageRef.current) ||
+            normalizeImageCandidate(curve.graph_image);
           logGraphImageAvailability(graphId, resolvedLocalImage, 'local-backend-fallback', {
             localCurveId: curve.id || '',
             localGraphImagePresent: Boolean(String(curve.graph_image || '').trim()),
