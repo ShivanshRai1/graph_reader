@@ -459,6 +459,7 @@ const parseCompanyApiText = (rawText) => {
 const AI_DIRECT_CAPTURE_PARAM = 'ai_direct_capture';
 const AI_PENDING_CAPTURE_STORAGE_KEY = 'ai_pending_capture_image';
 const AI_PENDING_CAPTURE_TTL_MS = 5 * 60 * 1000;
+const AI_LAST_RETURNED_GRAPH_ID_KEY = 'ai_last_returned_graph_id';
 
 const persistAiPendingCapture = (imageBase64, source, graphId = '') => {
   try {
@@ -499,6 +500,24 @@ const consumeAiPendingCapture = (expectedGraphId = '') => {
   } catch (error) {
     console.warn('Unable to consume AI pending capture image.', error);
     return null;
+  }
+};
+
+const getLastAiReturnedGraphId = () => {
+  try {
+    return String(window.sessionStorage.getItem(AI_LAST_RETURNED_GRAPH_ID_KEY) || '').trim();
+  } catch {
+    return '';
+  }
+};
+
+const persistLastAiReturnedGraphId = (graphId = '') => {
+  try {
+    const normalizedGraphId = String(graphId || '').trim();
+    if (!normalizedGraphId) return;
+    window.sessionStorage.setItem(AI_LAST_RETURNED_GRAPH_ID_KEY, normalizedGraphId);
+  } catch {
+    // no-op: best-effort only
   }
 };
 
@@ -701,9 +720,15 @@ const GraphCapture = () => {
       const graphIdForFlow = currentUrlGraphId || validGraphId;
 
       if (!currentUrlGraphId) {
+        const previousReturnedGraphId = getLastAiReturnedGraphId();
+        const isRepeatedReturnedGraphId = previousReturnedGraphId && previousReturnedGraphId === graphIdForFlow;
+        persistLastAiReturnedGraphId(graphIdForFlow);
+
         console.log('=== AI EXTRACTION DECISION ===', {
           action: 'reload_with_graph_id',
-          reason: 'Missing graph_id in URL; using graph_id returned by AI extraction',
+          reason: isRepeatedReturnedGraphId
+            ? 'Missing graph_id in URL; AI returned same graph_id again, reusing existing graph context'
+            : 'Missing graph_id in URL; using graph_id returned by AI extraction',
           graph_id: graphIdForFlow,
         });
 
@@ -712,8 +737,11 @@ const GraphCapture = () => {
         refreshUrl.searchParams.set('graph_id', graphIdForFlow);
         refreshUrl.searchParams.delete(AI_DIRECT_CAPTURE_PARAM);
         navigateWithAiFlowMessage(
-          'Graph ID does not exist in URL. Redirecting to graph capture page with returned graph ID...',
-          refreshUrl.toString()
+          isRepeatedReturnedGraphId
+            ? 'AI returned the same graph ID again. Reusing the existing graph context and redirecting to graph capture...'
+            : 'Graph ID does not exist in URL. Redirecting to graph capture page with returned graph ID...',
+          refreshUrl.toString(),
+          isRepeatedReturnedGraphId ? 2500 : 900
         );
         return;
       }
