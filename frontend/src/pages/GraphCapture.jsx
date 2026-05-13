@@ -600,7 +600,7 @@ const GraphCapture = () => {
   } = useGraph();
   const graphWorkspaceRef = useRef(null);
   const handleAiExtensionCapture = async (imageBase64, source = '') => {
-    const navigateWithAiFlowMessage = (message, targetUrl) => {
+    const navigateWithAiFlowMessage = (message, targetUrl, delayMs = 900) => {
       setAiFlowStatusMessage(message);
       window.setTimeout(() => {
         // When graph_id is already in the URL, targetUrl equals current URL.
@@ -609,7 +609,7 @@ const GraphCapture = () => {
         let isSameUrl = false;
         try { isSameUrl = new URL(targetUrl).href === window.location.href; } catch { isSameUrl = targetUrl === window.location.href; }
         if (isSameUrl) { window.location.reload(); } else { window.location.href = targetUrl; }
-      }, 900);
+      }, delayMs);
     };
 
     setAiFlowStatusMessage('');
@@ -739,8 +739,9 @@ const GraphCapture = () => {
         persistAiPendingCapture(imageBase64, source, graphIdForFlow);
         redirectUrl.searchParams.delete(AI_DIRECT_CAPTURE_PARAM);
         navigateWithAiFlowMessage(
-          'No captured curves found. Redirecting to graph capture page...',
-          redirectUrl.toString()
+          'Graph ID exists, but no captured curves were found. Redirecting to the graph capture page...',
+          redirectUrl.toString(),
+          4500
         );
         return;
       }
@@ -2594,7 +2595,7 @@ const GraphCapture = () => {
 
             setSavedCurves([]);
             setSavedCurvesSource('company');
-            setShouldSkipCaptureChoiceAfterAi(true);
+            setShouldSkipCaptureChoiceAfterAi(false);
             activateAppendSession(discovereeGraph.graph_id, graphImageUrl, 'fetchGraphById-emptyDetails');
 
             if (graphImageUrl) {
@@ -2677,7 +2678,7 @@ const GraphCapture = () => {
             discovereeResponse: 'failed-or-empty',
           });
           console.log('[DEBUG] No local curve found for graph_id; leaving upload panel empty.');
-          setShouldSkipCaptureChoiceAfterAi(true);
+          setShouldSkipCaptureChoiceAfterAi(false);
         }
       } catch (error) {
         console.error('[DEBUG] Error in fetchGraphById:', error);
