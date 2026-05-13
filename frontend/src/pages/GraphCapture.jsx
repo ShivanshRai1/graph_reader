@@ -3780,7 +3780,7 @@ const GraphCapture = () => {
           initialPendingCapture={restoredPendingCapture}
           onPendingCaptureChange={setHasPendingCaptureChoice}
         />
-        {(uploadedImage || (urlParams.graph_id && !shouldSkipCaptureChoiceAfterAi && !isInitialGraphFetchPending && !hasPendingCaptureChoice)) && (
+        {(uploadedImage || savedCurves.length > 0) && (
           <div ref={graphWorkspaceRef} className="flex flex-col lg:flex-row gap-8">
             <div className="w-full lg:w-2/5 flex flex-col gap-4">
               <GraphCanvas isReadOnly={isReadOnly} partNumber={urlParams.partno} manufacturer={urlParams.manufacturer || graphConfig.manufacturer} isAxisMappingConfirmed={isAxisMappingConfirmed} hasReturnUrl={!!urlParams.return_url} />
