@@ -618,61 +618,6 @@ const GraphCapture = () => {
     convertCanvasToGraphCoordinates,
   } = useGraph();
   const graphWorkspaceRef = useRef(null);
-
-  // Try to extract directly from primary URL (browser request, bypasses Render IP block)
-  const tryDirectPrimaryUrlExtraction = async (payload) => {
-    const primaryUrl = 'https://www.discoveree.io/vision_upload.php';
-    console.log('[AI_DIRECT] Attempting direct browser request to primary URL:', primaryUrl);
-    try {
-      // Send as FormData (multipart/form-data) - what the primary endpoint expects
-      const formData = new FormData();
-      Object.entries(payload).forEach(([key, value]) => {
-        formData.append(key, String(value));
-      });
-
-      const response = await fetch(primaryUrl, {
-        method: 'POST',
-        body: formData,
-        mode: 'cors',
-        credentials: 'omit',
-      });
-
-      console.log('[AI_DIRECT] Primary URL response status:', response.status);
-      const responseText = await response.text();
-      console.log('[AI_DIRECT] Primary URL raw response:', responseText.substring(0, 300));
-
-      if (!response.ok) {
-        console.log('[AI_DIRECT] Primary URL returned non-ok status:', response.status);
-        return null;
-      }
-
-      // Try to parse as JSON
-      let responseData;
-      try {
-        responseData = JSON.parse(responseText);
-      } catch (parseErr) {
-        console.log('[AI_DIRECT] Failed to parse response as JSON:', parseErr.message);
-        return null;
-      }
-
-      console.log('[AI_DIRECT] Primary URL succeeded, received:', responseData);
-      
-      // Format direct response to match relay structure for consistent processing
-      return {
-        upstream_status: response.status,
-        upstream_ok: response.ok,
-        content_type: response.headers.get('Content-Type') || 'application/json',
-        response: responseData,
-        raw_text: responseText,
-        target_url: primaryUrl,
-        attempts: [], // No fallback attempts in direct approach
-      };
-    } catch (corsError) {
-      console.log('[AI_DIRECT] Primary URL failed (likely CORS or network):', corsError.message);
-      return null;
-    }
-  };
-
   const handleAiExtensionCapture = async (imageBase64, source = '') => {
     const reencodeImageBase64 = async (base64Str) => {
       return new Promise((resolve, reject) => {
@@ -765,30 +710,15 @@ const GraphCapture = () => {
 
     setIsAiExtractionLoading(true);
     try {
-      // Try direct primary URL first (browser request, might bypass Imunify360 block)
-      const directResult = await tryDirectPrimaryUrlExtraction(requestPayload);
-      
-      let result;
-      let response;
-      
-      if (directResult) {
-        // Direct primary URL worked
-        console.log('[AI_EXTRACTION] Direct browser request to primary URL succeeded');
-        result = directResult;
-        response = { ok: true, status: 200 };
-      } else {
-        // Direct approach failed or got CORS, fall back to backend relay
-        console.log('[AI_EXTRACTION] Direct browser request failed, falling back to backend relay');
-        response = await fetch(relayUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(requestPayload),
-        });
+      const response = await fetch(relayUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestPayload),
+      });
 
-        result = await response.json();
-      }
+      const result = await response.json();
 
       console.log('=== RELAY RESPONSE ===', {
         relayStatus: response.status,
@@ -823,6 +753,41 @@ const GraphCapture = () => {
         isHtml: (a?.content_type || '').includes('text/html'),
         responseLength: (a?.raw_text || '').length,
       })));
+
+      // Enhanced logging for colleagues to see what happened
+      console.group('%c📊 AI EXTRACTION FLOW SUMMARY', 'color: #2196F3; font-size: 14px; font-weight: bold;');
+      
+      if (result?.attempts && result.attempts.length > 0) {
+        console.log('%c=== ATTEMPT 1: PRIMARY URL ===', 'color: #FF9800; font-weight: bold;');
+        const primaryAttempt = result.attempts[0];
+        console.log('URL:', primaryAttempt?.target_url);
+        console.log('Status Code:', primaryAttempt?.upstream_status);
+        console.log('Content Type:', primaryAttempt?.content_type);
+        
+        if ((primaryAttempt?.content_type || '').includes('text/html')) {
+          console.log('%c❌ BLOCKED: Response is HTML (not JSON)', 'color: #F44336; font-weight: bold;');
+          console.log('This means: Imunify360 bot-protection blocked the request');
+          console.log('Error Details:', primaryAttempt?.raw_text?.substring(0, 500));
+        } else if ((primaryAttempt?.raw_text || '').includes('imunify360')) {
+          console.log('%c❌ BLOCKED: Imunify360 bot-protection detected', 'color: #F44336; font-weight: bold;');
+          console.log('Error Message:', primaryAttempt?.raw_text?.substring(0, 500));
+        }
+        
+        if (result.attempts.length > 1) {
+          console.log('%c=== ATTEMPT 2: FALLBACK URL (BACKUP) ===', 'color: #4CAF50; font-weight: bold;');
+          const fallbackAttempt = result.attempts[1];
+          console.log('URL:', fallbackAttempt?.target_url);
+          console.log('Status Code:', fallbackAttempt?.upstream_status);
+          console.log('Content Type:', fallbackAttempt?.content_type);
+          
+          if (fallbackAttempt?.upstream_status === 200) {
+            console.log('%c✅ SUCCESS: Fallback endpoint worked', 'color: #4CAF50; font-weight: bold;');
+            console.log('Graph ID returned:', fallbackAttempt?.raw_text?.substring(0, 200));
+          }
+        }
+      }
+      
+      console.groupEnd();
 
       if (!response.ok) {
         // Relay itself failed (502/503) — network/server issue
