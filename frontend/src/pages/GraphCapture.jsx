@@ -698,6 +698,7 @@ const GraphCapture = () => {
         parsedResponse: result?.response,
       };
       console.log('=== AI EXTRACTION RESPONSE ===', aiResponseLog);
+      console.log('[DEBUG] DiscoverEE rawText:', result?.raw_text);
 
       // Persist request+response so they survive the page navigation that follows
       try {
@@ -741,6 +742,8 @@ const GraphCapture = () => {
           response: aiResponsePayload,
         });
         console.warn('AI extraction completed, but no valid graph ID was returned. Staying on this page.');
+        const rawTextPreview = String(result?.raw_text || '').substring(0, 400);
+        alert(`AI extraction returned no graph ID.\n\nDiscoverEE raw response:\n${rawTextPreview || '(empty)'}`);
         return;
       }
 
