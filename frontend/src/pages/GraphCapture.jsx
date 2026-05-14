@@ -724,9 +724,36 @@ const GraphCapture = () => {
         return;
       }
 
-      const aiResponsePayload = result?.response && typeof result.response === 'object'
+      let aiResponsePayload = result?.response && typeof result.response === 'object'
         ? result.response
         : {};
+
+      // Imunify360 bot-protection: relay server IP is blocked by DiscoverEE — retry from the
+      // user's real browser IP which is not in Imunify360's automation block list.
+      const isBlockedByImunify360 =
+        String(result?.raw_text || '').toLowerCase().includes('imunify360') ||
+        String(aiResponsePayload?.message || '').toLowerCase().includes('imunify360');
+      if (isBlockedByImunify360) {
+        console.warn('[AI] Relay IP blocked by Imunify360. Retrying directly from user browser...');
+        try {
+          const directFormData = new FormData();
+          for (const [k, v] of Object.entries(requestPayload)) directFormData.append(k, String(v));
+          const directRes = await fetch('https://www.discoveree.io/vision_upload.php', { method: 'POST', body: directFormData });
+          const directText = await directRes.text();
+          console.log('[DEBUG] Direct DiscoverEE rawText:', directText);
+          const jStart = Math.min(...[directText.indexOf('{'), directText.indexOf('[')].filter(i => i >= 0).concat([Infinity]));
+          const jEnd = Math.max(directText.lastIndexOf('}'), directText.lastIndexOf(']'));
+          if (jStart !== Infinity && jEnd > jStart) {
+            aiResponsePayload = JSON.parse(directText.substring(jStart, jEnd + 1));
+          }
+          console.log('[DEBUG] Direct parsed payload:', JSON.stringify(aiResponsePayload, null, 2));
+        } catch (directErr) {
+          console.error('[AI] Direct browser request also failed:', directErr.message);
+          alert('AI extraction is blocked by DiscoverEE bot-protection (Imunify360).\n\nThe relay server IP is flagged as automation. Contact DiscoverEE support to whitelist it.');
+          return;
+        }
+      }
+
       console.log('[DEBUG] Full AI response payload:', JSON.stringify(aiResponsePayload, null, 2));
       console.log('[DEBUG] Checking graph_id candidates:', {
         'responsePayload?.graph_id': aiResponsePayload?.graph_id,
