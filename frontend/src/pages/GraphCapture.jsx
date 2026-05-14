@@ -490,7 +490,10 @@ const consumeAiPendingCapture = (expectedGraphId = '') => {
     const payloadGraphId = String(payload?.graphId || '').trim();
     const normalizedExpectedGraphId = String(expectedGraphId || '').trim();
     if (payloadGraphId && normalizedExpectedGraphId && payloadGraphId !== normalizedExpectedGraphId) {
-      return null;
+      console.warn('[AI_PENDING_CAPTURE] graph_id mismatch detected; restoring image anyway to avoid losing pending capture.', {
+        payloadGraphId,
+        expectedGraphId: normalizedExpectedGraphId,
+      });
     }
 
     return {
@@ -1307,9 +1310,14 @@ const GraphCapture = () => {
       graph?.image,
     ];
 
+    const persistedGraphImage = getPersistedGraphImage(
+      graph?.graph_id || graph?.graphId || graphId
+    );
+
     const candidates = [
       ...graphImageCandidates,
       ...detailImageCandidates,
+      persistedGraphImage,
       restoredPendingImageRef.current,
     ];
 
