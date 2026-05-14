@@ -637,9 +637,12 @@ const GraphCapture = () => {
     };
 
     setAiFlowStatusMessage('');
-    // Strip data URI prefix (e.g. "data:image/png;base64,") — PHP expects raw base64 only
-    const rawBase64 = String(imageBase64 || '').replace(/^data:[^;]+;base64,/, '');
-    if (!rawBase64.trim()) {
+    // Strip data URI prefix (e.g. "data:image/png;base64,") then remove any
+    // whitespace/invalid chars so PHP strict base64_decode never rejects it.
+    const rawBase64 = String(imageBase64 || '')
+      .replace(/^data:[^;]+;base64,/, '')
+      .replace(/[^A-Za-z0-9+/=]/g, '');
+    if (!rawBase64) {
       alert('No valid image data found for AI extraction. Please paste or upload an image and try again.');
       return;
     }
