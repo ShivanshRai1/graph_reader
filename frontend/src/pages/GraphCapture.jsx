@@ -619,6 +619,27 @@ const GraphCapture = () => {
   } = useGraph();
   const graphWorkspaceRef = useRef(null);
   const handleAiExtensionCapture = async (imageBase64, source = '') => {
+    const reencodeImageBase64 = async (base64Str) => {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+          try {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+            const freshBase64 = canvas.toDataURL('image/png').replace(/^data:[^;]+;base64,/, '');
+            resolve(freshBase64);
+          } catch (err) {
+            reject(err);
+          }
+        };
+        img.onerror = () => reject(new Error('Failed to load image'));
+        img.src = base64Str.startsWith('data:') ? base64Str : `data:image/png;base64,${base64Str}`;
+      });
+    };
+
     try {
       const _u = new URL(window.location.href);
       _u.searchParams.set('type', 'ai_extraction');
@@ -637,9 +658,18 @@ const GraphCapture = () => {
     };
 
     setAiFlowStatusMessage('');
-    // Strip data URI prefix (e.g. "data:image/png;base64,") then remove any
-    // whitespace/invalid chars so PHP strict base64_decode never rejects it.
-    const rawBase64 = String(imageBase64 || '')
+    // Re-encode image via Canvas to create guaranteed-valid base64 from actual image pixels
+    let freshBase64 = imageBase64;
+    try {
+      freshBase64 = await reencodeImageBase64(imageBase64);
+      console.log('[AI] Image re-encoded via Canvas. Fresh base64 length:', freshBase64.length);
+    } catch (reencodeErr) {
+      console.warn('[AI] Canvas re-encoding failed, using original base64:', reencodeErr.message);
+      // Fall back to original if re-encoding fails
+    }
+
+    // Strip data URI prefix and non-base64 chars
+    const rawBase64 = String(freshBase64 || '')
       .replace(/^data:[^;]+;base64,/, '')
       .replace(/[^A-Za-z0-9+/=]/g, '');
     if (!rawBase64) {
