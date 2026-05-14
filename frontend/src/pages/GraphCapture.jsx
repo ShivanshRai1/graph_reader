@@ -640,8 +640,30 @@ const GraphCapture = () => {
     };
 
     setAiFlowStatusMessage('');
-    // Strip data URI prefix (e.g. "data:image/png;base64,") — PHP expects raw base64 only
-    const rawBase64 = String(imageBase64 || '').replace(/^data:[^;]+;base64,/, '');
+
+    // Convert to JPEG for DiscoverEE compatibility — vision_upload.php rejects PNG images.
+    // Falls back to the original image if conversion fails for any reason.
+    let convertedImageBase64 = imageBase64;
+    try {
+      convertedImageBase64 = await new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.naturalWidth;
+          canvas.height = img.naturalHeight;
+          const ctx = canvas.getContext('2d');
+          ctx.fillStyle = '#ffffff'; // JPEG has no transparency — fill white background
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 0, 0);
+          resolve(canvas.toDataURL('image/jpeg', 0.92));
+        };
+        img.onerror = () => resolve(imageBase64);
+        img.src = String(imageBase64 || '');
+      });
+    } catch (_e) {}
+
+    // Strip data URI prefix (e.g. "data:image/jpeg;base64,") — PHP expects raw base64 only
+    const rawBase64 = String(convertedImageBase64 || '').replace(/^data:[^;]+;base64,/, '');
     if (!rawBase64.trim()) {
       alert('No valid image data found for AI extraction. Please paste or upload an image and try again.');
       return;
@@ -1781,6 +1803,17 @@ const GraphCapture = () => {
 
     previousUploadedImageRef.current = nextImage;
   }, [uploadedImage]);
+
+  // Auto-persist uploaded image to localStorage when graph_id is in the URL.
+  // This ensures the image is restored on future visits even when DiscoverEE
+  // returns an empty graph_img for the graph.
+  useEffect(() => {
+    const graphId = String(urlParams.graph_id || '').trim();
+    if (!graphId || !uploadedImage) return;
+    const normalized = normalizeImageCandidate(uploadedImage);
+    if (!normalized) return;
+    persistGraphImage(graphId, normalized);
+  }, [uploadedImage, urlParams.graph_id]);
 
   const pushEditedCurveToApi = async (curve, nextMeta, nextSymbols, newCurveName = '') => {
     const currentSymbolPayload = buildDynamicSymbolPayload(
