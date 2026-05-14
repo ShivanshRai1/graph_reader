@@ -200,9 +200,11 @@ def relay_ai_extraction(payload: dict):
         primary_content_type = str(primary_result.get("content_type") or "").lower()
         primary_response_is_html = "text/html" in primary_content_type
         primary_response_is_error_text = "Invalid base64 format" in str(primary_result.get("raw_text") or "")
+        primary_response_is_imunify_blocked = "imunify360" in str(primary_result.get("raw_text") or "").lower()
         should_try_fallback = (
             primary_response_is_html
             or primary_response_is_error_text
+            or primary_response_is_imunify_blocked
             or (
                 not primary_result.get("upstream_ok")
                 and int(primary_result.get("upstream_status") or 0) >= 500
@@ -212,10 +214,20 @@ def relay_ai_extraction(payload: dict):
 
         final_result = primary_result
         if should_try_fallback:
+            reason = ""
+            if primary_response_is_html:
+                reason = "HTML response"
+            elif primary_response_is_imunify_blocked:
+                reason = "Imunify360 bot-protection blocked"
+            elif primary_response_is_error_text:
+                reason = "Invalid base64 format"
+            else:
+                reason = "5xx error"
+            print(f"[AI_EXTRACTION] PRIMARY FAILED ({reason}) - Using FALLBACK.")
             fallback_result = post_ai_extraction_to_company(fallback_url, normalized_payload, send_as_json=True)
             attempts.append(fallback_result)
             final_result = fallback_result
-            print(f"[AI_EXTRACTION] PRIMARY FAILED - Using FALLBACK. Final graph_id: {final_result.get('response', {}).get('graph_id', 'N/A')}")
+            print(f"[AI_EXTRACTION] FALLBACK RESULT. Final graph_id: {final_result.get('response', {}).get('graph_id', 'N/A')}")
         else:
             print(f"[AI_EXTRACTION] PRIMARY SUCCEEDED. Final graph_id: {final_result.get('response', {}).get('graph_id', 'N/A')}")
 
