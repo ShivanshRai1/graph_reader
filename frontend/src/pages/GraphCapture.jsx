@@ -745,7 +745,17 @@ const GraphCapture = () => {
       const aiResponsePayload = result?.response && typeof result.response === 'object'
         ? result.response
         : {};
+      console.log('[DEBUG] Full AI response payload:', JSON.stringify(aiResponsePayload, null, 2));
+      console.log('[DEBUG] Checking graph_id candidates:', {
+        'responsePayload?.graph_id': aiResponsePayload?.graph_id,
+        'responsePayload?.graphId': aiResponsePayload?.graphId,
+        'responsePayload?.id': aiResponsePayload?.id,
+        'responsePayload?.graph?.graph_id': aiResponsePayload?.graph?.graph_id,
+        'responsePayload?.graph?.graphId': aiResponsePayload?.graph?.graphId,
+        'responsePayload?.graph?.id': aiResponsePayload?.graph?.id,
+      });
       const validGraphId = resolveIntegerGraphIdFromAiResponse(aiResponsePayload);
+      console.log('[DEBUG] Resolved graph_id:', validGraphId);
       if (!validGraphId) {
         console.log('=== AI EXTRACTION DECISION ===', {
           action: 'stay',
