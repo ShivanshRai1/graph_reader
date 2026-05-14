@@ -703,8 +703,10 @@ const GraphCapture = () => {
     console.log('=== AI EXTRACTION REQUEST ===', {
       url: relayUrl,
       method: 'POST',
+      base64imageLength: rawBase64.length,
       payload: requestPayload,
     });
+    console.log('[DEBUG] Sending base64 string of length:', rawBase64.length, 'first 100 chars:', rawBase64.substring(0, 100));
 
     setIsAiExtractionLoading(true);
     try {
@@ -718,6 +720,23 @@ const GraphCapture = () => {
 
       const result = await response.json();
 
+      console.log('=== RELAY RESPONSE ===', {
+        relayStatus: response.status,
+        relayOk: response.ok,
+      });
+
+      console.log('=== UPSTREAM RESPONSE ===', {
+        upstreamStatus: result?.upstream_status,
+        upstreamOk: result?.upstream_ok,
+        contentType: result?.content_type,
+        rawTextLength: (result?.raw_text || '').length,
+        firstRawTextChars: (result?.raw_text || '').substring(0, 200),
+      });
+
+      console.log('=== PARSED RESPONSE ===', {
+        response: result?.response,
+      });
+
       console.log('=== AI EXTRACTION RESPONSE ===', {
         url: relayUrl,
         relayStatus: response.status,
@@ -727,6 +746,13 @@ const GraphCapture = () => {
         rawText: result?.raw_text,
         parsedResponse: result?.response,
       });
+
+      console.log('[DEBUG] Attempts (which URLs were tried):', result?.attempts?.map(a => ({
+        targetUrl: a?.target_url,
+        status: a?.upstream_status,
+        isHtml: (a?.content_type || '').includes('text/html'),
+        responseLength: (a?.raw_text || '').length,
+      })));
 
       if (!response.ok) {
         // Relay itself failed (502/503) — network/server issue
