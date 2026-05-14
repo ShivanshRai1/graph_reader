@@ -618,6 +618,61 @@ const GraphCapture = () => {
     convertCanvasToGraphCoordinates,
   } = useGraph();
   const graphWorkspaceRef = useRef(null);
+
+  // Try to extract directly from primary URL (browser request, bypasses Render IP block)
+  const tryDirectPrimaryUrlExtraction = async (payload) => {
+    const primaryUrl = 'https://www.discoveree.io/vision_upload.php';
+    console.log('[AI_DIRECT] Attempting direct browser request to primary URL:', primaryUrl);
+    try {
+      // Send as FormData (multipart/form-data) - what the primary endpoint expects
+      const formData = new FormData();
+      Object.entries(payload).forEach(([key, value]) => {
+        formData.append(key, String(value));
+      });
+
+      const response = await fetch(primaryUrl, {
+        method: 'POST',
+        body: formData,
+        mode: 'cors',
+        credentials: 'omit',
+      });
+
+      console.log('[AI_DIRECT] Primary URL response status:', response.status);
+      const responseText = await response.text();
+      console.log('[AI_DIRECT] Primary URL raw response:', responseText.substring(0, 300));
+
+      if (!response.ok) {
+        console.log('[AI_DIRECT] Primary URL returned non-ok status:', response.status);
+        return null;
+      }
+
+      // Try to parse as JSON
+      let responseData;
+      try {
+        responseData = JSON.parse(responseText);
+      } catch (parseErr) {
+        console.log('[AI_DIRECT] Failed to parse response as JSON:', parseErr.message);
+        return null;
+      }
+
+      console.log('[AI_DIRECT] Primary URL succeeded, received:', responseData);
+      
+      // Format direct response to match relay structure for consistent processing
+      return {
+        upstream_status: response.status,
+        upstream_ok: response.ok,
+        content_type: response.headers.get('Content-Type') || 'application/json',
+        response: responseData,
+        raw_text: responseText,
+        target_url: primaryUrl,
+        attempts: [], // No fallback attempts in direct approach
+      };
+    } catch (corsError) {
+      console.log('[AI_DIRECT] Primary URL failed (likely CORS or network):', corsError.message);
+      return null;
+    }
+  };
+
   const handleAiExtensionCapture = async (imageBase64, source = '') => {
     const reencodeImageBase64 = async (base64Str) => {
       return new Promise((resolve, reject) => {
@@ -710,15 +765,30 @@ const GraphCapture = () => {
 
     setIsAiExtractionLoading(true);
     try {
-      const response = await fetch(relayUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestPayload),
-      });
+      // Try direct primary URL first (browser request, might bypass Imunify360 block)
+      const directResult = await tryDirectPrimaryUrlExtraction(requestPayload);
+      
+      let result;
+      let response;
+      
+      if (directResult) {
+        // Direct primary URL worked
+        console.log('[AI_EXTRACTION] Direct browser request to primary URL succeeded');
+        result = directResult;
+        response = { ok: true, status: 200 };
+      } else {
+        // Direct approach failed or got CORS, fall back to backend relay
+        console.log('[AI_EXTRACTION] Direct browser request failed, falling back to backend relay');
+        response = await fetch(relayUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestPayload),
+        });
 
-      const result = await response.json();
+        result = await response.json();
+      }
 
       console.log('=== RELAY RESPONSE ===', {
         relayStatus: response.status,
