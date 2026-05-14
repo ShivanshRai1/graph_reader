@@ -688,7 +688,7 @@ const GraphCapture = () => {
 
       const result = await response.json();
 
-      console.log('=== AI EXTRACTION RESPONSE ===', {
+      const aiResponseLog = {
         url: relayUrl,
         relayStatus: response.status,
         upstreamStatus: result?.upstream_status,
@@ -696,7 +696,17 @@ const GraphCapture = () => {
         contentType: result?.content_type,
         rawText: result?.raw_text,
         parsedResponse: result?.response,
-      });
+      };
+      console.log('=== AI EXTRACTION RESPONSE ===', aiResponseLog);
+
+      // Persist request+response so they survive the page navigation that follows
+      try {
+        sessionStorage.setItem('ai_extraction_console_log', JSON.stringify({
+          timestamp: new Date().toISOString(),
+          request: { url: relayUrl, method: 'POST', payload: requestPayload },
+          response: aiResponseLog,
+        }));
+      } catch (_e) {}
 
       if (!response.ok) {
         // Relay itself failed (502/503) — network/server issue
@@ -1289,17 +1299,6 @@ const GraphCapture = () => {
   };
 
   const resolveGraphImageUrl = (graph = {}, details = [], graphId = '') => {
-    const detailList = Array.isArray(details) ? details : [];
-    const detailImageCandidates = detailList.flatMap((detail) => [
-      detail?.graph_img,
-      detail?.graph_image,
-      detail?.graphImage,
-      detail?.graph_image_url,
-      detail?.image_url,
-      detail?.img_url,
-      detail?.image,
-    ]);
-
     const graphImageCandidates = [
       graph?.graph_img,
       graph?.graph_image,
@@ -1314,10 +1313,14 @@ const GraphCapture = () => {
       graph?.graph_id || graph?.graphId || graphId
     );
 
+    // persistedGraphImage is checked before graphImageCandidates so that a
+    // previously-cached image is returned even when the upstream API returns
+    // an empty graph_img (common for DiscoverEE graphs).
+    // DiscoverEE never populates image fields on detail objects, so
+    // detailImageCandidates has been removed to avoid wasted iterations.
     const candidates = [
-      ...graphImageCandidates,
-      ...detailImageCandidates,
       persistedGraphImage,
+      ...graphImageCandidates,
       restoredPendingImageRef.current,
     ];
 
@@ -2449,6 +2452,17 @@ const GraphCapture = () => {
   };
 
   useEffect(() => {
+    // Re-log AI extraction request/response that was persisted before page navigation
+    try {
+      const aiLog = sessionStorage.getItem('ai_extraction_console_log');
+      if (aiLog) {
+        const parsed = JSON.parse(aiLog);
+        console.log('=== AI EXTRACTION REQUEST (restored after navigation) ===', parsed.request);
+        console.log('=== AI EXTRACTION RESPONSE (restored after navigation) ===', parsed.response);
+        sessionStorage.removeItem('ai_extraction_console_log');
+      }
+    } catch (_e) {}
+
     // Parse graph_id directly from URL to avoid timing issues with state
     const searchParams = new URLSearchParams(window.location.search);
     const graphId = searchParams.get('graph_id');
