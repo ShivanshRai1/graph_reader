@@ -202,6 +202,9 @@ def relay_ai_extraction(payload: dict):
             fallback_result = post_ai_extraction_to_company(fallback_url, normalized_payload, send_as_json=True)
             attempts.append(fallback_result)
             final_result = fallback_result
+            print(f"[AI_EXTRACTION] PRIMARY FAILED - Using FALLBACK. Final graph_id: {final_result.get('response', {}).get('graph_id', 'N/A')}")
+        else:
+            print(f"[AI_EXTRACTION] PRIMARY SUCCEEDED. Final graph_id: {final_result.get('response', {}).get('graph_id', 'N/A')}")
 
         response_content = {
             **final_result,
