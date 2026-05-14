@@ -118,7 +118,12 @@ def post_ai_extraction_to_company(target_url: str, normalized_payload: dict, sen
         "Referer": "https://graph-capture.netlify.app/",
     }
 
+    # Log payload info
+    base64_len = len(normalized_payload.get("base64image", ""))
+    print(f"[DEBUG] POST to {target_url}: send_as_json={send_as_json}, base64image_length={base64_len}, payload_keys={list(normalized_payload.keys())}")
+
     if send_as_json:
+        print(f"[DEBUG] Sending to {target_url} as JSON")
         response = requests.post(
             target_url,
             json=normalized_payload,
@@ -127,6 +132,7 @@ def post_ai_extraction_to_company(target_url: str, normalized_payload: dict, sen
         )
     else:
         # Use files= to send multipart/form-data, matching browser FormData semantics.
+        print(f"[DEBUG] Sending to {target_url} as multipart/form-data")
         multipart_fields = {key: (None, value) for key, value in normalized_payload.items()}
         response = requests.post(
             target_url,
@@ -136,6 +142,13 @@ def post_ai_extraction_to_company(target_url: str, normalized_payload: dict, sen
         )
 
     raw_text = response.text
+    content_type = response.headers.get("Content-Type", "")
+    print(f"[DEBUG] Response from {target_url}: Status={response.status_code} | Content-Type={content_type} | Length={len(raw_text)}")
+    
+    # If response is HTML, log full content
+    if "text/html" in content_type.lower():
+        print(f"[DEBUG] HTML Response (full): {raw_text[:2000]}")
+    
     try:
         parsed_response = parse_company_api_text(raw_text)
     except Exception:
