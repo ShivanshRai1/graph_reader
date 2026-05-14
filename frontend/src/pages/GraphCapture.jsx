@@ -641,26 +641,32 @@ const GraphCapture = () => {
 
     setAiFlowStatusMessage('');
 
-    // Convert to JPEG for DiscoverEE compatibility — vision_upload.php rejects PNG images.
-    // Falls back to the original image if conversion fails for any reason.
+    // Convert PNG to JPEG for DiscoverEE compatibility — vision_upload.php rejects PNG.
+    // Only convert if image is PNG; leave JPEG/JPG untouched to preserve quality.
     let convertedImageBase64 = imageBase64;
-    try {
-      convertedImageBase64 = await new Promise((resolve) => {
-        const img = new Image();
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          canvas.width = img.naturalWidth;
-          canvas.height = img.naturalHeight;
-          const ctx = canvas.getContext('2d');
-          ctx.fillStyle = '#ffffff'; // JPEG has no transparency — fill white background
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-          ctx.drawImage(img, 0, 0);
-          resolve(canvas.toDataURL('image/jpeg', 0.92));
-        };
-        img.onerror = () => resolve(imageBase64);
-        img.src = String(imageBase64 || '');
-      });
-    } catch (_e) {}
+    const isPng = String(imageBase64 || '').toLowerCase().includes('image/png');
+    if (isPng) {
+      try {
+        convertedImageBase64 = await new Promise((resolve) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.naturalWidth;
+            canvas.height = img.naturalHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#ffffff'; // JPEG has no transparency — fill white background
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0);
+            resolve(canvas.toDataURL('image/jpeg', 0.95));
+          };
+          img.onerror = () => resolve(imageBase64);
+          img.src = String(imageBase64 || '');
+        });
+        console.log('[AI EXTRACTION] Converted PNG to JPEG for DiscoverEE compatibility');
+      } catch (_e) {
+        console.warn('[AI EXTRACTION] PNG->JPEG conversion failed, using original');
+      }
+    }
 
     // Strip data URI prefix (e.g. "data:image/jpeg;base64,") — PHP expects raw base64 only
     const rawBase64 = String(convertedImageBase64 || '').replace(/^data:[^;]+;base64,/, '');
