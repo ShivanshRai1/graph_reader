@@ -163,6 +163,9 @@ def relay_ai_extraction(payload: dict):
 
     base64image = str(normalized_payload.get("base64image") or "")
     base64image = re.sub(r"^data:[^;]+;base64,", "", base64image).strip()
+    # Remove any non-base64 characters (whitespace, null bytes, etc.) so PHP strict
+    # base64_decode never returns false with "Invalid base64 format".
+    base64image = re.sub(r"[^A-Za-z0-9+/=]", "", base64image)
     if not base64image:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
