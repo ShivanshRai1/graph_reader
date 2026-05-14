@@ -490,10 +490,7 @@ const consumeAiPendingCapture = (expectedGraphId = '') => {
     const payloadGraphId = String(payload?.graphId || '').trim();
     const normalizedExpectedGraphId = String(expectedGraphId || '').trim();
     if (payloadGraphId && normalizedExpectedGraphId && payloadGraphId !== normalizedExpectedGraphId) {
-      console.warn('[AI_PENDING_CAPTURE] graph_id mismatch detected; restoring image anyway to avoid losing pending capture.', {
-        payloadGraphId,
-        expectedGraphId: normalizedExpectedGraphId,
-      });
+      return null;
     }
 
     return {
@@ -640,12 +637,9 @@ const GraphCapture = () => {
     };
 
     setAiFlowStatusMessage('');
-    // Strip data URI prefix (e.g. "data:image/png;base64,") then remove any
-    // whitespace/invalid chars so PHP strict base64_decode never rejects it.
-    const rawBase64 = String(imageBase64 || '')
-      .replace(/^data:[^;]+;base64,/, '')
-      .replace(/[^A-Za-z0-9+/=]/g, '');
-    if (!rawBase64) {
+    // Strip data URI prefix (e.g. "data:image/png;base64,") — PHP expects raw base64 only
+    const rawBase64 = String(imageBase64 || '').replace(/^data:[^;]+;base64,/, '');
+    if (!rawBase64.trim()) {
       alert('No valid image data found for AI extraction. Please paste or upload an image and try again.');
       return;
     }
@@ -691,7 +685,7 @@ const GraphCapture = () => {
 
       const result = await response.json();
 
-      const aiResponseLog = {
+      console.log('=== AI EXTRACTION RESPONSE ===', {
         url: relayUrl,
         relayStatus: response.status,
         upstreamStatus: result?.upstream_status,
@@ -699,18 +693,7 @@ const GraphCapture = () => {
         contentType: result?.content_type,
         rawText: result?.raw_text,
         parsedResponse: result?.response,
-      };
-      console.log('=== AI EXTRACTION RESPONSE ===', aiResponseLog);
-      console.log('[DEBUG] DiscoverEE rawText:', result?.raw_text);
-
-      // Persist request+response so they survive the page navigation that follows
-      try {
-        sessionStorage.setItem('ai_extraction_console_log', JSON.stringify({
-          timestamp: new Date().toISOString(),
-          request: { url: relayUrl, method: 'POST', payload: requestPayload },
-          response: aiResponseLog,
-        }));
-      } catch (_e) {}
+      });
 
       if (!response.ok) {
         // Relay itself failed (502/503) — network/server issue
@@ -724,47 +707,10 @@ const GraphCapture = () => {
         return;
       }
 
-      let aiResponsePayload = result?.response && typeof result.response === 'object'
+      const aiResponsePayload = result?.response && typeof result.response === 'object'
         ? result.response
         : {};
-
-      // Imunify360 bot-protection: relay server IP is blocked by DiscoverEE — retry from the
-      // user's real browser IP which is not in Imunify360's automation block list.
-      const isBlockedByImunify360 =
-        String(result?.raw_text || '').toLowerCase().includes('imunify360') ||
-        String(aiResponsePayload?.message || '').toLowerCase().includes('imunify360');
-      if (isBlockedByImunify360) {
-        console.warn('[AI] Relay IP blocked by Imunify360. Retrying directly from user browser...');
-        try {
-          const directFormData = new FormData();
-          for (const [k, v] of Object.entries(requestPayload)) directFormData.append(k, String(v));
-          const directRes = await fetch('https://www.discoveree.io/vision_upload.php', { method: 'POST', body: directFormData });
-          const directText = await directRes.text();
-          console.log('[DEBUG] Direct DiscoverEE rawText:', directText);
-          const jStart = Math.min(...[directText.indexOf('{'), directText.indexOf('[')].filter(i => i >= 0).concat([Infinity]));
-          const jEnd = Math.max(directText.lastIndexOf('}'), directText.lastIndexOf(']'));
-          if (jStart !== Infinity && jEnd > jStart) {
-            aiResponsePayload = JSON.parse(directText.substring(jStart, jEnd + 1));
-          }
-          console.log('[DEBUG] Direct parsed payload:', JSON.stringify(aiResponsePayload, null, 2));
-        } catch (directErr) {
-          console.error('[AI] Direct browser request also failed:', directErr.message);
-          alert('AI extraction is blocked by DiscoverEE bot-protection (Imunify360).\n\nThe relay server IP is flagged as automation. Contact DiscoverEE support to whitelist it.');
-          return;
-        }
-      }
-
-      console.log('[DEBUG] Full AI response payload:', JSON.stringify(aiResponsePayload, null, 2));
-      console.log('[DEBUG] Checking graph_id candidates:', {
-        'responsePayload?.graph_id': aiResponsePayload?.graph_id,
-        'responsePayload?.graphId': aiResponsePayload?.graphId,
-        'responsePayload?.id': aiResponsePayload?.id,
-        'responsePayload?.graph?.graph_id': aiResponsePayload?.graph?.graph_id,
-        'responsePayload?.graph?.graphId': aiResponsePayload?.graph?.graphId,
-        'responsePayload?.graph?.id': aiResponsePayload?.graph?.id,
-      });
       const validGraphId = resolveIntegerGraphIdFromAiResponse(aiResponsePayload);
-      console.log('[DEBUG] Resolved graph_id:', validGraphId);
       if (!validGraphId) {
         console.log('=== AI EXTRACTION DECISION ===', {
           action: 'stay',
@@ -772,8 +718,6 @@ const GraphCapture = () => {
           response: aiResponsePayload,
         });
         console.warn('AI extraction completed, but no valid graph ID was returned. Staying on this page.');
-        const rawTextPreview = String(result?.raw_text || '').substring(0, 400);
-        alert(`AI extraction returned no graph ID.\n\nDiscoverEE raw response:\n${rawTextPreview || '(empty)'}`);
         return;
       }
 
@@ -1342,6 +1286,17 @@ const GraphCapture = () => {
   };
 
   const resolveGraphImageUrl = (graph = {}, details = [], graphId = '') => {
+    const detailList = Array.isArray(details) ? details : [];
+    const detailImageCandidates = detailList.flatMap((detail) => [
+      detail?.graph_img,
+      detail?.graph_image,
+      detail?.graphImage,
+      detail?.graph_image_url,
+      detail?.image_url,
+      detail?.img_url,
+      detail?.image,
+    ]);
+
     const graphImageCandidates = [
       graph?.graph_img,
       graph?.graph_image,
@@ -1352,18 +1307,9 @@ const GraphCapture = () => {
       graph?.image,
     ];
 
-    const persistedGraphImage = getPersistedGraphImage(
-      graph?.graph_id || graph?.graphId || graphId
-    );
-
-    // persistedGraphImage is checked before graphImageCandidates so that a
-    // previously-cached image is returned even when the upstream API returns
-    // an empty graph_img (common for DiscoverEE graphs).
-    // DiscoverEE never populates image fields on detail objects, so
-    // detailImageCandidates has been removed to avoid wasted iterations.
     const candidates = [
-      persistedGraphImage,
       ...graphImageCandidates,
+      ...detailImageCandidates,
       restoredPendingImageRef.current,
     ];
 
@@ -1824,17 +1770,6 @@ const GraphCapture = () => {
 
     previousUploadedImageRef.current = nextImage;
   }, [uploadedImage]);
-
-  // Auto-persist uploaded image to localStorage when graph_id is in the URL.
-  // This ensures the image is restored on future visits even when DiscoverEE
-  // returns an empty graph_img for the graph.
-  useEffect(() => {
-    const graphId = String(urlParams.graph_id || '').trim();
-    if (!graphId || !uploadedImage) return;
-    const normalized = normalizeImageCandidate(uploadedImage);
-    if (!normalized) return;
-    persistGraphImage(graphId, normalized);
-  }, [uploadedImage, urlParams.graph_id]);
 
   const pushEditedCurveToApi = async (curve, nextMeta, nextSymbols, newCurveName = '') => {
     const currentSymbolPayload = buildDynamicSymbolPayload(
@@ -2506,17 +2441,6 @@ const GraphCapture = () => {
   };
 
   useEffect(() => {
-    // Re-log AI extraction request/response that was persisted before page navigation
-    try {
-      const aiLog = sessionStorage.getItem('ai_extraction_console_log');
-      if (aiLog) {
-        const parsed = JSON.parse(aiLog);
-        console.log('=== AI EXTRACTION REQUEST (restored after navigation) ===', parsed.request);
-        console.log('=== AI EXTRACTION RESPONSE (restored after navigation) ===', parsed.response);
-        sessionStorage.removeItem('ai_extraction_console_log');
-      }
-    } catch (_e) {}
-
     // Parse graph_id directly from URL to avoid timing issues with state
     const searchParams = new URLSearchParams(window.location.search);
     const graphId = searchParams.get('graph_id');
