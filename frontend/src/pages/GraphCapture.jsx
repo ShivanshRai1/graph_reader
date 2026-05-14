@@ -521,6 +521,67 @@ const persistLastAiReturnedGraphId = (graphId = '') => {
   }
 };
 
+// Persist AI extraction flow details so they survive page navigation
+const persistAiExtractionFlowLog = (flowData) => {
+  try {
+    const KEY = 'ai_extraction_flow_log';
+    window.sessionStorage.setItem(KEY, JSON.stringify(flowData));
+  } catch (error) {
+    console.warn('Unable to persist AI extraction flow log.', error);
+  }
+};
+
+// Restore and re-log AI extraction flow after page navigation
+const restoreAndLogAiExtractionFlow = () => {
+  try {
+    const KEY = 'ai_extraction_flow_log';
+    const raw = window.sessionStorage.getItem(KEY);
+    if (!raw) return;
+
+    const flowData = JSON.parse(raw);
+    
+    // Re-log to console with "restored" marker
+    console.group('%c📊 AI EXTRACTION FLOW SUMMARY (restored after navigation)', 'color: #2196F3; font-size: 14px; font-weight: bold;');
+    
+    if (flowData.attempts && flowData.attempts.length > 0) {
+      console.log('%c=== ATTEMPT 1: PRIMARY URL ===', 'color: #FF9800; font-weight: bold;');
+      const primaryAttempt = flowData.attempts[0];
+      console.log('URL:', primaryAttempt?.target_url);
+      console.log('Status Code:', primaryAttempt?.upstream_status);
+      console.log('Content Type:', primaryAttempt?.content_type);
+      
+      if ((primaryAttempt?.content_type || '').includes('text/html')) {
+        console.log('%c❌ BLOCKED: Response is HTML (not JSON)', 'color: #F44336; font-weight: bold;');
+        console.log('This means: Imunify360 bot-protection blocked the request');
+        console.log('Error Details:', primaryAttempt?.raw_text?.substring(0, 500));
+      } else if ((primaryAttempt?.raw_text || '').includes('imunify360')) {
+        console.log('%c❌ BLOCKED: Imunify360 bot-protection detected', 'color: #F44336; font-weight: bold;');
+        console.log('Error Message:', primaryAttempt?.raw_text?.substring(0, 500));
+      }
+      
+      if (flowData.attempts.length > 1) {
+        console.log('%c=== ATTEMPT 2: FALLBACK URL (BACKUP) ===', 'color: #4CAF50; font-weight: bold;');
+        const fallbackAttempt = flowData.attempts[1];
+        console.log('URL:', fallbackAttempt?.target_url);
+        console.log('Status Code:', fallbackAttempt?.upstream_status);
+        console.log('Content Type:', fallbackAttempt?.content_type);
+        
+        if (fallbackAttempt?.upstream_status === 200) {
+          console.log('%c✅ SUCCESS: Fallback endpoint worked', 'color: #4CAF50; font-weight: bold;');
+          console.log('Graph ID returned:', fallbackAttempt?.raw_text?.substring(0, 200));
+        }
+      }
+    }
+    
+    console.groupEnd();
+    
+    // Clear after restoring so it doesn't get logged again
+    window.sessionStorage.removeItem(KEY);
+  } catch (error) {
+    console.warn('Unable to restore AI extraction flow log.', error);
+  }
+};
+
 const checkGraphHasCapturedCurves = async (graphId) => {
   const normalizedGraphId = String(graphId || '').trim();
   if (!normalizedGraphId) return false;
@@ -618,6 +679,12 @@ const GraphCapture = () => {
     convertCanvasToGraphCoordinates,
   } = useGraph();
   const graphWorkspaceRef = useRef(null);
+
+  // Restore AI extraction flow logs on component mount
+  useEffect(() => {
+    restoreAndLogAiExtractionFlow();
+  }, []);
+
   const handleAiExtensionCapture = async (imageBase64, source = '') => {
     const reencodeImageBase64 = async (base64Str) => {
       return new Promise((resolve, reject) => {
@@ -788,6 +855,9 @@ const GraphCapture = () => {
       }
       
       console.groupEnd();
+      
+      // Save flow data to sessionStorage so it persists across page navigation
+      persistAiExtractionFlowLog({ attempts: result?.attempts || [] });
 
       if (!response.ok) {
         // Relay itself failed (502/503) — network/server issue
