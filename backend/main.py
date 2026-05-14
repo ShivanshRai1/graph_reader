@@ -141,6 +141,8 @@ def post_ai_extraction_to_company(target_url: str, normalized_payload: dict, sen
     except Exception:
         parsed_response = raw_text
 
+    print(f"[AI_EXTRACTION] URL: {target_url} | Status: {response.status_code} | RawText length: {len(raw_text)} | First 500 chars: {raw_text[:500]}")
+
     return {
         "target_url": target_url,
         "upstream_status": response.status_code,
