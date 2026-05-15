@@ -50,20 +50,32 @@ ensure_optional_curve_columns()
 
 
 def get_backend_ip():
-    """Get the outbound IP address of the backend server"""
+    """Get the outbound IP address of the backend server (non-blocking)"""
     try:
-        response = requests.get('https://api.ipify.org?format=json', timeout=5)
+        response = requests.get('https://api.ipify.org?format=json', timeout=3)
         ip = response.json().get('ip', 'unknown')
         return ip
     except Exception as e:
-        print(f"[DEBUG] Failed to detect backend IP: {e}")
+        # Silently fail, don't break the server
         return 'unknown'
 
 
-# Log backend IP on startup (for Render.com whitelist purposes)
-backend_ip = get_backend_ip()
-print(f"[STARTUP] Backend outbound IP: {backend_ip}")
-print(f"[STARTUP] Share this IP with DiscoverEE to whitelist in Imunify360: {backend_ip}")
+# Initialize backend_ip as unknown
+backend_ip = 'unknown'
+
+# Detect IP in background (non-blocking, so it doesn't delay server startup)
+def detect_ip_background():
+    global backend_ip
+    try:
+        backend_ip = get_backend_ip()
+        print(f"[STARTUP] Backend outbound IP: {backend_ip}")
+        print(f"[STARTUP] Share this IP with DiscoverEE to whitelist in Imunify360: {backend_ip}")
+    except Exception as e:
+        print(f"[DEBUG] Failed to detect backend IP in background: {e}")
+
+# Start IP detection in background thread
+ip_detection_thread = threading.Thread(target=detect_ip_background, daemon=True)
+ip_detection_thread.start()
 
 app = FastAPI(
     title="Graph Data Capture API",
