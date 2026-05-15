@@ -13,7 +13,6 @@ import threading
 import time
 from sqlalchemy import inspect, text
 import requests
-import socket
 
 # Create tables
 Base.metadata.create_all(bind=engine)
@@ -47,23 +46,6 @@ def ensure_optional_curve_columns():
 
 
 ensure_optional_curve_columns()
-
-
-def get_backend_ip():
-    """Get the outbound IP address of the backend server"""
-    try:
-        response = requests.get('https://api.ipify.org?format=json', timeout=5)
-        ip = response.json().get('ip', 'unknown')
-        return ip
-    except Exception as e:
-        print(f"[DEBUG] Failed to detect backend IP: {e}")
-        return 'unknown'
-
-
-# Log backend IP on startup (for Render.com whitelist purposes)
-backend_ip = get_backend_ip()
-print(f"[STARTUP] Backend outbound IP: {backend_ip}")
-print(f"[STARTUP] Share this IP with DiscoverEE to whitelist in Imunify360: {backend_ip}")
 
 app = FastAPI(
     title="Graph Data Capture API",
@@ -109,12 +91,21 @@ def health_check():
 
 @app.get("/api/debug/backend-ip")
 def debug_backend_ip():
-    """Debug endpoint to check the backend's outbound IP address"""
-    return {
-        "backend_ip": backend_ip,
-        "info": "Use this IP to whitelist in DiscoverEE's Imunify360 settings",
-        "endpoint": "https://www.discoveree.io/vision_upload.php"
-    }
+    """Debug endpoint to get the backend's outbound IP (on-demand, no blocking)"""
+    try:
+        response = requests.get('https://api.ipify.org?format=json', timeout=3)
+        ip = response.json().get('ip', 'unknown')
+        return {
+            "backend_ip": ip,
+            "info": "Use this IP to whitelist in DiscoverEE's Imunify360 settings",
+            "endpoint": "https://www.discoveree.io/vision_upload.php"
+        }
+    except Exception as e:
+        return {
+            "backend_ip": "error",
+            "error": str(e),
+            "info": "Could not detect IP. Check Render dashboard instead."
+        }
 
 
 def parse_company_api_text(raw_text: str):
