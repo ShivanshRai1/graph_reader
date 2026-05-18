@@ -963,30 +963,22 @@ const GraphCapture = () => {
       );
     } catch (error) {
       console.error('AI extraction request failed:', error);
-      
-      // If we had a graph_id in the URL before AI extraction, preserve it for manual capture
+
+      // Show user-friendly error message on screen for 4 seconds, then redirect
+      setIsAiExtractionLoading(false);
       const currentUrlGraphId = String(urlParams.graph_id || '').trim();
+      const errorUrl = new URL(window.location.href);
       if (currentUrlGraphId) {
-        // Case 2 failure: had graph_id, preserve it
-        const errorUrl = new URL(window.location.href);
         errorUrl.searchParams.set('graph_id', currentUrlGraphId);
-        errorUrl.searchParams.delete(AI_DIRECT_CAPTURE_PARAM);
-        navigateWithAiFlowMessage(
-          'AI extraction encountered an issue. You can still manually upload and capture the data.',
-          errorUrl.toString(),
-          1200
-        );
-      } else {
-        // Case 3 failure: no graph_id, just redirect to clear upload state
-        const errorUrl = new URL(window.location.href);
-        errorUrl.searchParams.delete(AI_DIRECT_CAPTURE_PARAM);
-        navigateWithAiFlowMessage(
-          'AI extraction encountered an issue. You can still manually upload and capture the data.',
-          errorUrl.toString(),
-          1200
-        );
       }
+      errorUrl.searchParams.delete(AI_DIRECT_CAPTURE_PARAM);
+      navigateWithAiFlowMessage(
+        "Sorry, we couldn't read your graph automatically. You can still upload the image and capture the data yourself",
+        errorUrl.toString(),
+        4000
+      );
     } finally {
+      // Loading state already cleared above in catch, safe to call again here for non-error paths
       setIsAiExtractionLoading(false);
     }
   };
