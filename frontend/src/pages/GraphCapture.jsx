@@ -2650,6 +2650,15 @@ const GraphCapture = () => {
       console.log('[DEBUG] No graph_id in URL params, skipping fetch');
       return;
     }
+
+    // Skip auto-fetch if there's a pending capture from AI extraction (Case 3)
+    const pendingCaptureKey = 'ai_pending_capture_image';
+    const pendingCapture = sessionStorage.getItem(pendingCaptureKey);
+    if (pendingCapture) {
+      console.log('[DEBUG] Pending AI capture exists, skipping auto-fetch to show upload interface');
+      return;
+    }
+
     console.log('[DEBUG] Fetching graph_id:', graphId);
     const fetchGraphById = async () => {
       try {
