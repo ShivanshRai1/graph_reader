@@ -907,8 +907,8 @@ const GraphCapture = () => {
         refreshUrl.searchParams.delete(AI_DIRECT_CAPTURE_PARAM);
         navigateWithAiFlowMessage(
           isRepeatedReturnedGraphId
-            ? 'AI returned the same graph ID again. Reusing the existing graph context and redirecting to graph capture...'
-            : 'Graph ID does not exist in URL. Redirecting to graph capture page with returned graph ID...',
+            ? 'AI returned the same graph ID again. Reusing the existing graph context and redirecting to upload page...'
+            : 'New graph created from AI extraction. Redirecting to upload page to capture data...',
           refreshUrl.toString(),
           isRepeatedReturnedGraphId ? 2500 : 900
         );
@@ -928,7 +928,7 @@ const GraphCapture = () => {
 
       if (!hasCapturedCurves) {
         console.log('=== AI EXTRACTION DECISION ===', {
-          action: 'reload_for_capture',
+          action: 'redirect_for_capture',
           reason: 'graph_id exists but has no captured curves yet',
           graph_id: graphIdForFlow,
         });
@@ -936,9 +936,9 @@ const GraphCapture = () => {
         persistAiPendingCapture(imageBase64, source, graphIdForFlow);
         redirectUrl.searchParams.delete(AI_DIRECT_CAPTURE_PARAM);
         navigateWithAiFlowMessage(
-          'Graph ID exists, but no captured curves were found. Redirecting to the graph capture page...',
+          'Graph found. Redirecting to upload page to capture data...',
           redirectUrl.toString(),
-          4500
+          900
         );
         return;
       }
@@ -956,7 +956,29 @@ const GraphCapture = () => {
       );
     } catch (error) {
       console.error('AI extraction request failed:', error);
-      alert(`Failed to send image for AI extraction: ${error?.message || 'Unknown error'}`);
+      
+      // If we had a graph_id in the URL before AI extraction, preserve it for manual capture
+      const currentUrlGraphId = String(urlParams.graph_id || '').trim();
+      if (currentUrlGraphId) {
+        // Case 2 failure: had graph_id, preserve it
+        const errorUrl = new URL(window.location.href);
+        errorUrl.searchParams.set('graph_id', currentUrlGraphId);
+        errorUrl.searchParams.delete(AI_DIRECT_CAPTURE_PARAM);
+        navigateWithAiFlowMessage(
+          'AI extraction encountered an issue. You can still manually upload and capture the data.',
+          errorUrl.toString(),
+          1200
+        );
+      } else {
+        // Case 3 failure: no graph_id, just redirect to clear upload state
+        const errorUrl = new URL(window.location.href);
+        errorUrl.searchParams.delete(AI_DIRECT_CAPTURE_PARAM);
+        navigateWithAiFlowMessage(
+          'AI extraction encountered an issue. You can still manually upload and capture the data.',
+          errorUrl.toString(),
+          1200
+        );
+      }
     } finally {
       setIsAiExtractionLoading(false);
     }
