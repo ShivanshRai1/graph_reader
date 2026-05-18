@@ -951,7 +951,7 @@ const GraphCapture = () => {
 
       redirectUrl.searchParams.delete(AI_DIRECT_CAPTURE_PARAM);
       navigateWithAiFlowMessage(
-        'Curves already exist. Redirecting to curves listing page...',
+        'Graph found with existing curves. Redirecting to graph capture page...',
         redirectUrl.toString()
       );
     } catch (error) {
