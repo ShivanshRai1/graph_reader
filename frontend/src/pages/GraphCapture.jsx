@@ -1028,6 +1028,8 @@ const GraphCapture = () => {
   const [aiFlowStatusMessage, setAiFlowStatusMessage] = useState('');
   const [restoredPendingCapture, setRestoredPendingCapture] = useState(null);
   const [hasPendingCaptureChoice, setHasPendingCaptureChoice] = useState(false);
+  // Capture pending state at render time (before any effects consume sessionStorage)
+  const hasPendingAiCaptureOnMountRef = useRef(Boolean(sessionStorage.getItem(AI_PENDING_CAPTURE_STORAGE_KEY)));
   const [isInitialGraphFetchPending, setIsInitialGraphFetchPending] = useState(
     () => Boolean(new URLSearchParams(window.location.search).get('graph_id'))
   );
@@ -2651,16 +2653,10 @@ const GraphCapture = () => {
       return;
     }
 
-    // Skip auto-fetch if there's a pending capture from AI extraction (Case 3) - check both React state and sessionStorage
-    if (restoredPendingCapture) {
-      console.log('[DEBUG] Restored pending capture exists, skipping auto-fetch to show upload interface for Case 3');
-      return;
-    }
-    
-    const pendingCaptureKey = 'ai_pending_capture_image';
-    const pendingCapture = sessionStorage.getItem(pendingCaptureKey);
-    if (pendingCapture) {
-      console.log('[DEBUG] Pending AI capture in sessionStorage, skipping auto-fetch to show upload interface');
+    // Skip auto-fetch if there was a pending capture from AI extraction when component mounted (Case 3)
+    // This ref is set at render time before any effects consume sessionStorage
+    if (hasPendingAiCaptureOnMountRef.current) {
+      console.log('[DEBUG] Pending AI capture on mount, skipping auto-fetch to show upload interface for Case 3');
       return;
     }
 
@@ -2922,7 +2918,7 @@ const GraphCapture = () => {
       }
     };
     fetchGraphById().finally(() => setIsInitialGraphFetchPending(false));
-  }, [restoredPendingCapture]); // Don't auto-fetch if pending capture from AI exists (Case 3)
+  }, []); // graphId is parsed from URL directly
 
   // Auto-load graph context (image + axis settings) but keep points empty until View/Edit is clicked.
   useEffect(() => {
