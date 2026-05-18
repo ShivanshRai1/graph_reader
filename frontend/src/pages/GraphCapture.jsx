@@ -776,15 +776,14 @@ const GraphCapture = () => {
     console.log('[DEBUG] Sending base64 string of length:', rawBase64.length, 'first 100 chars:', rawBase64.substring(0, 100));
 
     setIsAiExtractionLoading(true);
-
-    // Debug: Allow forcing error via URL parameter for testing failure case
-    const urlSearchParams = new URLSearchParams(window.location.search);
-    if (urlSearchParams.get('ai_force_error') === 'true') {
-      console.log('[DEBUG] Forced error mode enabled - simulating AI extraction failure');
-      throw new Error('Simulated AI extraction failure for testing purposes');
-    }
-
     try {
+      // Debug: Allow forcing error via URL parameter for testing failure case
+      const urlSearchParams = new URLSearchParams(window.location.search);
+      if (urlSearchParams.get('ai_force_error') === 'true') {
+        console.log('[DEBUG] Forced error mode enabled - simulating AI extraction failure');
+        throw new Error('Simulated AI extraction failure for testing purposes');
+      }
+
       const response = await fetch(relayUrl, {
         method: 'POST',
         headers: {
