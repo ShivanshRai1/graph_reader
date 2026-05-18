@@ -2651,11 +2651,16 @@ const GraphCapture = () => {
       return;
     }
 
-    // Skip auto-fetch if there's a pending capture from AI extraction (Case 3)
+    // Skip auto-fetch if there's a pending capture from AI extraction (Case 3) - check both React state and sessionStorage
+    if (restoredPendingCapture) {
+      console.log('[DEBUG] Restored pending capture exists, skipping auto-fetch to show upload interface for Case 3');
+      return;
+    }
+    
     const pendingCaptureKey = 'ai_pending_capture_image';
     const pendingCapture = sessionStorage.getItem(pendingCaptureKey);
     if (pendingCapture) {
-      console.log('[DEBUG] Pending AI capture exists, skipping auto-fetch to show upload interface');
+      console.log('[DEBUG] Pending AI capture in sessionStorage, skipping auto-fetch to show upload interface');
       return;
     }
 
@@ -2917,7 +2922,7 @@ const GraphCapture = () => {
       }
     };
     fetchGraphById().finally(() => setIsInitialGraphFetchPending(false));
-  }, []); // graphId is parsed from URL directly
+  }, [restoredPendingCapture]); // Don't auto-fetch if pending capture from AI exists (Case 3)
 
   // Auto-load graph context (image + axis settings) but keep points empty until View/Edit is clicked.
   useEffect(() => {
