@@ -799,6 +799,13 @@ const GraphCapture = () => {
   }, []);
 
   const handleAiExtensionCapture = async (imageBase64, source = '') => {
+    // TEST MODE: Check at the very start before anything else runs
+    const _testParams = new URLSearchParams(window.location.search);
+    const _isDualCallTest = _testParams.get('ai_test_dual_call') === 'true';
+    console.log('[TEST MODE EARLY CHECK] window.location.search:', window.location.search);
+    console.log('[TEST MODE EARLY CHECK] ai_test_dual_call value:', _testParams.get('ai_test_dual_call'));
+    console.log('[TEST MODE EARLY CHECK] isDualCallTest:', _isDualCallTest);
+
     const reencodeImageBase64 = async (base64Str) => {
       return new Promise((resolve, reject) => {
         const img = new Image();
@@ -940,7 +947,7 @@ const GraphCapture = () => {
     
     // TEST MODE: If ai_test_dual_call=true, run frontend and backend calls in parallel
     const urlSearchParams = new URLSearchParams(window.location.search);
-    const isDualCallTest = urlSearchParams.get('ai_test_dual_call') === 'true';
+    const isDualCallTest = _isDualCallTest; // Evaluated at very start of function
     
     
     if (isDualCallTest) {
