@@ -61,28 +61,33 @@ exports.handler = async function (event) {
       };
     }
 
-    // Build FormData to send to DiscoverEE (multipart/form-data)
-    const formData = new FormData();
-    const skipKeys = new Set(['base64image']);
+    // Build the normalized payload (all values as strings, matching Python backend)
+    const normalizedPayload = {};
     for (const [key, value] of Object.entries(payload)) {
-      if (!skipKeys.has(key)) {
-        formData.append(key, String(value == null ? '' : value));
-      }
+      normalizedPayload[key] = value == null ? '' : String(value);
     }
-    formData.append('base64image', base64image);
+    normalizedPayload['base64image'] = base64image;
+
+    if (!normalizedPayload['action']) {
+      normalizedPayload['action'] = 'graphcapture';
+    }
 
     const requestHeaders = {
       Accept: 'application/json, text/plain, */*',
       'Accept-Language': 'en-US,en;q=0.9',
+      'Accept-Encoding': 'gzip, deflate, br',
+      'Content-Type': 'application/json',
       'User-Agent':
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
       Origin: 'https://graph-capture.netlify.app',
       Referer: 'https://graph-capture.netlify.app/',
+      Connection: 'keep-alive',
+      'Cache-Control': 'max-age=0',
     };
 
     const response = await fetch(PRIMARY_URL, {
       method: 'POST',
-      body: formData,
+      body: JSON.stringify(normalizedPayload),
       headers: requestHeaders,
     });
 
