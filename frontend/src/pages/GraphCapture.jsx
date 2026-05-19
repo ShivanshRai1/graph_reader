@@ -819,6 +819,54 @@ const GraphCapture = () => {
       }, delayMs);
     };
 
+    // TEST MODE: Make direct frontend call to AI API (for testing if frontend bypasses Imunify360)
+    const testDirectFrontendCall = async (base64Image) => {
+      console.group('%c[TEST] Direct Frontend Call to vision_upload.php', 'color: #FF6B00; font-weight: bold; font-size: 12px;');
+      const formData = new FormData();
+      formData.append('image', base64Image);
+      
+      const startTime = performance.now();
+      try {
+        console.log('Sending direct request from browser to: https://www.discoveree.io/vision_upload.php');
+        const response = await fetch('https://www.discoveree.io/vision_upload.php', {
+          method: 'POST',
+          body: formData,
+          mode: 'cors',
+        });
+        
+        const duration = (performance.now() - startTime).toFixed(2);
+        const contentType = response.headers.get('content-type');
+        const responseText = await response.text();
+        
+        console.log('%c✅ Frontend Request Completed', 'color: #4CAF50; font-weight: bold;');
+        console.log('Status:', response.status);
+        console.log('Content-Type:', contentType);
+        console.log('Duration:', duration, 'ms');
+        console.log('Response length:', responseText.length);
+        console.log('Response preview:', responseText.substring(0, 500));
+        
+        if ((contentType || '').includes('text/html')) {
+          console.log('%c❌ BLOCKED: HTML response (likely Imunify360)', 'color: #F44336;');
+        } else if ((contentType || '').includes('application/json')) {
+          console.log('%c✅ SUCCESS: JSON response', 'color: #4CAF50;');
+          const parsed = JSON.parse(responseText);
+          console.log('Parsed response:', parsed);
+          return { success: true, data: parsed, status: response.status };
+        }
+        
+        return { success: false, status: response.status, contentType, responseLength: responseText.length };
+      } catch (error) {
+        const duration = (performance.now() - startTime).toFixed(2);
+        console.log('%c❌ Frontend Request Failed', 'color: #F44336; font-weight: bold;');
+        console.log('Error type:', error.name);
+        console.log('Error message:', error.message);
+        console.log('Duration:', duration, 'ms');
+        return { success: false, error: error.message };
+      } finally {
+        console.groupEnd();
+      }
+    };
+
     setAiFlowStatusMessage('');
     // Re-encode image via Canvas to create guaranteed-valid base64 from actual image pixels
     let freshBase64 = imageBase64;
@@ -871,9 +919,37 @@ const GraphCapture = () => {
     console.log('[DEBUG] Sending base64 string of length:', rawBase64.length, 'first 100 chars:', rawBase64.substring(0, 100));
 
     setIsAiExtractionLoading(true);
+    
+    // TEST MODE: If ai_test_dual_call=true, run frontend and backend calls in parallel
+    const urlSearchParams = new URLSearchParams(window.location.search);
+    const isDualCallTest = urlSearchParams.get('ai_test_dual_call') === 'true';
+    if (isDualCallTest) {
+      console.group('%c[TEST MODE] Running Dual API Calls (Frontend + Backend)', 'color: #FF6B00; font-weight: bold; font-size: 14px;');
+      console.log('Starting parallel frontend and backend calls for comparison...');
+      
+      try {
+        // Run both calls in parallel
+        const [frontendResult, backendResult] = await Promise.allSettled([
+          testDirectFrontendCall(rawBase64),
+          fetch(relayUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestPayload),
+          }).then(r => ({ status: r.status, contentType: r.headers.get('content-type'), text: r.text() }))
+        ]);
+        
+        console.group('%c[TEST RESULTS COMPARISON]', 'color: #FF6B00; font-weight: bold; font-size: 12px;');
+        console.log('%cFrontend Result:', 'color: #2196F3; font-weight: bold;', frontendResult);
+        console.log('%cBackend Result:', 'color: #2196F3; font-weight: bold;', backendResult);
+        console.groupEnd();
+      } catch (testErr) {
+        console.error('[TEST] Error during dual call test:', testErr);
+      }
+      console.groupEnd();
+    }
+    
     try {
       // Debug: Allow forcing error via URL parameter for testing failure case
-      const urlSearchParams = new URLSearchParams(window.location.search);
       if (urlSearchParams.get('ai_force_error') === 'true') {
         console.log('[DEBUG] Forced error mode enabled - simulating AI extraction failure');
         throw new Error('Simulated AI extraction failure for testing purposes');
