@@ -72,10 +72,16 @@ exports.handler = async function (event) {
       normalizedPayload['action'] = 'graphcapture';
     }
 
-    // Send as multipart/form-data so PHP reads from $_POST (JSON leaves $_POST empty)
+    // Send as multipart/form-data so PHP reads from $_POST
+    // vision_upload.php may require the full data URI prefix for its validation
     const formData = new FormData();
     for (const [key, value] of Object.entries(normalizedPayload)) {
-      formData.append(key, value);
+      if (key === 'base64image') {
+        // Restore the data URI prefix that was stripped by the frontend
+        formData.append(key, `data:image/png;base64,${value}`);
+      } else {
+        formData.append(key, value);
+      }
     }
 
     const requestHeaders = {
