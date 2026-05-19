@@ -771,6 +771,15 @@ const GraphCapture = () => {
     clearAiExtractedMetadata();
   }, []);
 
+  // Restore AI pending capture image on component mount
+  useEffect(() => {
+    const pending = consumeAiPendingCapture();
+    if (!pending || !pending.imageBase64) return;
+
+    console.log('[AI PENDING CAPTURE] Restoring captured image to display form view');
+    setUploadedImage(pending.imageBase64);
+  }, []);
+
   const handleAiExtensionCapture = async (imageBase64, source = '') => {
     const reencodeImageBase64 = async (base64Str) => {
       return new Promise((resolve, reject) => {
