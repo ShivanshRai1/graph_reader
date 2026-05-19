@@ -713,6 +713,24 @@ const GraphCapture = () => {
     restoreAndLogAiExtractionFlow();
   }, []);
 
+  // Display stored dual-call test results from previous test run
+  useEffect(() => {
+    const storedResults = sessionStorage.getItem('ai_test_dual_call_results');
+    if (!storedResults) return;
+    
+    try {
+      const results = JSON.parse(storedResults);
+      console.group('%c[TEST MODE] Previous Dual Call Test Results', 'color: #FF6B00; font-weight: bold; font-size: 12px;');
+      console.log('Timestamp:', results.timestamp);
+      console.log('%cFrontend Direct Call Result:', 'color: #2196F3; font-weight: bold;', results.frontend);
+      console.log('%cBackend Relay Result:', 'color: #2196F3; font-weight: bold;', results.backend);
+      console.log('%c💡 TIP: Copy these results to compare frontend vs backend behavior', 'color: #FFC107; font-weight: bold;');
+      console.groupEnd();
+    } catch (err) {
+      console.warn('[TEST MODE] Failed to parse stored test results:', err);
+    }
+  }, []);
+
   // Restore and apply AI extracted metadata to form on component mount
   useEffect(() => {
     const metadata = restoreAiExtractedMetadata();
@@ -926,6 +944,8 @@ const GraphCapture = () => {
     if (isDualCallTest) {
       console.group('%c[TEST MODE] Running Dual API Calls (Frontend + Backend)', 'color: #FF6B00; font-weight: bold; font-size: 14px;');
       console.log('Starting parallel frontend and backend calls for comparison...');
+      console.log('Test results will be stored in sessionStorage and persist after navigation.');
+      console.log('To retrieve results after navigation, run: JSON.parse(sessionStorage.getItem("ai_test_dual_call_results"))');
       
       try {
         // Run both calls in parallel
@@ -938,12 +958,24 @@ const GraphCapture = () => {
           }).then(r => ({ status: r.status, contentType: r.headers.get('content-type'), text: r.text() }))
         ]);
         
+        const testResults = {
+          timestamp: new Date().toISOString(),
+          frontend: frontendResult,
+          backend: backendResult,
+        };
+        
+        // Store results in sessionStorage so they persist after navigation
+        window.sessionStorage.setItem('ai_test_dual_call_results', JSON.stringify(testResults, null, 2));
+        
         console.group('%c[TEST RESULTS COMPARISON]', 'color: #FF6B00; font-weight: bold; font-size: 12px;');
         console.log('%cFrontend Result:', 'color: #2196F3; font-weight: bold;', frontendResult);
         console.log('%cBackend Result:', 'color: #2196F3; font-weight: bold;', backendResult);
+        console.log('%c✅ Results stored in sessionStorage as: ai_test_dual_call_results', 'color: #4CAF50; font-weight: bold;');
+        console.log('%cTo view after navigation, run: JSON.parse(sessionStorage.getItem("ai_test_dual_call_results"))', 'color: #4CAF50;');
         console.groupEnd();
       } catch (testErr) {
         console.error('[TEST] Error during dual call test:', testErr);
+        window.sessionStorage.setItem('ai_test_dual_call_error', String(testErr));
       }
       console.groupEnd();
     }
