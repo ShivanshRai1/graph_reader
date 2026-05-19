@@ -941,6 +941,12 @@ const GraphCapture = () => {
     // TEST MODE: If ai_test_dual_call=true, run frontend and backend calls in parallel
     const urlSearchParams = new URLSearchParams(window.location.search);
     const isDualCallTest = urlSearchParams.get('ai_test_dual_call') === 'true';
+    
+    console.log('%c[TEST MODE CHECK]', 'color: #FF6B00; font-weight: bold;');
+    console.log('URL search params:', window.location.search);
+    console.log('ai_test_dual_call parameter value:', urlSearchParams.get('ai_test_dual_call'));
+    console.log('isDualCallTest:', isDualCallTest);
+    
     if (isDualCallTest) {
       console.group('%c[TEST MODE] Running Dual API Calls (Frontend + Backend)', 'color: #FF6B00; font-weight: bold; font-size: 14px;');
       console.log('Starting parallel frontend and backend calls for comparison...');
@@ -968,11 +974,19 @@ const GraphCapture = () => {
           backend: backendResult,
         };
         
+        console.log('%c[TEST] Results object created:', 'color: #4CAF50; font-weight: bold;', testResults);
+        
         // Store results in sessionStorage so they persist after navigation
         try {
-          window.sessionStorage.setItem('ai_test_dual_call_results', JSON.stringify(testResults, null, 2));
+          const jsonStr = JSON.stringify(testResults, null, 2);
+          console.log('%c[TEST] Attempting to store JSON:', 'color: #4CAF50; font-weight: bold;', 'length=' + jsonStr.length);
+          window.sessionStorage.setItem('ai_test_dual_call_results', jsonStr);
+          
+          // Verify storage worked
+          const retrieved = window.sessionStorage.getItem('ai_test_dual_call_results');
+          console.log('%c[TEST] ✅ Storage verification - Retrieved from sessionStorage:', 'color: #4CAF50; font-weight: bold;', retrieved ? 'SUCCESS - ' + retrieved.length + ' chars' : 'FAILED - null');
         } catch (storageErr) {
-          console.error('[TEST] Failed to store results in sessionStorage:', storageErr);
+          console.error('%c[TEST] ❌ Failed to store results in sessionStorage:', 'color: #F44336; font-weight: bold;', storageErr);
         }
         
         console.group('%c[TEST RESULTS COMPARISON]', 'color: #FF6B00; font-weight: bold; font-size: 12px;');
