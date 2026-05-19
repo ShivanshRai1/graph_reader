@@ -2761,6 +2761,14 @@ const GraphCapture = () => {
       return;
     }
 
+    // Skip auto-fetch if there's a pending AI capture on mount (Cases 2 & 3)
+    // This prevents loading existing curves from DB and keeps user in manual capture mode
+    // The ref is set at render time before effects run, so it's reliable even if sessionStorage is modified
+    if (hasPendingAiCaptureOnMountRef.current) {
+      console.log('[DEBUG] Pending AI capture detected on mount, skipping auto-fetch to stay in manual capture mode');
+      return;
+    }
+
     console.log('[DEBUG] Fetching graph_id:', graphId);
     const fetchGraphById = async () => {
       try {
