@@ -919,7 +919,7 @@ const GraphCapture = () => {
       graph_id: String(urlParams.graph_id || ''),
       discoveree_cat_id: String(urlParams.discoveree_cat_id || ''),
       partno: String(urlParams.partno || ''),
-      manf: String(urlParams.manufacturer || ''),
+      manf: String(urlParams.manf || urlParams.manufacturer || ''),
       manufacturer: String(urlParams.manufacturer || ''),
       username: String(urlParams.username || ''),
       graph_title: String(urlParams.graph_title || ''),
@@ -1021,9 +1021,11 @@ const GraphCapture = () => {
           netlifyRawText.includes('<!DOCTYPE') ||
           netlifyRawText.includes('<html')
         );
-        if (!netlifyResponse.ok || netlifyIsImunify) {
+        const netlifyIsInvalidBase64 = typeof netlifyRawText === 'string' &&
+          netlifyRawText.toLowerCase().includes('invalid base64 format');
+        if (!netlifyResponse.ok || netlifyIsImunify || netlifyIsInvalidBase64) {
           netlifyBlocked = true;
-          console.warn('[RELAY] Netlify function blocked or failed (status:', netlifyResponse.status, ', imunify:', netlifyIsImunify, '). Falling back to Render relay.');
+          console.warn('[RELAY] Netlify function blocked or failed (status:', netlifyResponse.status, ', imunify:', netlifyIsImunify, ', invalidBase64:', netlifyIsInvalidBase64, '). Falling back to Render relay.');
         } else {
           response = new Response(JSON.stringify(netlifyResult), {
             status: netlifyResponse.status,
@@ -3804,7 +3806,7 @@ const GraphCapture = () => {
           discoveree_cat_id: urlParams.discoveree_cat_id ? String(urlParams.discoveree_cat_id) : '',
           identifier: resolvedOutgoingIdentifier,
           partno: urlParams.partno || '',
-          manf: urlParams.manufacturer || graphConfig.manufacturer || '',
+          manf: urlParams.manf || urlParams.manufacturer || graphConfig.manufacturer || '',
           manufacturer: urlParams.manufacturer || graphConfig.manufacturer || '',
           graph_title: graphConfig.graphTitle || urlParams.graph_title || '',
           curve_title: urlParams.curve_title || graphConfig.curveName || '',
