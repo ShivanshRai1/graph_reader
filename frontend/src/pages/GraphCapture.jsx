@@ -1009,15 +1009,11 @@ const GraphCapture = () => {
       const graphIdForFlow = currentUrlGraphId || validGraphId;
 
       if (!currentUrlGraphId) {
-        const previousReturnedGraphId = getLastAiReturnedGraphId();
-        const isRepeatedReturnedGraphId = previousReturnedGraphId && previousReturnedGraphId === graphIdForFlow;
         persistLastAiReturnedGraphId(graphIdForFlow);
 
         console.log('=== AI EXTRACTION DECISION ===', {
           action: 'redirect_with_graph_id_and_metadata',
-          reason: isRepeatedReturnedGraphId
-            ? 'Missing graph_id in URL; AI returned same graph_id again, reusing existing graph context'
-            : 'Missing graph_id in URL; using graph_id returned by AI extraction',
+          reason: 'Missing graph_id in URL; using graph_id returned by AI extraction',
           graph_id: graphIdForFlow,
         });
 
@@ -1027,11 +1023,9 @@ const GraphCapture = () => {
         refreshUrl.searchParams.set('graph_id', graphIdForFlow);
         refreshUrl.searchParams.delete(AI_DIRECT_CAPTURE_PARAM);
         navigateWithAiFlowMessage(
-          isRepeatedReturnedGraphId
-            ? 'AI returned the same graph ID again. Reusing the existing graph context and redirecting to upload page...'
-            : 'New graph created from AI extraction. Redirecting to upload page to capture data...',
+          'New graph created from AI extraction. Redirecting to graph capture page with pre-filled data...',
           refreshUrl.toString(),
-          isRepeatedReturnedGraphId ? 2500 : 900
+          900
         );
         return;
       }
