@@ -7,6 +7,10 @@
 
 const PRIMARY_URL = 'https://www.discoveree.io/vision_upload.php';
 
+function toBase64Uint8Array(base64) {
+  return Uint8Array.from(Buffer.from(base64, 'base64'));
+}
+
 function parseJsonFromText(rawText) {
   try {
     const objectStart = rawText.indexOf('{');
@@ -29,6 +33,41 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'Content-Type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
+
+function hasValidGraphId(parsedResponse, rawText) {
+  if (parsedResponse && typeof parsedResponse === 'object') {
+    const directGraphId = parsedResponse.graph_id ?? parsedResponse.graphId;
+    if (directGraphId !== undefined && directGraphId !== null && String(directGraphId).trim() !== '') {
+      return true;
+    }
+  }
+
+  const raw = String(rawText || '');
+  return /"graph_id"\s*:\s*"?\d+"?/i.test(raw);
+}
+
+async function postAttempt({ body, requestHeaders, mode }) {
+  const response = await fetch(PRIMARY_URL, {
+    method: 'POST',
+    body,
+    headers: requestHeaders,
+  });
+
+  const rawText = await response.text();
+  const contentType = response.headers.get('content-type') || '';
+  const parsedResponse = parseJsonFromText(rawText);
+
+  return {
+    mode,
+    target_url: PRIMARY_URL,
+    upstream_status: response.status,
+    upstream_ok: response.ok,
+    content_type: contentType,
+    raw_text: rawText,
+    response: parsedResponse,
+    valid_graph_id: hasValidGraphId(parsedResponse, rawText),
+  };
+}
 
 exports.handler = async function (event) {
   // Handle CORS preflight
@@ -72,18 +111,6 @@ exports.handler = async function (event) {
       normalizedPayload['action'] = 'graphcapture';
     }
 
-    // Send as multipart/form-data so PHP reads from $_POST
-    // vision_upload.php may require the full data URI prefix for its validation
-    const formData = new FormData();
-    for (const [key, value] of Object.entries(normalizedPayload)) {
-      if (key === 'base64image') {
-        // Restore the data URI prefix that was stripped by the frontend
-        formData.append(key, `data:image/png;base64,${value}`);
-      } else {
-        formData.append(key, value);
-      }
-    }
-
     const requestHeaders = {
       Accept: 'application/json, text/plain, */*',
       'Accept-Language': 'en-US,en;q=0.9',
@@ -95,32 +122,74 @@ exports.handler = async function (event) {
       'Cache-Control': 'max-age=0',
     };
 
-    const response = await fetch(PRIMARY_URL, {
-      method: 'POST',
-      body: formData,
-      headers: requestHeaders,
-    });
+    const attempts = [];
 
-    const rawText = await response.text();
-    const contentType = response.headers.get('content-type') || '';
-    const parsedResponse = parseJsonFromText(rawText);
+    const formDataRaw = new FormData();
+    for (const [key, value] of Object.entries(normalizedPayload)) {
+      formDataRaw.append(key, value);
+    }
+    attempts.push(await postAttempt({ body: formDataRaw, requestHeaders, mode: 'multipart_raw_base64' }));
 
-    const attemptResult = {
-      target_url: PRIMARY_URL,
-      upstream_status: response.status,
-      upstream_ok: response.ok,
-      content_type: contentType,
-      raw_text: rawText,
-      response: parsedResponse,
-    };
+    const firstAttempt = attempts[0];
+    if (!firstAttempt.valid_graph_id) {
+      const formDataPrefixed = new FormData();
+      for (const [key, value] of Object.entries(normalizedPayload)) {
+        if (key === 'base64image') {
+          formDataPrefixed.append(key, `data:image/png;base64,${value}`);
+        } else {
+          formDataPrefixed.append(key, value);
+        }
+      }
+      attempts.push(await postAttempt({ body: formDataPrefixed, requestHeaders, mode: 'multipart_data_uri_base64' }));
+    }
+
+    const secondAttempt = attempts[attempts.length - 1];
+    if (!secondAttempt.valid_graph_id) {
+      try {
+        const imageBytes = toBase64Uint8Array(base64image);
+        const imageBlob = new Blob([imageBytes], { type: 'image/png' });
+
+        const formDataFile = new FormData();
+        for (const [key, value] of Object.entries(normalizedPayload)) {
+          if (key !== 'base64image') {
+            formDataFile.append(key, value);
+          }
+        }
+        formDataFile.append('base64image', base64image);
+        formDataFile.append('image', imageBlob, 'capture.png');
+        formDataFile.append('file', imageBlob, 'capture.png');
+        attempts.push(await postAttempt({ body: formDataFile, requestHeaders, mode: 'multipart_with_file_blob' }));
+      } catch (fileAttemptError) {
+        attempts.push({
+          mode: 'multipart_with_file_blob',
+          target_url: PRIMARY_URL,
+          upstream_status: 500,
+          upstream_ok: false,
+          content_type: 'application/json',
+          raw_text: `File blob conversion failed: ${fileAttemptError.message}`,
+          response: { error: `File blob conversion failed: ${fileAttemptError.message}` },
+          valid_graph_id: false,
+        });
+      }
+    }
+
+    let finalAttempt = attempts.find((attempt) => attempt.valid_graph_id);
+    if (!finalAttempt) {
+      finalAttempt = attempts[attempts.length - 1] || firstAttempt;
+    }
 
     const result = {
-      ...attemptResult,
-      attempts: [attemptResult],
+      target_url: finalAttempt.target_url,
+      upstream_status: finalAttempt.upstream_status,
+      upstream_ok: finalAttempt.upstream_ok,
+      content_type: finalAttempt.content_type,
+      raw_text: finalAttempt.raw_text,
+      response: finalAttempt.response,
+      attempts,
     };
 
     return {
-      statusCode: response.status,
+      statusCode: finalAttempt.upstream_status,
       headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
       body: JSON.stringify(result),
     };
