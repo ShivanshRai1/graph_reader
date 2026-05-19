@@ -145,6 +145,20 @@ exports.handler = async function (event) {
 
     const secondAttempt = attempts[attempts.length - 1];
     if (!secondAttempt.valid_graph_id) {
+      const formDataAltImageKeys = new FormData();
+      for (const [key, value] of Object.entries(normalizedPayload)) {
+        if (key !== 'base64image') {
+          formDataAltImageKeys.append(key, value);
+        }
+      }
+      formDataAltImageKeys.append('base64image', base64image);
+      formDataAltImageKeys.append('graph_img', `data:image/png;base64,${base64image}`);
+      formDataAltImageKeys.append('image_data', base64image);
+      attempts.push(await postAttempt({ body: formDataAltImageKeys, requestHeaders, mode: 'multipart_alt_image_keys' }));
+    }
+
+    const thirdAttempt = attempts[attempts.length - 1];
+    if (!thirdAttempt.valid_graph_id) {
       try {
         const imageBytes = toBase64Uint8Array(base64image);
         const imageBlob = new Blob([imageBytes], { type: 'image/png' });
@@ -171,6 +185,68 @@ exports.handler = async function (event) {
           valid_graph_id: false,
         });
       }
+    }
+
+    const fourthAttempt = attempts[attempts.length - 1];
+    if (!fourthAttempt.valid_graph_id) {
+      const urlEncodedRaw = new URLSearchParams();
+      for (const [key, value] of Object.entries(normalizedPayload)) {
+        urlEncodedRaw.set(key, value);
+      }
+      attempts.push(await postAttempt({
+        body: urlEncodedRaw.toString(),
+        requestHeaders: {
+          ...requestHeaders,
+          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        },
+        mode: 'urlencoded_raw_base64',
+      }));
+    }
+
+    const fifthAttempt = attempts[attempts.length - 1];
+    if (!fifthAttempt.valid_graph_id) {
+      const urlEncodedPrefixed = new URLSearchParams();
+      for (const [key, value] of Object.entries(normalizedPayload)) {
+        if (key === 'base64image') {
+          urlEncodedPrefixed.set(key, `data:image/png;base64,${value}`);
+        } else {
+          urlEncodedPrefixed.set(key, value);
+        }
+      }
+      attempts.push(await postAttempt({
+        body: urlEncodedPrefixed.toString(),
+        requestHeaders: {
+          ...requestHeaders,
+          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        },
+        mode: 'urlencoded_data_uri_base64',
+      }));
+    }
+
+    const sixthAttempt = attempts[attempts.length - 1];
+    if (!sixthAttempt.valid_graph_id) {
+      const jsonRawPayload = { ...normalizedPayload, base64image };
+      attempts.push(await postAttempt({
+        body: JSON.stringify(jsonRawPayload),
+        requestHeaders: {
+          ...requestHeaders,
+          'Content-Type': 'application/json',
+        },
+        mode: 'json_raw_base64',
+      }));
+    }
+
+    const seventhAttempt = attempts[attempts.length - 1];
+    if (!seventhAttempt.valid_graph_id) {
+      const jsonPrefixedPayload = { ...normalizedPayload, base64image: `data:image/png;base64,${base64image}` };
+      attempts.push(await postAttempt({
+        body: JSON.stringify(jsonPrefixedPayload),
+        requestHeaders: {
+          ...requestHeaders,
+          'Content-Type': 'application/json',
+        },
+        mode: 'json_data_uri_base64',
+      }));
     }
 
     let finalAttempt = attempts.find((attempt) => attempt.valid_graph_id);
