@@ -460,6 +460,34 @@ const AI_DIRECT_CAPTURE_PARAM = 'ai_direct_capture';
 const AI_PENDING_CAPTURE_STORAGE_KEY = 'ai_pending_capture_image';
 const AI_PENDING_CAPTURE_TTL_MS = 5 * 60 * 1000;
 const AI_LAST_RETURNED_GRAPH_ID_KEY = 'ai_last_returned_graph_id';
+const AI_EXTRACTED_METADATA_KEY = 'ai_extracted_metadata';
+
+const persistAiExtractedMetadata = (metadata) => {
+  try {
+    window.sessionStorage.setItem(AI_EXTRACTED_METADATA_KEY, JSON.stringify(metadata));
+  } catch (error) {
+    console.warn('Unable to persist AI extracted metadata.', error);
+  }
+};
+
+const restoreAiExtractedMetadata = () => {
+  try {
+    const raw = window.sessionStorage.getItem(AI_EXTRACTED_METADATA_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (error) {
+    console.warn('Unable to restore AI extracted metadata.', error);
+    return null;
+  }
+};
+
+const clearAiExtractedMetadata = () => {
+  try {
+    window.sessionStorage.removeItem(AI_EXTRACTED_METADATA_KEY);
+  } catch (error) {
+    console.warn('Unable to clear AI extracted metadata.', error);
+  }
+};
 
 const persistAiPendingCapture = (imageBase64, source, graphId = '') => {
   try {
@@ -685,6 +713,64 @@ const GraphCapture = () => {
     restoreAndLogAiExtractionFlow();
   }, []);
 
+  // Restore and apply AI extracted metadata to form on component mount
+  useEffect(() => {
+    const metadata = restoreAiExtractedMetadata();
+    if (!metadata) return;
+
+    console.log('[AI METADATA] Restoring extracted metadata to form:', metadata);
+
+    // Apply metadata to graphConfig state
+    setGraphConfig((prev) => {
+      const updated = { ...prev };
+
+      if (metadata.graphTitle) {
+        updated.graphTitle = metadata.graphTitle;
+      }
+      if (metadata.curveName) {
+        updated.curveName = metadata.curveName;
+      }
+      if (metadata.xTitle) {
+        updated.xTitle = metadata.xTitle;
+      }
+      if (metadata.yTitle) {
+        updated.yTitle = metadata.yTitle;
+      }
+      if (metadata.xScale) {
+        updated.xScale = metadata.xScale;
+      }
+      if (metadata.yScale) {
+        updated.yScale = metadata.yScale;
+      }
+      if (metadata.xUnit) {
+        updated.xUnit = metadata.xUnit;
+      }
+      if (metadata.yUnit) {
+        updated.yUnit = metadata.yUnit;
+      }
+      if (metadata.xMin !== '' && metadata.xMin !== null && metadata.xMin !== undefined) {
+        updated.xMin = metadata.xMin;
+      }
+      if (metadata.xMax !== '' && metadata.xMax !== null && metadata.xMax !== undefined) {
+        updated.xMax = metadata.xMax;
+      }
+      if (metadata.yMin !== '' && metadata.yMin !== null && metadata.yMin !== undefined) {
+        updated.yMin = metadata.yMin;
+      }
+      if (metadata.yMax !== '' && metadata.yMax !== null && metadata.yMax !== undefined) {
+        updated.yMax = metadata.yMax;
+      }
+      if (metadata.tctj) {
+        updated.tctj = metadata.tctj;
+      }
+
+      return updated;
+    });
+
+    console.log('[AI METADATA] Form values restored from extracted metadata');
+    clearAiExtractedMetadata();
+  }, []);
+
   const handleAiExtensionCapture = async (imageBase64, source = '') => {
     const reencodeImageBase64 = async (base64Str) => {
       return new Promise((resolve, reject) => {
@@ -882,6 +968,24 @@ const GraphCapture = () => {
         ? result.response
         : {};
       const validGraphId = resolveIntegerGraphIdFromAiResponse(aiResponsePayload);
+      
+      // Extract metadata from AI response for auto-population
+      const extractedMetadata = {
+        graphTitle: String(aiResponsePayload?.graph_title || aiResponsePayload?.title || '').trim(),
+        curveName: String(aiResponsePayload?.curve_title || aiResponsePayload?.curve_name || aiResponsePayload?.line_name || '').trim(),
+        xTitle: String(aiResponsePayload?.x_title || aiResponsePayload?.x_label || '').trim(),
+        yTitle: String(aiResponsePayload?.y_title || aiResponsePayload?.y_label || '').trim(),
+        xScale: String(aiResponsePayload?.x_scale || 'Linear').trim(),
+        yScale: String(aiResponsePayload?.y_scale || 'Linear').trim(),
+        xUnit: String(aiResponsePayload?.x_unit || '').trim(),
+        yUnit: String(aiResponsePayload?.y_unit || '').trim(),
+        xMin: aiResponsePayload?.x_min ?? '',
+        xMax: aiResponsePayload?.x_max ?? '',
+        yMin: aiResponsePayload?.y_min ?? '',
+        yMax: aiResponsePayload?.y_max ?? '',
+        tctj: String(aiResponsePayload?.tctj || aiResponsePayload?.temperature || '').trim(),
+      };
+      
       if (!validGraphId) {
         console.log('=== AI EXTRACTION DECISION ===', {
           action: 'stay',
@@ -901,7 +1005,7 @@ const GraphCapture = () => {
         persistLastAiReturnedGraphId(graphIdForFlow);
 
         console.log('=== AI EXTRACTION DECISION ===', {
-          action: 'reload_with_graph_id',
+          action: 'redirect_with_graph_id_and_metadata',
           reason: isRepeatedReturnedGraphId
             ? 'Missing graph_id in URL; AI returned same graph_id again, reusing existing graph context'
             : 'Missing graph_id in URL; using graph_id returned by AI extraction',
@@ -909,6 +1013,7 @@ const GraphCapture = () => {
         });
 
         persistAiPendingCapture(imageBase64, source, graphIdForFlow);
+        persistAiExtractedMetadata(extractedMetadata);
         const refreshUrl = new URL(window.location.href);
         refreshUrl.searchParams.set('graph_id', graphIdForFlow);
         refreshUrl.searchParams.delete(AI_DIRECT_CAPTURE_PARAM);
@@ -941,9 +1046,10 @@ const GraphCapture = () => {
         });
 
         persistAiPendingCapture(imageBase64, source, graphIdForFlow);
+        persistAiExtractedMetadata(extractedMetadata);
         redirectUrl.searchParams.delete(AI_DIRECT_CAPTURE_PARAM);
         navigateWithAiFlowMessage(
-          'Graph found. Redirecting to upload page to capture data...',
+          'Graph found. Redirecting to graph capture page with pre-filled data...',
           redirectUrl.toString(),
           900
         );
@@ -1028,7 +1134,7 @@ const GraphCapture = () => {
   const [restoredPendingCapture, setRestoredPendingCapture] = useState(null);
   const [hasPendingCaptureChoice, setHasPendingCaptureChoice] = useState(false);
   // Capture pending state at render time (before any effects consume sessionStorage)
-  const hasPendingAiCaptureOnMountRef = useRef(Boolean(sessionStorage.getItem(AI_PENDING_CAPTURE_STORAGE_KEY)));
+  const hasPendingAiCaptureOnMountRef = useRef(Boolean(sessionStorage.getItem(AI_PENDING_CAPTURE_STORAGE_KEY))); // Render-time check for pending capture (for reference if needed later)
   const [isInitialGraphFetchPending, setIsInitialGraphFetchPending] = useState(
     () => Boolean(new URLSearchParams(window.location.search).get('graph_id'))
   );
@@ -2649,13 +2755,6 @@ const GraphCapture = () => {
     
     if (!graphId) {
       console.log('[DEBUG] No graph_id in URL params, skipping fetch');
-      return;
-    }
-
-    // Skip auto-fetch if there was a pending capture from AI extraction when component mounted (Case 3)
-    // This ref is set at render time before any effects consume sessionStorage
-    if (hasPendingAiCaptureOnMountRef.current) {
-      console.log('[DEBUG] Pending AI capture on mount, skipping auto-fetch to show upload interface for Case 3');
       return;
     }
 
