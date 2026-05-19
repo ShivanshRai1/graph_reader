@@ -61,7 +61,7 @@ exports.handler = async function (event) {
       };
     }
 
-    // Build the normalized payload (all values as strings, matching Python backend)
+    // Build the normalized payload (all values as strings)
     const normalizedPayload = {};
     for (const [key, value] of Object.entries(payload)) {
       normalizedPayload[key] = value == null ? '' : String(value);
@@ -72,11 +72,15 @@ exports.handler = async function (event) {
       normalizedPayload['action'] = 'graphcapture';
     }
 
+    // Send as multipart/form-data so PHP reads from $_POST (JSON leaves $_POST empty)
+    const formData = new FormData();
+    for (const [key, value] of Object.entries(normalizedPayload)) {
+      formData.append(key, value);
+    }
+
     const requestHeaders = {
       Accept: 'application/json, text/plain, */*',
       'Accept-Language': 'en-US,en;q=0.9',
-      'Accept-Encoding': 'gzip, deflate, br',
-      'Content-Type': 'application/json',
       'User-Agent':
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
       Origin: 'https://graph-capture.netlify.app',
@@ -87,7 +91,7 @@ exports.handler = async function (event) {
 
     const response = await fetch(PRIMARY_URL, {
       method: 'POST',
-      body: JSON.stringify(normalizedPayload),
+      body: formData,
       headers: requestHeaders,
     });
 
