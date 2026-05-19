@@ -933,11 +933,12 @@ const GraphCapture = () => {
       return_url: String(urlParams.return_url || ''),
     };
 
-    const relayUrl = `${apiUrl}/api/ai-extraction`;
+    const netlifyRelayUrl = '/.netlify/functions/ai-relay';
+    const renderRelayUrl = `${apiUrl}/api/ai-extraction`;
 
     console.log('=== AI EXTRACTION REQUEST ===', {
-      url: relayUrl,
-      method: 'POST',
+      netlifyRelayUrl,
+      renderRelayUrl,
       base64imageLength: rawBase64.length,
       payload: requestPayload,
     });
@@ -961,7 +962,7 @@ const GraphCapture = () => {
         const [frontendResult, backendResult] = await Promise.allSettled([
           testDirectFrontendCall(rawBase64),
           (async () => {
-            const r = await fetch(relayUrl, {
+            const r = await fetch(renderRelayUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(requestPayload),
@@ -994,17 +995,62 @@ const GraphCapture = () => {
         throw new Error('Simulated AI extraction failure for testing purposes');
       }
 
-      const response = await fetch(relayUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestPayload),
-      });
+      // Try Netlify function first (different IP, bypasses Imunify360), then fall back to Render
+      let response;
+      let activeRelayUrl;
+      let netlifyBlocked = false;
+
+      try {
+        console.log('[RELAY] Trying Netlify function first:', netlifyRelayUrl);
+        const netlifyResponse = await fetch(netlifyRelayUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestPayload),
+        });
+        const netlifyResponseClone = netlifyResponse.clone();
+        let netlifyResult = null;
+        try {
+          netlifyResult = await netlifyResponseClone.json();
+        } catch {
+          netlifyResult = null;
+        }
+        const netlifyRawText = netlifyResult?.raw_text || '';
+        const netlifyIsImunify = typeof netlifyRawText === 'string' && (
+          netlifyRawText.includes('Imunify360') ||
+          netlifyRawText.includes('Access denied') ||
+          netlifyRawText.includes('<!DOCTYPE') ||
+          netlifyRawText.includes('<html')
+        );
+        if (!netlifyResponse.ok || netlifyIsImunify) {
+          netlifyBlocked = true;
+          console.warn('[RELAY] Netlify function blocked or failed (status:', netlifyResponse.status, ', imunify:', netlifyIsImunify, '). Falling back to Render relay.');
+        } else {
+          response = new Response(JSON.stringify(netlifyResult), {
+            status: netlifyResponse.status,
+            headers: { 'Content-Type': 'application/json' },
+          });
+          activeRelayUrl = netlifyRelayUrl;
+          console.log('[RELAY] Netlify function succeeded:', netlifyResponse.status);
+        }
+      } catch (netlifyError) {
+        netlifyBlocked = true;
+        console.warn('[RELAY] Netlify function threw an error:', netlifyError.message, '- falling back to Render relay.');
+      }
+
+      if (netlifyBlocked || !response) {
+        console.log('[RELAY] Using Render backend relay:', renderRelayUrl);
+        response = await fetch(renderRelayUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestPayload),
+        });
+        activeRelayUrl = renderRelayUrl;
+      }
 
       const result = await response.json();
 
       console.log('=== RELAY RESPONSE ===', {
+        activeRelayUrl,
         relayStatus: response.status,
         relayOk: response.ok,
       });
@@ -1022,7 +1068,7 @@ const GraphCapture = () => {
       });
 
       console.log('=== AI EXTRACTION RESPONSE ===', {
-        url: relayUrl,
+        url: activeRelayUrl,
         relayStatus: response.status,
         upstreamStatus: result?.upstream_status,
         upstreamOk: result?.upstream_ok,
