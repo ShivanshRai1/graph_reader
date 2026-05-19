@@ -1,11 +1,12 @@
 /**
  * Netlify serverless function: ai-relay
- * Proxies AI extraction requests to DiscoverEE's vision_upload.php.
+ * Proxies AI extraction requests to DiscoverEE's AI endpoints.
  * Runs on Netlify/AWS Lambda IPs which are not blocked by Imunify360.
  * Returns the same response shape as the Render backend relay.
  */
 
 const PRIMARY_URL = 'https://www.discoveree.io/vision_upload.php';
+const BACKUP_URL = 'https://www.discoveree.io/graph_capture_api.php';
 
 function toBase64Uint8Array(base64) {
   return Uint8Array.from(Buffer.from(base64, 'base64'));
@@ -46,8 +47,22 @@ function hasValidGraphId(parsedResponse, rawText) {
   return /"graph_id"\s*:\s*"?\d+"?/i.test(raw);
 }
 
-async function postAttempt({ body, requestHeaders, mode }) {
-  const response = await fetch(PRIMARY_URL, {
+function shouldUseBackupEndpoint(attempt) {
+  const contentType = String(attempt?.content_type || '').toLowerCase();
+  const rawText = String(attempt?.raw_text || '');
+  const lowerRawText = rawText.toLowerCase();
+  const upstreamStatus = Number(attempt?.upstream_status || 0);
+
+  return (
+    contentType.includes('text/html') ||
+    lowerRawText.includes('imunify360') ||
+    rawText.includes('Invalid base64 format') ||
+    (!attempt?.upstream_ok && upstreamStatus >= 500 && rawText.trim() === '')
+  );
+}
+
+async function postAttempt({ body, requestHeaders, mode, targetUrl = PRIMARY_URL }) {
+  const response = await fetch(targetUrl, {
     method: 'POST',
     body,
     headers: requestHeaders,
@@ -59,7 +74,7 @@ async function postAttempt({ body, requestHeaders, mode }) {
 
   return {
     mode,
-    target_url: PRIMARY_URL,
+    target_url: targetUrl,
     upstream_status: response.status,
     upstream_ok: response.ok,
     content_type: contentType,
@@ -246,6 +261,21 @@ exports.handler = async function (event) {
           'Content-Type': 'application/json',
         },
         mode: 'json_data_uri_base64',
+      }));
+    }
+
+    const latestPrimaryAttempt = attempts[attempts.length - 1];
+    const shouldTryBackup = !latestPrimaryAttempt.valid_graph_id && attempts.some(shouldUseBackupEndpoint);
+    if (shouldTryBackup) {
+      const backupJsonPayload = { ...normalizedPayload, base64image };
+      attempts.push(await postAttempt({
+        body: JSON.stringify(backupJsonPayload),
+        requestHeaders: {
+          ...requestHeaders,
+          'Content-Type': 'application/json',
+        },
+        mode: 'backup_json_raw_base64',
+        targetUrl: BACKUP_URL,
       }));
     }
 
