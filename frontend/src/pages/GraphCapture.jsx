@@ -1023,7 +1023,35 @@ const GraphCapture = () => {
         );
         const netlifyIsInvalidBase64 = typeof netlifyRawText === 'string' &&
           netlifyRawText.toLowerCase().includes('invalid base64 format');
-        if (!netlifyResponse.ok || netlifyIsImunify || netlifyIsInvalidBase64) {
+        const netlifyGraphId = String(
+          netlifyResult?.response?.graph_id ??
+          netlifyResult?.response?.graphId ??
+          ''
+        ).trim();
+        const netlifyHasSuccessfulFallback = Array.isArray(netlifyResult?.attempts) &&
+          netlifyResult.attempts.some((attempt) => {
+            const targetUrl = String(attempt?.target_url || '');
+            const contentType = String(attempt?.content_type || '').toLowerCase();
+            const rawText = String(attempt?.raw_text || '');
+            const attemptGraphId = String(
+              attempt?.response?.graph_id ??
+              attempt?.response?.graphId ??
+              ''
+            ).trim();
+
+            return (
+              targetUrl.includes('graph_capture_api.php') &&
+              Number(attempt?.upstream_status) === 200 &&
+              contentType.includes('application/json') &&
+              (attemptGraphId !== '' || /"graph_id"\s*:\s*"?\d+"?/i.test(rawText))
+            );
+          });
+        const netlifySucceeded =
+          netlifyResponse.ok &&
+          netlifyResult?.upstream_ok !== false &&
+          (netlifyGraphId !== '' || netlifyHasSuccessfulFallback);
+
+        if (!netlifySucceeded && (!netlifyResponse.ok || netlifyIsImunify || netlifyIsInvalidBase64)) {
           netlifyBlocked = true;
           console.warn('[RELAY] Netlify function blocked or failed (status:', netlifyResponse.status, ', imunify:', netlifyIsImunify, ', invalidBase64:', netlifyIsInvalidBase64, '). Falling back to Render relay.');
         } else {
