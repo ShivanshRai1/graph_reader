@@ -951,11 +951,15 @@ const GraphCapture = () => {
         // Run both calls in parallel
         const [frontendResult, backendResult] = await Promise.allSettled([
           testDirectFrontendCall(rawBase64),
-          fetch(relayUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(requestPayload),
-          }).then(r => ({ status: r.status, contentType: r.headers.get('content-type'), text: r.text() }))
+          (async () => {
+            const r = await fetch(relayUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(requestPayload),
+            });
+            const text = await r.text();
+            return { status: r.status, contentType: r.headers.get('content-type'), text };
+          })()
         ]);
         
         const testResults = {
@@ -965,7 +969,11 @@ const GraphCapture = () => {
         };
         
         // Store results in sessionStorage so they persist after navigation
-        window.sessionStorage.setItem('ai_test_dual_call_results', JSON.stringify(testResults, null, 2));
+        try {
+          window.sessionStorage.setItem('ai_test_dual_call_results', JSON.stringify(testResults, null, 2));
+        } catch (storageErr) {
+          console.error('[TEST] Failed to store results in sessionStorage:', storageErr);
+        }
         
         console.group('%c[TEST RESULTS COMPARISON]', 'color: #FF6B00; font-weight: bold; font-size: 12px;');
         console.log('%cFrontend Result:', 'color: #2196F3; font-weight: bold;', frontendResult);
