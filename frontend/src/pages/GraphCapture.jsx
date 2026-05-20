@@ -974,6 +974,7 @@ const GraphCapture = () => {
     // TEST MODE: If ai_test_dual_call=true, run frontend and backend calls in parallel
     const urlSearchParams = new URLSearchParams(window.location.search);
     const isDualCallTest = _isDualCallTest; // Evaluated at very start of function
+    const isBackendFallbackDisabled = urlSearchParams.get('ai_disable_backend_fallback') === 'true';
     
     
     if (isDualCallTest) {
@@ -1093,6 +1094,9 @@ const GraphCapture = () => {
       }
 
       if (netlifyBlocked || !response) {
+        if (isBackendFallbackDisabled) {
+          throw new Error('Netlify relay failed and backend fallback is disabled (ai_disable_backend_fallback=true).');
+        }
         console.log('[RELAY] Using Render backend relay:', renderRelayUrl);
         response = await fetch(renderRelayUrl, {
           method: 'POST',
@@ -1194,16 +1198,20 @@ const GraphCapture = () => {
 
       if (!currentUrlGraphId) {
         let aiReturnedGraphHasCapturedCurves = false;
+        let couldVerifyAiGraphReuse = true;
         try {
           aiReturnedGraphHasCapturedCurves = await checkGraphHasCapturedCurves(validGraphId);
         } catch (error) {
-          console.warn('Unable to verify whether AI-returned graph_id already has curves. Proceeding with current graph_id flow.', error);
+          couldVerifyAiGraphReuse = false;
+          console.warn('Unable to verify whether AI-returned graph_id already has curves. Falling back to fresh capture mode to avoid reusing an existing graph.', error);
         }
 
-        if (aiReturnedGraphHasCapturedCurves) {
+        if (aiReturnedGraphHasCapturedCurves || !couldVerifyAiGraphReuse) {
           console.log('=== AI EXTRACTION DECISION ===', {
             action: 'redirect_for_fresh_capture_without_graph_id',
-            reason: 'Case 3 guard: AI returned graph_id already has captured curves; avoiding reuse of existing graph',
+            reason: aiReturnedGraphHasCapturedCurves
+              ? 'Case 3 guard: AI returned graph_id already has captured curves; avoiding reuse of existing graph'
+              : 'Case 3 guard: Unable to verify AI-returned graph_id reuse; defaulting to fresh capture mode',
             ai_returned_graph_id: validGraphId,
           });
 
