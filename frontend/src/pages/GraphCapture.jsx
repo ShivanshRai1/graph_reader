@@ -1213,52 +1213,24 @@ const GraphCapture = () => {
       const graphIdForFlow = currentUrlGraphId || validGraphId;
 
       if (!currentUrlGraphId) {
-        let aiReturnedGraphHasCapturedCurves = false;
-        let couldVerifyAiGraphReuse = true;
-        try {
-          aiReturnedGraphHasCapturedCurves = await checkGraphHasCapturedCurves(validGraphId);
-        } catch (error) {
-          couldVerifyAiGraphReuse = false;
-          console.warn('Unable to verify whether AI-returned graph_id already has curves. Falling back to fresh capture mode to avoid reusing an existing graph.', error);
-        }
-
-        if (aiReturnedGraphHasCapturedCurves || !couldVerifyAiGraphReuse) {
-          console.log('=== AI EXTRACTION DECISION ===', {
-            action: 'redirect_for_fresh_capture_without_graph_id',
-            reason: aiReturnedGraphHasCapturedCurves
-              ? 'Case 3 guard: AI returned graph_id already has captured curves; avoiding reuse of existing graph'
-              : 'Case 3 guard: Unable to verify AI-returned graph_id reuse; defaulting to fresh capture mode',
-            ai_returned_graph_id: validGraphId,
-          });
-
-          persistAiPendingCapture(imageBase64, source);
-          persistAiExtractedMetadata(extractedMetadata);
-          const refreshUrl = new URL(window.location.href);
-          refreshUrl.searchParams.delete('graph_id');
-          refreshUrl.searchParams.delete(AI_DIRECT_CAPTURE_PARAM);
-          navigateWithAiFlowMessage(
-            'Existing graph detected from AI response. Continuing in fresh capture mode with pre-filled data...',
-            refreshUrl.toString(),
-            900
-          );
-          return;
-        }
-
-        persistLastAiReturnedGraphId(graphIdForFlow);
-
+        // Case 3: no graph_id in URL — always enter fresh capture mode.
+        // We use AI-extracted metadata to pre-fill the form but do NOT adopt
+        // the upstream graph_id; upstream deduplication always returns the same
+        // id for the same partno/manf/tctj context. The real graph_id is
+        // assigned only when the user saves a new capture.
         console.log('=== AI EXTRACTION DECISION ===', {
-          action: 'redirect_with_graph_id_and_metadata',
-          reason: 'Missing graph_id in URL; using graph_id returned by AI extraction',
-          graph_id: graphIdForFlow,
+          action: 'redirect_for_fresh_capture_without_graph_id',
+          reason: 'Case 3: no graph_id in URL; entering fresh capture mode with AI metadata pre-filled',
+          ai_returned_graph_id: validGraphId,
         });
 
-        persistAiPendingCapture(imageBase64, source, graphIdForFlow);
+        persistAiPendingCapture(imageBase64, source);
         persistAiExtractedMetadata(extractedMetadata);
         const refreshUrl = new URL(window.location.href);
-        refreshUrl.searchParams.set('graph_id', graphIdForFlow);
+        refreshUrl.searchParams.delete('graph_id');
         refreshUrl.searchParams.delete(AI_DIRECT_CAPTURE_PARAM);
         navigateWithAiFlowMessage(
-          'New graph created from AI extraction. Redirecting to graph capture page with pre-filled data...',
+          'AI extracted graph data. Loading fresh capture mode with pre-filled data...',
           refreshUrl.toString(),
           900
         );
