@@ -936,6 +936,22 @@ const GraphCapture = () => {
       alert('No valid image data found for AI extraction. Please paste or upload an image and try again.');
       return;
     }
+
+    const hasExistingGraphContextForAi = String(urlParams.graph_id || '').trim() !== '';
+    const case3DedupSuffix = hasExistingGraphContextForAi
+      ? ''
+      : `__ai_new_${Date.now()}_${Math.floor(Math.random() * 1000000)}`;
+
+    const baseGraphTitle = String(urlParams.graph_title || '');
+    const dedupBusterGraphTitle = hasExistingGraphContextForAi
+      ? baseGraphTitle
+      : `${baseGraphTitle || 'ai_graph'}${case3DedupSuffix}`;
+
+    const baseIdentifier = String(urlParams.identifier || crypto.randomUUID());
+    const dedupBusterIdentifier = hasExistingGraphContextForAi
+      ? baseIdentifier
+      : `${baseIdentifier}${case3DedupSuffix}`;
+
     const requestPayload = {
       action: 'graphcapture',
       type: 'ai_extraction',
@@ -947,12 +963,12 @@ const GraphCapture = () => {
       manf: String(urlParams.manf || urlParams.manufacturer || ''),
       manufacturer: String(urlParams.manufacturer || ''),
       username: String(urlParams.username || ''),
-      graph_title: String(urlParams.graph_title || ''),
+      graph_title: dedupBusterGraphTitle,
       curve_title: String(urlParams.curve_title || ''),
       x_label: String(urlParams.x_label || ''),
       y_label: String(urlParams.y_label || ''),
       other_symbols: String(urlParams.other_symbols || ''),
-      identifier: String(urlParams.identifier || crypto.randomUUID()),
+      identifier: dedupBusterIdentifier,
       testuser_id: String(urlParams.testuser_id || ''),
       tctj: String(urlParams.tctj || ''),
       return_url: String(urlParams.return_url || ''),
