@@ -7,6 +7,7 @@
 
 const PRIMARY_URL = 'https://www.discoveree.io/vision_upload.php';
 const BACKUP_URL = 'https://www.discoveree.io/graph_capture_api.php';
+const UPSTREAM_TIMEOUT_MS = 8000;
 
 function toBase64Uint8Array(base64) {
   return Uint8Array.from(Buffer.from(base64, 'base64'));
@@ -61,27 +62,67 @@ function shouldUseBackupEndpoint(attempt) {
   );
 }
 
+function isPositiveIntegerId(value) {
+  const normalized = String(value ?? '').trim();
+  if (!/^\d+$/.test(normalized)) return false;
+  return Number(normalized) > 0;
+}
+
+function normalizeIdentifier(value) {
+  const normalized = String(value ?? '').trim();
+  if (!normalized) return '';
+  const lower = normalized.toLowerCase();
+  if (['0', 'null', 'undefined', 'nan', 'false'].includes(lower)) {
+    return '';
+  }
+  return normalized;
+}
+
 async function postAttempt({ body, requestHeaders, mode, targetUrl = PRIMARY_URL }) {
-  const response = await fetch(targetUrl, {
-    method: 'POST',
-    body,
-    headers: requestHeaders,
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
 
-  const rawText = await response.text();
-  const contentType = response.headers.get('content-type') || '';
-  const parsedResponse = parseJsonFromText(rawText);
+  try {
+    const response = await fetch(targetUrl, {
+      method: 'POST',
+      body,
+      headers: requestHeaders,
+      signal: controller.signal,
+    });
 
-  return {
-    mode,
-    target_url: targetUrl,
-    upstream_status: response.status,
-    upstream_ok: response.ok,
-    content_type: contentType,
-    raw_text: rawText,
-    response: parsedResponse,
-    valid_graph_id: hasValidGraphId(parsedResponse, rawText),
-  };
+    const rawText = await response.text();
+    const contentType = response.headers.get('content-type') || '';
+    const parsedResponse = parseJsonFromText(rawText);
+
+    return {
+      mode,
+      target_url: targetUrl,
+      upstream_status: response.status,
+      upstream_ok: response.ok,
+      content_type: contentType,
+      raw_text: rawText,
+      response: parsedResponse,
+      valid_graph_id: hasValidGraphId(parsedResponse, rawText),
+    };
+  } catch (error) {
+    const isAbort = error?.name === 'AbortError';
+    const message = isAbort
+      ? `Upstream timeout after ${UPSTREAM_TIMEOUT_MS}ms`
+      : `Upstream request failed: ${error?.message || 'unknown error'}`;
+
+    return {
+      mode,
+      target_url: targetUrl,
+      upstream_status: isAbort ? 504 : 502,
+      upstream_ok: false,
+      content_type: 'application/json',
+      raw_text: message,
+      response: { error: message },
+      valid_graph_id: false,
+    };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 exports.handler = async function (event) {
@@ -122,6 +163,17 @@ exports.handler = async function (event) {
     }
     normalizedPayload['base64image'] = base64image;
 
+    const incomingGraphId = String(normalizedPayload['graph_id'] || '').trim();
+    const hasValidIncomingGraphId = isPositiveIntegerId(incomingGraphId);
+
+    if (!hasValidIncomingGraphId) {
+      delete normalizedPayload['graph_id'];
+      delete normalizedPayload['return_graph_id'];
+
+      const incomingIdentifier = normalizeIdentifier(normalizedPayload['identifier']);
+      normalizedPayload['identifier'] = incomingIdentifier || `ai_${Date.now()}_${Math.floor(Math.random() * 1000000)}`;
+    }
+
     if (!normalizedPayload['action']) {
       normalizedPayload['action'] = 'graphcapture';
     }
@@ -146,7 +198,9 @@ exports.handler = async function (event) {
     attempts.push(await postAttempt({ body: formDataRaw, requestHeaders, mode: 'multipart_raw_base64' }));
 
     const firstAttempt = attempts[0];
-    if (!firstAttempt.valid_graph_id) {
+    const shouldSkipRemainingPrimaryAttempts = shouldUseBackupEndpoint(firstAttempt);
+
+    if (!firstAttempt.valid_graph_id && !shouldSkipRemainingPrimaryAttempts) {
       const formDataPrefixed = new FormData();
       for (const [key, value] of Object.entries(normalizedPayload)) {
         if (key === 'base64image') {
@@ -159,7 +213,7 @@ exports.handler = async function (event) {
     }
 
     const secondAttempt = attempts[attempts.length - 1];
-    if (!secondAttempt.valid_graph_id) {
+    if (!secondAttempt.valid_graph_id && !shouldSkipRemainingPrimaryAttempts) {
       const formDataAltImageKeys = new FormData();
       for (const [key, value] of Object.entries(normalizedPayload)) {
         if (key !== 'base64image') {
@@ -173,7 +227,7 @@ exports.handler = async function (event) {
     }
 
     const thirdAttempt = attempts[attempts.length - 1];
-    if (!thirdAttempt.valid_graph_id) {
+    if (!thirdAttempt.valid_graph_id && !shouldSkipRemainingPrimaryAttempts) {
       try {
         const imageBytes = toBase64Uint8Array(base64image);
         const imageBlob = new Blob([imageBytes], { type: 'image/png' });
@@ -203,7 +257,7 @@ exports.handler = async function (event) {
     }
 
     const fourthAttempt = attempts[attempts.length - 1];
-    if (!fourthAttempt.valid_graph_id) {
+    if (!fourthAttempt.valid_graph_id && !shouldSkipRemainingPrimaryAttempts) {
       const urlEncodedRaw = new URLSearchParams();
       for (const [key, value] of Object.entries(normalizedPayload)) {
         urlEncodedRaw.set(key, value);
@@ -219,7 +273,7 @@ exports.handler = async function (event) {
     }
 
     const fifthAttempt = attempts[attempts.length - 1];
-    if (!fifthAttempt.valid_graph_id) {
+    if (!fifthAttempt.valid_graph_id && !shouldSkipRemainingPrimaryAttempts) {
       const urlEncodedPrefixed = new URLSearchParams();
       for (const [key, value] of Object.entries(normalizedPayload)) {
         if (key === 'base64image') {
@@ -239,7 +293,7 @@ exports.handler = async function (event) {
     }
 
     const sixthAttempt = attempts[attempts.length - 1];
-    if (!sixthAttempt.valid_graph_id) {
+    if (!sixthAttempt.valid_graph_id && !shouldSkipRemainingPrimaryAttempts) {
       const jsonRawPayload = { ...normalizedPayload, base64image };
       attempts.push(await postAttempt({
         body: JSON.stringify(jsonRawPayload),
@@ -252,7 +306,7 @@ exports.handler = async function (event) {
     }
 
     const seventhAttempt = attempts[attempts.length - 1];
-    if (!seventhAttempt.valid_graph_id) {
+    if (!seventhAttempt.valid_graph_id && !shouldSkipRemainingPrimaryAttempts) {
       const jsonPrefixedPayload = { ...normalizedPayload, base64image: `data:image/png;base64,${base64image}` };
       attempts.push(await postAttempt({
         body: JSON.stringify(jsonPrefixedPayload),
@@ -291,6 +345,11 @@ exports.handler = async function (event) {
       content_type: finalAttempt.content_type,
       raw_text: finalAttempt.raw_text,
       response: finalAttempt.response,
+      relay_context: {
+        incoming_graph_id: incomingGraphId,
+        forwarded_graph_id: String(normalizedPayload['graph_id'] || ''),
+        forwarded_identifier: String(normalizedPayload['identifier'] || ''),
+      },
       attempts,
     };
 
