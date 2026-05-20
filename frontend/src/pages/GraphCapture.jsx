@@ -559,6 +559,65 @@ const persistAiExtractionFlowLog = (flowData) => {
   }
 };
 
+const logAiExtractionFlowSummary = (attempts = [], { restored = false } = {}) => {
+  const list = Array.isArray(attempts) ? attempts : [];
+  const groupLabel = restored
+    ? '%c📊 AI EXTRACTION FLOW SUMMARY (restored after navigation)'
+    : '%c📊 AI EXTRACTION FLOW SUMMARY';
+
+  console.group(groupLabel, 'color: #2196F3; font-size: 14px; font-weight: bold;');
+
+  if (list.length === 0) {
+    console.log('No upstream attempts were recorded.');
+    console.groupEnd();
+    return;
+  }
+
+  const primaryAttempt = list[0];
+  console.log('%c=== ATTEMPT 1: PRIMARY URL ===', 'color: #FF9800; font-weight: bold;');
+  console.log('URL:', primaryAttempt?.target_url);
+  console.log('Status Code:', primaryAttempt?.upstream_status);
+  console.log('Content Type:', primaryAttempt?.content_type);
+
+  if ((primaryAttempt?.content_type || '').includes('text/html')) {
+    console.log('%c❌ BLOCKED: Response is HTML (not JSON)', 'color: #F44336; font-weight: bold;');
+    console.log('This means: Imunify360 bot-protection blocked the request');
+    console.log('Error Details:', primaryAttempt?.raw_text?.substring(0, 500));
+  } else if ((primaryAttempt?.raw_text || '').toLowerCase().includes('imunify360')) {
+    console.log('%c❌ BLOCKED: Imunify360 bot-protection detected', 'color: #F44336; font-weight: bold;');
+    console.log('Error Message:', primaryAttempt?.raw_text?.substring(0, 500));
+  }
+
+  const backupAttempt = list.find((attempt) => String(attempt?.target_url || '').includes('graph_capture_api.php'));
+  if (!backupAttempt) {
+    console.log('%cℹ️ No backup endpoint attempt detected in this run', 'color: #607D8B; font-weight: bold;');
+    console.groupEnd();
+    return;
+  }
+
+  console.log('%c=== BACKUP ATTEMPT (graph_capture_api.php) ===', 'color: #4CAF50; font-weight: bold;');
+  console.log('URL:', backupAttempt?.target_url);
+  console.log('Status Code:', backupAttempt?.upstream_status);
+  console.log('Content Type:', backupAttempt?.content_type);
+
+  const backupGraphId = String(
+    backupAttempt?.response?.graph_id ?? backupAttempt?.response?.graphId ?? ''
+  ).trim();
+  const backupHasGraphId =
+    backupGraphId !== '' || /"graph_id"\s*:\s*"?\d+"?/i.test(String(backupAttempt?.raw_text || ''));
+  const backupIsJson = String(backupAttempt?.content_type || '').toLowerCase().includes('application/json');
+
+  if (Number(backupAttempt?.upstream_status) === 200 && backupIsJson && backupHasGraphId) {
+    console.log('%c✅ SUCCESS: Backup endpoint returned graph_id', 'color: #4CAF50; font-weight: bold;');
+    console.log('Graph ID returned:', backupGraphId || backupAttempt?.raw_text?.substring(0, 200));
+  } else {
+    console.log('%c⚠️ BACKUP DID NOT RETURN VALID graph_id', 'color: #FF9800; font-weight: bold;');
+    console.log('Backup Response Snippet:', String(backupAttempt?.raw_text || '').substring(0, 400));
+  }
+
+  console.groupEnd();
+};
+
 // Restore and re-log AI extraction flow after page navigation
 const restoreAndLogAiExtractionFlow = () => {
   try {
@@ -567,41 +626,7 @@ const restoreAndLogAiExtractionFlow = () => {
     if (!raw) return;
 
     const flowData = JSON.parse(raw);
-    
-    // Re-log to console with "restored" marker
-    console.group('%c📊 AI EXTRACTION FLOW SUMMARY (restored after navigation)', 'color: #2196F3; font-size: 14px; font-weight: bold;');
-    
-    if (flowData.attempts && flowData.attempts.length > 0) {
-      console.log('%c=== ATTEMPT 1: PRIMARY URL ===', 'color: #FF9800; font-weight: bold;');
-      const primaryAttempt = flowData.attempts[0];
-      console.log('URL:', primaryAttempt?.target_url);
-      console.log('Status Code:', primaryAttempt?.upstream_status);
-      console.log('Content Type:', primaryAttempt?.content_type);
-      
-      if ((primaryAttempt?.content_type || '').includes('text/html')) {
-        console.log('%c❌ BLOCKED: Response is HTML (not JSON)', 'color: #F44336; font-weight: bold;');
-        console.log('This means: Imunify360 bot-protection blocked the request');
-        console.log('Error Details:', primaryAttempt?.raw_text?.substring(0, 500));
-      } else if ((primaryAttempt?.raw_text || '').includes('imunify360')) {
-        console.log('%c❌ BLOCKED: Imunify360 bot-protection detected', 'color: #F44336; font-weight: bold;');
-        console.log('Error Message:', primaryAttempt?.raw_text?.substring(0, 500));
-      }
-      
-      if (flowData.attempts.length > 1) {
-        console.log('%c=== ATTEMPT 2: FALLBACK URL (BACKUP) ===', 'color: #4CAF50; font-weight: bold;');
-        const fallbackAttempt = flowData.attempts[1];
-        console.log('URL:', fallbackAttempt?.target_url);
-        console.log('Status Code:', fallbackAttempt?.upstream_status);
-        console.log('Content Type:', fallbackAttempt?.content_type);
-        
-        if (fallbackAttempt?.upstream_status === 200) {
-          console.log('%c✅ SUCCESS: Fallback endpoint worked', 'color: #4CAF50; font-weight: bold;');
-          console.log('Graph ID returned:', fallbackAttempt?.raw_text?.substring(0, 200));
-        }
-      }
-    }
-    
-    console.groupEnd();
+    logAiExtractionFlowSummary(flowData?.attempts || [], { restored: true });
     
     // Clear after restoring so it doesn't get logged again
     window.sessionStorage.removeItem(KEY);
@@ -1115,39 +1140,7 @@ const GraphCapture = () => {
       })));
 
       // Enhanced logging for colleagues to see what happened
-      console.group('%c📊 AI EXTRACTION FLOW SUMMARY', 'color: #2196F3; font-size: 14px; font-weight: bold;');
-      
-      if (result?.attempts && result.attempts.length > 0) {
-        console.log('%c=== ATTEMPT 1: PRIMARY URL ===', 'color: #FF9800; font-weight: bold;');
-        const primaryAttempt = result.attempts[0];
-        console.log('URL:', primaryAttempt?.target_url);
-        console.log('Status Code:', primaryAttempt?.upstream_status);
-        console.log('Content Type:', primaryAttempt?.content_type);
-        
-        if ((primaryAttempt?.content_type || '').includes('text/html')) {
-          console.log('%c❌ BLOCKED: Response is HTML (not JSON)', 'color: #F44336; font-weight: bold;');
-          console.log('This means: Imunify360 bot-protection blocked the request');
-          console.log('Error Details:', primaryAttempt?.raw_text?.substring(0, 500));
-        } else if ((primaryAttempt?.raw_text || '').includes('imunify360')) {
-          console.log('%c❌ BLOCKED: Imunify360 bot-protection detected', 'color: #F44336; font-weight: bold;');
-          console.log('Error Message:', primaryAttempt?.raw_text?.substring(0, 500));
-        }
-        
-        if (result.attempts.length > 1) {
-          console.log('%c=== ATTEMPT 2: FALLBACK URL (BACKUP) ===', 'color: #4CAF50; font-weight: bold;');
-          const fallbackAttempt = result.attempts[1];
-          console.log('URL:', fallbackAttempt?.target_url);
-          console.log('Status Code:', fallbackAttempt?.upstream_status);
-          console.log('Content Type:', fallbackAttempt?.content_type);
-          
-          if (fallbackAttempt?.upstream_status === 200) {
-            console.log('%c✅ SUCCESS: Fallback endpoint worked', 'color: #4CAF50; font-weight: bold;');
-            console.log('Graph ID returned:', fallbackAttempt?.raw_text?.substring(0, 200));
-          }
-        }
-      }
-      
-      console.groupEnd();
+      logAiExtractionFlowSummary(result?.attempts || []);
       
       // Save flow data to sessionStorage so it persists across page navigation
       persistAiExtractionFlowLog({ attempts: result?.attempts || [] });
