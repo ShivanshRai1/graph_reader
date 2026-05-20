@@ -1193,6 +1193,33 @@ const GraphCapture = () => {
       const graphIdForFlow = currentUrlGraphId || validGraphId;
 
       if (!currentUrlGraphId) {
+        let aiReturnedGraphHasCapturedCurves = false;
+        try {
+          aiReturnedGraphHasCapturedCurves = await checkGraphHasCapturedCurves(validGraphId);
+        } catch (error) {
+          console.warn('Unable to verify whether AI-returned graph_id already has curves. Proceeding with current graph_id flow.', error);
+        }
+
+        if (aiReturnedGraphHasCapturedCurves) {
+          console.log('=== AI EXTRACTION DECISION ===', {
+            action: 'redirect_for_fresh_capture_without_graph_id',
+            reason: 'Case 3 guard: AI returned graph_id already has captured curves; avoiding reuse of existing graph',
+            ai_returned_graph_id: validGraphId,
+          });
+
+          persistAiPendingCapture(imageBase64, source);
+          persistAiExtractedMetadata(extractedMetadata);
+          const refreshUrl = new URL(window.location.href);
+          refreshUrl.searchParams.delete('graph_id');
+          refreshUrl.searchParams.delete(AI_DIRECT_CAPTURE_PARAM);
+          navigateWithAiFlowMessage(
+            'Existing graph detected from AI response. Continuing in fresh capture mode with pre-filled data...',
+            refreshUrl.toString(),
+            900
+          );
+          return;
+        }
+
         persistLastAiReturnedGraphId(graphIdForFlow);
 
         console.log('=== AI EXTRACTION DECISION ===', {
