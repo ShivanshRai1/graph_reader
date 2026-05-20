@@ -993,6 +993,146 @@ const GraphCapture = () => {
     const isBackendFallbackDisabled = urlSearchParams.get('ai_disable_backend_fallback') === 'true';
     
     
+    const isEndpointProofTest = urlSearchParams.get('ai_test_endpoint_proof') === 'true';
+
+    if (isEndpointProofTest) {
+      setIsAiExtractionLoading(true);
+      console.group('%c🔬 ENDPOINT PROOF TEST — All 3 Paths vs vision_upload.php', 'color: #9C27B0; font-weight: bold; font-size: 15px;');
+      console.log('Testing vision_upload.php from: (1) Browser direct, (2) Netlify function, (3) Render backend');
+      console.log('Navigation BLOCKED so you can read results. Payload base64 length:', rawBase64.length);
+
+      const VISION_URL = 'https://www.discoveree.io/vision_upload.php';
+      const GCAPI_URL  = 'https://www.discoveree.io/graph_capture_api.php';
+
+      const proofPayload = { ...requestPayload };
+
+      // --- PATH 1: Browser direct ---
+      const path1 = (async () => {
+        console.group('%c📍 PATH 1 — Browser direct → vision_upload.php', 'color: #FF6B00; font-weight: bold;');
+        const t0 = performance.now();
+        try {
+          const fd = new FormData();
+          Object.entries(proofPayload).forEach(([k, v]) => fd.append(k, v));
+          const r = await fetch(VISION_URL, { method: 'POST', body: fd, mode: 'cors' });
+          const ct = r.headers.get('content-type') || '';
+          const body = await r.text();
+          const ms = (performance.now() - t0).toFixed(0);
+          const blocked = ct.includes('text/html') || body.includes('Imunify360') || body.includes('Invalid base64');
+          console.log('URL:', VISION_URL);
+          console.log('HTTP status:', r.status, '| Content-Type:', ct, '| Duration:', ms + 'ms');
+          console.log('Body (first 400):', body.substring(0, 400));
+          if (blocked) console.log('%c❌ BLOCKED — response is HTML, not JSON', 'color:#F44336;font-weight:bold;');
+          else         console.log('%c✅ NOT blocked — response is JSON', 'color:#4CAF50;font-weight:bold;');
+          console.groupEnd();
+          return { path: 'browser_direct', url: VISION_URL, status: r.status, contentType: ct, bodySnippet: body.substring(0, 400), blocked, ms };
+        } catch (err) {
+          const ms = (performance.now() - t0).toFixed(0);
+          console.log('%c❌ ERROR — request threw an exception (likely CORS or network block)', 'color:#F44336;font-weight:bold;');
+          console.log('Error name:', err.name, '| Message:', err.message, '| Duration:', ms + 'ms');
+          console.groupEnd();
+          return { path: 'browser_direct', url: VISION_URL, error: err.message, errorName: err.name, blocked: true, ms };
+        }
+      })();
+
+      // --- PATH 2: Netlify function ---
+      const path2 = (async () => {
+        console.group('%c📍 PATH 2 — Netlify function → relay → vision_upload.php + graph_capture_api.php', 'color: #2196F3; font-weight: bold;');
+        const t0 = performance.now();
+        try {
+          const r = await fetch(netlifyRelayUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(proofPayload),
+          });
+          const ct = r.headers.get('content-type') || '';
+          const data = await r.json();
+          const ms = (performance.now() - t0).toFixed(0);
+          console.log('Relay URL:', netlifyRelayUrl, '| HTTP status:', r.status, '| Duration:', ms + 'ms');
+          console.log('upstream_status:', data?.upstream_status, '| upstream_ok:', data?.upstream_ok, '| content_type:', data?.content_type);
+          console.log('raw_text (first 300):', String(data?.raw_text || '').substring(0, 300));
+          if (Array.isArray(data?.attempts)) {
+            data.attempts.forEach((a, i) => {
+              const aBlocked = String(a?.content_type || '').includes('text/html') || String(a?.raw_text || '').includes('Imunify360') || String(a?.raw_text || '').includes('Invalid base64');
+              console.log(`  Attempt ${i + 1}: ${a?.target_url} | HTTP ${a?.upstream_status} | ${a?.content_type} | blocked=${aBlocked} | snippet="${String(a?.raw_text || '').substring(0, 120)}"`);
+            });
+          }
+          const visionAttempt = (data?.attempts || []).find(a => String(a?.target_url || '').includes('vision_upload'));
+          const gcapiAttempt  = (data?.attempts || []).find(a => String(a?.target_url || '').includes('graph_capture_api'));
+          if (visionAttempt) {
+            const vBlocked = String(visionAttempt.content_type || '').includes('text/html');
+            console.log(vBlocked ? '%c❌ vision_upload.php BLOCKED from Netlify' : '%c✅ vision_upload.php NOT blocked from Netlify', vBlocked ? 'color:#F44336;font-weight:bold;' : 'color:#4CAF50;font-weight:bold;');
+          }
+          if (gcapiAttempt) {
+            const gOk = String(gcapiAttempt.content_type || '').includes('application/json');
+            console.log(gOk ? '%c✅ graph_capture_api.php OK from Netlify' : '%c⚠️ graph_capture_api.php unexpected response from Netlify', gOk ? 'color:#4CAF50;font-weight:bold;' : 'color:#FF9800;font-weight:bold;');
+          }
+          console.groupEnd();
+          return { path: 'netlify_relay', relayStatus: r.status, upstreamStatus: data?.upstream_status, upstreamOk: data?.upstream_ok, contentType: data?.content_type, rawSnippet: String(data?.raw_text || '').substring(0, 300), attempts: data?.attempts, ms };
+        } catch (err) {
+          const ms = (performance.now() - t0).toFixed(0);
+          console.log('%c❌ ERROR calling Netlify relay', 'color:#F44336;font-weight:bold;', err.message);
+          console.groupEnd();
+          return { path: 'netlify_relay', error: err.message, ms };
+        }
+      })();
+
+      // --- PATH 3: Render backend ---
+      const path3 = (async () => {
+        console.group('%c📍 PATH 3 — Render backend → relay → vision_upload.php + graph_capture_api.php', 'color: #4CAF50; font-weight: bold;');
+        const t0 = performance.now();
+        try {
+          const r = await fetch(renderRelayUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(proofPayload),
+          });
+          const ct = r.headers.get('content-type') || '';
+          const data = await r.json();
+          const ms = (performance.now() - t0).toFixed(0);
+          console.log('Relay URL:', renderRelayUrl, '| HTTP status:', r.status, '| Duration:', ms + 'ms');
+          console.log('upstream_status:', data?.upstream_status, '| upstream_ok:', data?.upstream_ok, '| content_type:', data?.content_type);
+          console.log('raw_text (first 300):', String(data?.raw_text || '').substring(0, 300));
+          if (Array.isArray(data?.attempts)) {
+            data.attempts.forEach((a, i) => {
+              const aBlocked = String(a?.content_type || '').includes('text/html') || String(a?.raw_text || '').includes('Imunify360') || String(a?.raw_text || '').includes('Invalid base64');
+              console.log(`  Attempt ${i + 1}: ${a?.target_url} | HTTP ${a?.upstream_status} | ${a?.content_type} | blocked=${aBlocked} | snippet="${String(a?.raw_text || '').substring(0, 120)}"`);
+            });
+          }
+          const visionAttempt = (data?.attempts || []).find(a => String(a?.target_url || '').includes('vision_upload'));
+          const gcapiAttempt  = (data?.attempts || []).find(a => String(a?.target_url || '').includes('graph_capture_api'));
+          if (visionAttempt) {
+            const vBlocked = String(visionAttempt.content_type || '').includes('text/html');
+            console.log(vBlocked ? '%c❌ vision_upload.php BLOCKED from Render backend' : '%c✅ vision_upload.php NOT blocked from Render backend', vBlocked ? 'color:#F44336;font-weight:bold;' : 'color:#4CAF50;font-weight:bold;');
+          }
+          if (gcapiAttempt) {
+            const gOk = String(gcapiAttempt.content_type || '').includes('application/json');
+            console.log(gOk ? '%c✅ graph_capture_api.php OK from Render backend' : '%c⚠️ graph_capture_api.php unexpected response from Render backend', gOk ? 'color:#4CAF50;font-weight:bold;' : 'color:#FF9800;font-weight:bold;');
+          }
+          console.groupEnd();
+          return { path: 'render_backend', relayStatus: r.status, upstreamStatus: data?.upstream_status, upstreamOk: data?.upstream_ok, contentType: data?.content_type, rawSnippet: String(data?.raw_text || '').substring(0, 300), attempts: data?.attempts, ms };
+        } catch (err) {
+          const ms = (performance.now() - t0).toFixed(0);
+          console.log('%c❌ ERROR calling Render backend', 'color:#F44336;font-weight:bold;', err.message);
+          console.groupEnd();
+          return { path: 'render_backend', error: err.message, ms };
+        }
+      })();
+
+      const [r1, r2, r3] = await Promise.allSettled([path1, path2, path3]);
+
+      console.group('%c📋 PROOF SUMMARY', 'color: #9C27B0; font-weight: bold; font-size: 14px;');
+      console.log('%cPATH 1 — Browser direct:',   'color:#FF6B00;font-weight:bold;', r1.value || r1.reason);
+      console.log('%cPATH 2 — Netlify relay:',    'color:#2196F3;font-weight:bold;', r2.value || r2.reason);
+      console.log('%cPATH 3 — Render backend:',   'color:#4CAF50;font-weight:bold;', r3.value || r3.reason);
+      sessionStorage.setItem('ai_endpoint_proof_results', JSON.stringify({ path1: r1.value, path2: r2.value, path3: r3.value, ts: new Date().toISOString() }));
+      console.log('%c💾 Full results saved to sessionStorage key: ai_endpoint_proof_results', 'color:#9C27B0;');
+      console.log('%c⚠️ Navigation BLOCKED — refresh page to return to normal mode', 'color:#FFC107;font-weight:bold;');
+      console.groupEnd();
+      console.groupEnd();
+      setIsAiExtractionLoading(false);
+      return;
+    }
+
     if (isDualCallTest) {
       console.group('%c[TEST MODE] Running Dual API Calls (Frontend + Backend)', 'color: #FF6B00; font-weight: bold; font-size: 14px;');
       console.log('Starting parallel frontend and backend calls for comparison...');
