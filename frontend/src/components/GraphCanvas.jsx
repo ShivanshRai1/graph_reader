@@ -39,6 +39,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   const warningHoldTimeoutRef = useRef(null);
   const lastCaptureClickRef = useRef({ x: null, y: null, ts: 0 });
   const [boxTransparent, setBoxTransparent] = useState(false);
+  const [imageLoadFailed, setImageLoadFailed] = useState(false);
   const lastUserBoxRef = useRef(null); // Store last manually set box dimensions
   const potentialResizeHandleRef = useRef(null); // Track which handle was clicked
   const clickedOnHandleRef = useRef(false); // Track if this click originated on a handle
@@ -88,11 +89,13 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
 
   useEffect(() => {
     if (uploadedImage && canvasRef.current) {
+      setImageLoadFailed(false);
       const canvas = canvasRef.current;
       const ctx = canvas.getContext('2d');
       const img = new Image();
       
       img.onload = () => {
+        setImageLoadFailed(false);
         canvas.width = img.width;
         canvas.height = img.height;
         setImageSize({ width: img.width, height: img.height });
@@ -119,8 +122,15 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
         drawDataPoints(ctx);
         if (showFixPoints) drawFixPoints(ctx);
       };
+
+      img.onerror = () => {
+        console.warn('[GraphCanvas] Failed to load graph image:', uploadedImage);
+        setImageLoadFailed(true);
+      };
       
       img.src = uploadedImage;
+    } else {
+      setImageLoadFailed(false);
     }
   }, [uploadedImage]);
 
@@ -995,6 +1005,11 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       >
         x={formatCoord(mousePos.x)} y={formatCoord(mousePos.y)}
       </div>
+      {imageLoadFailed && (
+        <div className="mb-3 rounded border border-amber-400 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          The graph image could not be loaded from the server. Re-upload the screenshot, or open this graph after it was saved once in this tool (stored copy).
+        </div>
+      )}
       <div className="border border-gray-200 rounded mb-4 overflow-auto">
         <canvas
           ref={canvasRef}
