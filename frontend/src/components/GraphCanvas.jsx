@@ -1,8 +1,8 @@
 import { useRef, useState, useEffect } from 'react';
 import { useGraph } from '../context/GraphContext';
 
-const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', isAxisMappingConfirmed = false, hasReturnUrl = false }) => {
-  const { uploadedImage, graphArea, setGraphArea, dataPoints, addDataPoint, clearDataPoints, graphConfig, deleteDataPoint, convertGraphToCanvasCoordinates, convertCanvasToGraphCoordinates, replaceDataPoints } = useGraph();
+const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', isAxisMappingConfirmed = false, hasReturnUrl = false, isEditingCurve = false }) => {
+  const { uploadedImage, graphArea, setGraphArea, dataPoints, addDataPoint, clearDataPoints, graphConfig, deleteDataPoint, convertGraphToCanvasCoordinates, convertCanvasToGraphCoordinates, replaceDataPoints, updateDataPoint } = useGraph();
   const [showRedrawMsg, setShowRedrawMsg] = useState(false);
   const canvasRef = useRef(null);
   const magnifierRef = useRef(null);
@@ -43,6 +43,9 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   const lastUserBoxRef = useRef(null); // Store last manually set box dimensions
   const potentialResizeHandleRef = useRef(null); // Track which handle was clicked
   const clickedOnHandleRef = useRef(false); // Track if this click originated on a handle
+  const [editDragPointIndex, setEditDragPointIndex] = useState(null);
+  const editDragPointIndexRef = useRef(null);
+  const editDragMovedRef = useRef(false);
 
   const MARGIN = 6; // Margin from edges for resize handles visibility
   const EDGE_GAP = 12; // Hysteresis for edge checks to reduce flicker
@@ -52,6 +55,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   const RESIZE_ACTIVATION_THRESHOLD = 3; // pixels to move before activating resize
   const DOUBLE_CLICK_GUARD_MS = 140; // Only suppress very rapid repeat clicks
   const DOUBLE_CLICK_GUARD_PX = 2; // Only suppress near-identical click locations
+  const EDIT_POINT_HIT_RADIUS = 12;
 
   const normalizeArea = (area) => {
     let { x, y, width, height } = area;
@@ -86,6 +90,65 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
 
     return { x, y, width, height };
   };
+
+  const findPointIndexAtCanvasPosition = (canvasX, canvasY, hitRadius = EDIT_POINT_HIT_RADIUS) => {
+    let bestIndex = -1;
+    let bestDistance = hitRadius;
+
+    for (let i = 0; i < dataPoints.length; i++) {
+      const point = dataPoints[i];
+      if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) continue;
+
+      const { canvasX: drawX, canvasY: drawY } = convertGraphToCanvasCoordinates(point.x, point.y);
+      if (!Number.isFinite(drawX) || !Number.isFinite(drawY)) continue;
+
+      const dx = canvasX - drawX;
+      const dy = canvasY - drawY;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      if (distance <= bestDistance) {
+        bestDistance = distance;
+        bestIndex = i;
+      }
+    }
+
+    return bestIndex;
+  };
+
+  const clampCanvasPointToGraphArea = (canvasX, canvasY) => {
+    const area = normalizeArea(graphArea);
+    if (area.width <= 0 || area.height <= 0) {
+      return { canvasX, canvasY };
+    }
+
+    return {
+      canvasX: Math.min(Math.max(canvasX, area.x), area.x + area.width),
+      canvasY: Math.min(Math.max(canvasY, area.y), area.y + area.height),
+    };
+  };
+
+  const updatePointFromCanvasPosition = (index, canvasX, canvasY) => {
+    if (index < 0 || index >= dataPoints.length) return;
+
+    const clamped = clampCanvasPointToGraphArea(canvasX, canvasY);
+    const graphCoords = convertCanvasToGraphCoordinates(clamped.canvasX, clamped.canvasY);
+    if (!Number.isFinite(graphCoords.x) || !Number.isFinite(graphCoords.y)) return;
+
+    updateDataPoint(index, graphCoords.x, graphCoords.y);
+  };
+
+  useEffect(() => {
+    if (isEditingCurve) {
+      setShowFixPoints(true);
+    }
+  }, [isEditingCurve]);
+
+  useEffect(() => {
+    if (!isEditingCurve) {
+      editDragPointIndexRef.current = null;
+      setEditDragPointIndex(null);
+      editDragMovedRef.current = false;
+    }
+  }, [isEditingCurve]);
 
   useEffect(() => {
     if (uploadedImage && canvasRef.current) {
@@ -145,7 +208,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     drawSelection(ctx);
     drawDataPoints(ctx);
     if (showFixPoints) drawFixPoints(ctx);
-  }, [graphArea, dataPoints, showFixPoints, hoveredHandle, resizeMode, previewMousePos, connectSortByX, isAxisMappingConfirmed, graphConfig.xMin, graphConfig.xMax, graphConfig.yMin, graphConfig.yMax, graphConfig.xScale, graphConfig.yScale]);
+  }, [graphArea, dataPoints, showFixPoints, hoveredHandle, resizeMode, previewMousePos, connectSortByX, isAxisMappingConfirmed, isEditingCurve, editDragPointIndex, graphConfig.xMin, graphConfig.xMax, graphConfig.yMin, graphConfig.yMax, graphConfig.xScale, graphConfig.yScale]);
 
   // Keep live refs always in sync with latest state
   const graphConfigRef = useRef(graphConfig);
@@ -355,16 +418,19 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       const { canvasX: drawX, canvasY: drawY } = convertGraphToCanvasCoordinates(point.x, point.y);
       if (!Number.isFinite(drawX) || !Number.isFinite(drawY)) return;
       
-      const pointRadius = 2.5;
-      
+      const isAnnotation = point.isAnnotation === true;
+      const isActiveEditPoint = isEditingCurve && editDragPointIndex === index;
+      const pointRadius = isEditingCurve ? 5 : 2.5;
+
       // Different colors for different point types:
       // - Red for imported points
       // - Yellow/Orange for annotations (user-captured points)
-      const isAnnotation = point.isAnnotation === true;
-      const fillColor = isAnnotation ? '#FFD700' : 'red'; // Gold for annotations, red for imported
+      const fillColor = isActiveEditPoint
+        ? '#FFD700'
+        : (isAnnotation ? '#FFD700' : 'red'); // Gold for annotations, red for imported
       
-      ctx.strokeStyle = 'white';
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = isActiveEditPoint ? '#1976d2' : 'white';
+      ctx.lineWidth = isActiveEditPoint ? 2 : 1;
       ctx.beginPath();
       ctx.arc(drawX, drawY, pointRadius, 0, 2 * Math.PI);
       ctx.stroke();
@@ -409,7 +475,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     ctx.stroke();
 
     // Draw dashed preview line from last point to current mouse position
-    if (orderedPoints.length > 0 && previewMousePos.x !== null && previewMousePos.y !== null) {
+    if (!isEditingCurve && orderedPoints.length > 0 && previewMousePos.x !== null && previewMousePos.y !== null) {
       ctx.strokeStyle = '#FFD700';
       ctx.lineWidth = 4;
       ctx.setLineDash([5, 5]); // 5px dash, 5px gap
@@ -438,6 +504,16 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
 
     // Reset drag distance for new interaction
     setDragDistance(0);
+
+    if (isEditingCurve && !isReadOnly) {
+      const hitIndex = findPointIndexAtCanvasPosition(x, y);
+      if (hitIndex >= 0) {
+        editDragMovedRef.current = false;
+        editDragPointIndexRef.current = hitIndex;
+        setEditDragPointIndex(hitIndex);
+      }
+      return;
+    }
 
     const area = normalizeArea(graphArea);
     const handleRadius = 12; // Same as in handleMouseMoveOnCanvas
@@ -491,6 +567,12 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
 
     const x = (e.clientX - rect.left) * scaleX;
     const y = (e.clientY - rect.top) * scaleY;
+
+    if (isEditingCurve && editDragPointIndexRef.current !== null) {
+      editDragMovedRef.current = true;
+      updatePointFromCanvasPosition(editDragPointIndexRef.current, x, y);
+      return;
+    }
 
     // Check if we need to activate resize mode based on potential handle
     if (!resizeMode && potentialResizeHandleRef.current && initialArea && !isAxisMappingConfirmed) {
@@ -591,6 +673,11 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       setBoxTransparent(true);
     }
     
+    if (editDragPointIndexRef.current !== null) {
+      editDragPointIndexRef.current = null;
+      setEditDragPointIndex(null);
+    }
+
     // Always clean up on mouse up
     potentialResizeHandleRef.current = null;
     setIsSelecting(false);
@@ -603,6 +690,13 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
 
   const handleCanvasClick = (e) => {
     if (isReadOnly) {
+      return;
+    }
+
+    if (isEditingCurve) {
+      if (editDragMovedRef.current) {
+        editDragMovedRef.current = false;
+      }
       return;
     }
     
@@ -677,6 +771,10 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     e.preventDefault(); // Prevent browser context menu
 
     if (isReadOnly) {
+      return;
+    }
+
+    if (isEditingCurve) {
       return;
     }
     
@@ -758,8 +856,15 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       }
       
       setHoveredHandle(hovered);
-      
-      if (hovered) {
+
+      if (isEditingCurve) {
+        if (editDragPointIndexRef.current !== null) {
+          canvas.style.cursor = 'grabbing';
+        } else {
+          const hitIndex = findPointIndexAtCanvasPosition(canvasX, canvasY);
+          canvas.style.cursor = hitIndex >= 0 ? 'grab' : 'default';
+        }
+      } else if (hovered) {
         canvas.style.cursor = 'default';
       } else {
         canvas.style.cursor = 'default';

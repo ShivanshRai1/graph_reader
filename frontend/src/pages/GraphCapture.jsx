@@ -2210,6 +2210,7 @@ const GraphCapture = () => {
       : [];
     replaceDataPoints(loadedPoints);
     setIsReadOnly(false);
+    setIsAxisMappingConfirmed(true);
 
     setEditingCurveId(curve.id);
     setEditCurveMeta({
@@ -4667,7 +4668,7 @@ const GraphCapture = () => {
         {(uploadedImage || savedCurves.length > 0) && (
           <div ref={graphWorkspaceRef} className="flex flex-col lg:flex-row gap-8">
             <div className="w-full lg:w-2/5 flex flex-col gap-4">
-              <GraphCanvas isReadOnly={isReadOnly} partNumber={urlParams.partno} manufacturer={urlParams.manufacturer || graphConfig.manufacturer} isAxisMappingConfirmed={isAxisMappingConfirmed} hasReturnUrl={!!urlParams.return_url} />
+              <GraphCanvas isReadOnly={isReadOnly} partNumber={urlParams.partno} manufacturer={urlParams.manufacturer || graphConfig.manufacturer} isAxisMappingConfirmed={isAxisMappingConfirmed} hasReturnUrl={!!urlParams.return_url} isEditingCurve={Boolean(editingCurveId)} />
               <CapturedPointsList isReadOnly={isReadOnly} hasReturnUrl={!!urlParams.return_url} />
             </div>
             <div className="w-full lg:w-3/5">
