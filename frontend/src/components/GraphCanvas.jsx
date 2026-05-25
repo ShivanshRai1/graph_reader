@@ -168,23 +168,25 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
 
         // Defer so persisted graphArea from parent can sync into graphAreaRef first.
         requestAnimationFrame(() => {
-          const currentArea = normalizeArea(graphAreaRef.current);
-          if (currentArea.width === 0 && currentArea.height === 0 && dataPointsRef.current.length === 0) {
-            const initialBox = constrainAreaToMargin(
-              {
-                x: 0,
-                y: 0,
-                width: img.width,
-                height: img.height,
-              },
-              img.width,
-              img.height
-            );
-            setGraphArea(initialBox);
-            lastUserBoxRef.current = initialBox;
-          }
+          requestAnimationFrame(() => {
+            const currentArea = normalizeArea(graphAreaRef.current);
+            if (currentArea.width === 0 && currentArea.height === 0 && dataPointsRef.current.length === 0) {
+              const initialBox = constrainAreaToMargin(
+                {
+                  x: 0,
+                  y: 0,
+                  width: img.width,
+                  height: img.height,
+                },
+                img.width,
+                img.height
+              );
+              setGraphArea(initialBox);
+              lastUserBoxRef.current = initialBox;
+            }
 
-          drawLoadedImage();
+            drawLoadedImage();
+          });
         });
       };
 
