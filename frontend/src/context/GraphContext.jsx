@@ -8,6 +8,64 @@ import {
 
 const GraphContext = createContext();
 
+const getSafeLogBoundsStatic = (minValue, maxValue) => {
+  const safeMin = Number.isFinite(minValue) && minValue > 0 ? minValue : 1e-12;
+  const candidateMax = Number.isFinite(maxValue) && maxValue > 0 ? maxValue : safeMin * 10;
+  const safeMax = candidateMax > safeMin ? candidateMax : safeMin * 10;
+  return {
+    min: safeMin,
+    max: safeMax,
+    logMin: Math.log10(safeMin),
+    logMax: Math.log10(safeMax),
+  };
+};
+
+const getAxisBoundsFromConfig = (graphConfig = {}) => {
+  let xMin = parseFloat(graphConfig.xMin);
+  let xMax = parseFloat(graphConfig.xMax);
+  let yMin = parseFloat(graphConfig.yMin);
+  let yMax = parseFloat(graphConfig.yMax);
+
+  if (Number.isNaN(xMin)) xMin = graphConfig.xScale === 'Logarithmic' ? 1 : 0;
+  if (Number.isNaN(xMax)) xMax = 100;
+  if (Number.isNaN(yMin)) yMin = graphConfig.yScale === 'Logarithmic' ? 1 : 0;
+  if (Number.isNaN(yMax)) yMax = 100;
+
+  return { xMin, xMax, yMin, yMax };
+};
+
+export const graphToCanvasWithBounds = (graphX, graphY, graphArea, graphConfig = {}) => {
+  if (!graphArea || graphArea.width === 0 || graphArea.height === 0) {
+    return { canvasX: 0, canvasY: 0 };
+  }
+
+  const { xMin, xMax, yMin, yMax } = getAxisBoundsFromConfig(graphConfig);
+
+  let canvasX;
+  if (graphConfig.xScale === 'Logarithmic') {
+    const xBounds = getSafeLogBoundsStatic(xMin, xMax);
+    const xLog = Math.log10(Math.max(Number(graphX), 1e-12));
+    const xRange = Math.max(xBounds.logMax - xBounds.logMin, 1e-9);
+    canvasX = graphArea.x + ((xLog - xBounds.logMin) / xRange) * graphArea.width;
+  } else {
+    const dx = Math.max(xMax - xMin, 1e-9);
+    canvasX = graphArea.x + ((graphX - xMin) / dx) * graphArea.width;
+  }
+
+  let canvasY;
+  if (graphConfig.yScale === 'Logarithmic') {
+    const yBounds = getSafeLogBoundsStatic(yMin, yMax);
+    const yLog = Math.log10(Math.max(Number(graphY), 1e-12));
+    const yRange = Math.max(yBounds.logMax - yBounds.logMin, 1e-9);
+    canvasY = graphArea.y + ((yBounds.logMax - yLog) / yRange) * graphArea.height;
+  } else {
+    const dy = Math.max(yMax - yMin, 1e-9);
+    canvasY = graphArea.y + ((yMax - graphY) / dy) * graphArea.height;
+  }
+
+  return { canvasX, canvasY };
+};
+
 export const useGraph = () => {
   const context = useContext(GraphContext);
   if (!context) {
@@ -153,35 +211,17 @@ export const GraphProvider = ({ children }) => {
   // Convert graph coordinates to canvas coordinates
   // Optional boundsOverride lets us map using updated bounds before state flushes
   const convertGraphToCanvasCoordinates = (graphX, graphY, boundsOverride) => {
-    if (graphArea.width === 0 || graphArea.height === 0) {
-      return { canvasX: 0, canvasY: 0 };
-    }
+    const configForConversion = boundsOverride
+      ? {
+          ...graphConfig,
+          xMin: boundsOverride.xMin,
+          xMax: boundsOverride.xMax,
+          yMin: boundsOverride.yMin,
+          yMax: boundsOverride.yMax,
+        }
+      : graphConfig;
 
-    const { xMin, xMax, yMin, yMax } = boundsOverride || getNormalizedMinMax();
-
-    let canvasX;
-    if (graphConfig.xScale === 'Logarithmic') {
-      const xBounds = getSafeLogBounds(xMin, xMax);
-      const xLog = Math.log10(Math.max(Number(graphX), 1e-12));
-      const xRange = Math.max(xBounds.logMax - xBounds.logMin, 1e-9);
-      canvasX = graphArea.x + ((xLog - xBounds.logMin) / xRange) * graphArea.width;
-    } else {
-      const dx = Math.max(xMax - xMin, 1e-9);
-      canvasX = graphArea.x + ((graphX - xMin) / dx) * graphArea.width;
-    }
-
-    let canvasY;
-    if (graphConfig.yScale === 'Logarithmic') {
-      const yBounds = getSafeLogBounds(yMin, yMax);
-      const yLog = Math.log10(Math.max(Number(graphY), 1e-12));
-      const yRange = Math.max(yBounds.logMax - yBounds.logMin, 1e-9);
-      canvasY = graphArea.y + ((yBounds.logMax - yLog) / yRange) * graphArea.height;
-    } else {
-      const dy = Math.max(yMax - yMin, 1e-9);
-      canvasY = graphArea.y + ((yMax - graphY) / dy) * graphArea.height;
-    }
-
-    return { canvasX, canvasY };
+    return graphToCanvasWithBounds(graphX, graphY, graphArea, configForConversion);
   };
 
   const addDataPoint = (point, curveId = null) => {
@@ -351,13 +391,21 @@ export const GraphProvider = ({ children }) => {
       return;
     }
 
-    const updatedPoints = dataPoints.map(point => {
+    const updatedPoints = dataPoints.map((point) => {
       if (!point.imported) {
-        return point; // Keep user-captured points as-is
+        return point;
       }
 
-      // Recalculate canvas coordinates for imported points
-      const canvasCoords = convertGraphToCanvasCoordinates(point.x, point.y);
+      const canvasCoords = graphToCanvasWithBounds(point.x, point.y, graphArea, graphConfig);
+      if (
+        Number.isFinite(point.canvasX) &&
+        Number.isFinite(point.canvasY) &&
+        Math.abs(point.canvasX - canvasCoords.canvasX) < 0.01 &&
+        Math.abs(point.canvasY - canvasCoords.canvasY) < 0.01
+      ) {
+        return point;
+      }
+
       return {
         ...point,
         canvasX: canvasCoords.canvasX,
@@ -365,8 +413,11 @@ export const GraphProvider = ({ children }) => {
       };
     });
 
-    setDataPoints(updatedPoints);
-  }, [graphConfig.xScale, graphConfig.yScale, graphConfig.xUnitPrefix, graphConfig.yUnitPrefix, graphConfig.xMin, graphConfig.xMax, graphConfig.yMin, graphConfig.yMax, graphArea.width, graphArea.height]);
+    const changed = updatedPoints.some((point, index) => point !== dataPoints[index]);
+    if (changed) {
+      setDataPoints(updatedPoints);
+    }
+  }, [graphConfig.xScale, graphConfig.yScale, graphConfig.xUnitPrefix, graphConfig.yUnitPrefix, graphConfig.xMin, graphConfig.xMax, graphConfig.yMin, graphConfig.yMax, graphArea.width, graphArea.height, graphArea.x, graphArea.y]);
 
   /**
    * Load saved annotations for a curve and add them to current data points

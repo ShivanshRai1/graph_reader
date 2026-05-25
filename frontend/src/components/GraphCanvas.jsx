@@ -158,27 +158,34 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
         canvas.height = img.height;
         setImageSize({ width: img.width, height: img.height });
         imageRef.current = img; // Store image reference
-        
-        // Auto-draw blue selection box covering entire image only on first load (no points captured yet)
-        if (graphArea.width === 0 && graphArea.height === 0 && dataPoints.length === 0) {
-          const initialBox = constrainAreaToMargin(
-            {
-              x: 0,
-              y: 0,
-              width: img.width,
-              height: img.height,
-            },
-            img.width,
-            img.height
-          );
-          setGraphArea(initialBox);
-          lastUserBoxRef.current = initialBox;
-        }
-        
-        ctx.drawImage(img, 0, 0);
-        drawSelection(ctx);
-        drawDataPoints(ctx);
-        if (showFixPoints) drawFixPoints(ctx);
+
+        const drawLoadedImage = () => {
+          ctx.drawImage(img, 0, 0);
+          drawSelection(ctx);
+          drawDataPoints(ctx);
+          if (showFixPoints) drawFixPoints(ctx);
+        };
+
+        // Defer so persisted graphArea from parent can sync into graphAreaRef first.
+        requestAnimationFrame(() => {
+          const currentArea = normalizeArea(graphAreaRef.current);
+          if (currentArea.width === 0 && currentArea.height === 0 && dataPointsRef.current.length === 0) {
+            const initialBox = constrainAreaToMargin(
+              {
+                x: 0,
+                y: 0,
+                width: img.width,
+                height: img.height,
+              },
+              img.width,
+              img.height
+            );
+            setGraphArea(initialBox);
+            lastUserBoxRef.current = initialBox;
+          }
+
+          drawLoadedImage();
+        });
       };
 
       img.onerror = () => {
@@ -286,7 +293,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   // canvas positions so dots stay on the curve regardless of axis range changes.
   // Uses only refs — no stale closure issues.
   useEffect(() => {
-    if (isAxisMappingConfirmed) return;
+    if (isAxisMappingConfirmed || isEditingCurve) return;
     const pts = dataPointsRef.current;
     if (pts.length === 0) return;
     const box = normalizeArea(graphAreaRef.current);
@@ -326,7 +333,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       return { ...p, x, y };
     });
     replaceDataPoints(updated);
-  }, [graphConfig.xMin, graphConfig.xMax, graphConfig.yMin, graphConfig.yMax, graphConfig.xScale, graphConfig.yScale]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [graphConfig.xMin, graphConfig.xMax, graphConfig.yMin, graphConfig.yMax, graphConfig.xScale, graphConfig.yScale, isAxisMappingConfirmed, isEditingCurve]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => () => {
     if (coordinateUpdateTimeoutRef.current) {

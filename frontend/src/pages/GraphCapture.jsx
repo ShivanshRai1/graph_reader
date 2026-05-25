@@ -4,7 +4,7 @@ import GraphConfig from '../components/GraphConfig';
 import CapturedPointsList from '../components/CapturedPointsList';
 import SavedGraphPreview from '../components/SavedGraphPreview';
 import SavedGraphCombinedPreview from '../components/SavedGraphCombinedPreview';
-import { useGraph } from '../context/GraphContext';
+import { useGraph, graphToCanvasWithBounds } from '../context/GraphContext';
 import { clearAnnotationsForCurve } from '../utils/annotationStorage';
 import { useState, useEffect, useMemo, useRef } from 'react';
 
@@ -889,6 +889,8 @@ const GraphCapture = () => {
     setUploadedImage,
     loadAnnotationsForCurve,
     convertCanvasToGraphCoordinates,
+    graphArea,
+    setGraphArea,
   } = useGraph();
   const graphWorkspaceRef = useRef(null);
 
@@ -2060,9 +2062,8 @@ const GraphCapture = () => {
       .filter((entry) => entry.value !== '');
   };
 
-  const resolveAxisValue = (primaryValue, secondaryValue, fallbackValue = '') => {
-    const candidates = [primaryValue, secondaryValue, fallbackValue];
-    for (const candidate of candidates) {
+  const resolveAxisValue = (...values) => {
+    for (const candidate of values) {
       if (isValidSymbolValue(candidate)) {
         return String(candidate).trim();
       }
@@ -2095,6 +2096,124 @@ const GraphCapture = () => {
     } catch (error) {
       console.warn('[DEBUG] Failed to persist graph image:', error);
     }
+  };
+
+  const normalizePersistedGraphArea = (area) => {
+    const x = Number(area?.x);
+    const y = Number(area?.y);
+    const width = Number(area?.width);
+    const height = Number(area?.height);
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+      return null;
+    }
+    return {
+      x: Number.isFinite(x) ? x : 0,
+      y: Number.isFinite(y) ? y : 0,
+      width,
+      height,
+    };
+  };
+
+  const getPersistedGraphContext = (graphId) => {
+    const normalizedGraphId = String(graphId || '').trim();
+    if (!normalizedGraphId) return null;
+
+    try {
+      const raw = localStorage.getItem(`graph_context_${normalizedGraphId}`);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return {
+        graphArea: normalizePersistedGraphArea(parsed?.graphArea),
+        axis: parsed?.axis && typeof parsed.axis === 'object' ? parsed.axis : null,
+      };
+    } catch (error) {
+      console.warn('[DEBUG] Failed to read persisted graph context:', error);
+      return null;
+    }
+  };
+
+  const persistGraphContext = (graphId, area, axisConfig = {}) => {
+    const normalizedGraphId = String(graphId || '').trim();
+    const normalizedArea = normalizePersistedGraphArea(area);
+    if (!normalizedGraphId || !normalizedArea) return;
+
+    try {
+      localStorage.setItem(
+        `graph_context_${normalizedGraphId}`,
+        JSON.stringify({
+          graphArea: normalizedArea,
+          axis: {
+            xMin: axisConfig.xMin ?? '',
+            xMax: axisConfig.xMax ?? '',
+            yMin: axisConfig.yMin ?? '',
+            yMax: axisConfig.yMax ?? '',
+            xScale: axisConfig.xScale || 'Linear',
+            yScale: axisConfig.yScale || 'Linear',
+            xUnitPrefix: axisConfig.xUnitPrefix || '1',
+            yUnitPrefix: axisConfig.yUnitPrefix || '1',
+            xLabel: axisConfig.xLabel || '',
+            yLabel: axisConfig.yLabel || '',
+          },
+        })
+      );
+    } catch (error) {
+      console.warn('[DEBUG] Failed to persist graph context:', error);
+    }
+  };
+
+  const hasValidAxisMapping = (config = {}) => {
+    const xMin = parseFloat(config.xMin);
+    const xMax = parseFloat(config.xMax);
+    const yMin = parseFloat(config.yMin);
+    const yMax = parseFloat(config.yMax);
+
+    return (
+      Number.isFinite(xMin) &&
+      Number.isFinite(xMax) &&
+      Number.isFinite(yMin) &&
+      Number.isFinite(yMax) &&
+      xMin !== xMax &&
+      yMin !== yMax &&
+      Boolean(config.xScale) &&
+      Boolean(config.yScale)
+    );
+  };
+
+  const buildCurveConfigFromSaved = (curve, prevConfig = {}, persistedAxis = null) => ({
+    graphTitle: curve.config?.graphTitle || curve.graph_title || prevConfig.graphTitle || '',
+    curveName: curve.config?.curveName || curve.curve_name || curve.name || prevConfig.curveName || '',
+    partNumber: curve.config?.partNumber || curve.part_number || prevConfig.partNumber || '',
+    xScale: curve.config?.xScale || curve.x_scale || persistedAxis?.xScale || prevConfig.xScale || 'Linear',
+    yScale: curve.config?.yScale || curve.y_scale || persistedAxis?.yScale || prevConfig.yScale || 'Linear',
+    xUnitPrefix: curve.config?.xUnitPrefix || curve.x_unit || persistedAxis?.xUnitPrefix || prevConfig.xUnitPrefix || '1',
+    yUnitPrefix: curve.config?.yUnitPrefix || curve.y_unit || persistedAxis?.yUnitPrefix || prevConfig.yUnitPrefix || '1',
+    xMin: resolveAxisValue(curve.config?.xMin, curve.x_min, persistedAxis?.xMin, prevConfig.xMin),
+    xMax: resolveAxisValue(curve.config?.xMax, curve.x_max, persistedAxis?.xMax, prevConfig.xMax),
+    yMin: resolveAxisValue(curve.config?.yMin, curve.y_min, persistedAxis?.yMin, prevConfig.yMin),
+    yMax: resolveAxisValue(curve.config?.yMax, curve.y_max, persistedAxis?.yMax, prevConfig.yMax),
+    xLabel: curve.config?.xLabel || curve.x_label || persistedAxis?.xLabel || prevConfig.xLabel || '',
+    yLabel: curve.config?.yLabel || curve.y_label || persistedAxis?.yLabel || prevConfig.yLabel || '',
+    temperature: curve.config?.temperature || curve.temperature || prevConfig.temperature || '',
+  });
+
+  const buildImportedPointsForCurve = (curve, area, config) => {
+    const pointList = Array.isArray(curve?.points) ? curve.points : [];
+    return pointList
+      .map((point) => {
+        const x = Number(point?.x_value ?? point?.x);
+        const y = Number(point?.y_value ?? point?.y);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+
+        const { canvasX, canvasY } = graphToCanvasWithBounds(x, y, area, config);
+        return {
+          x,
+          y,
+          canvasX,
+          canvasY,
+          imported: true,
+        };
+      })
+      .filter(Boolean);
   };
 
   const resolveGraphImageUrl = (graph = {}, details = [], graphId = '') => {
@@ -2181,49 +2300,55 @@ const GraphCapture = () => {
     //   sessionGraphId: activeSessionGraphIdRef.current || '',
     // });
     setSelectedCurveId('');
+    const graphId = String(curve.graphId || getGraphIdForCurve(curve) || urlParams.graph_id || '').trim();
+    const persistedContext = getPersistedGraphContext(graphId);
+    const restoredArea =
+      persistedContext?.graphArea ||
+      (graphArea.width > 0 && graphArea.height > 0 ? graphArea : null);
+
     if (curve.graphImageUrl) {
       setUploadedImageFromExistingGraph(curve.graphImageUrl);
     }
 
+    const nextConfig = buildCurveConfigFromSaved(curve, graphConfig, persistedContext?.axis);
+
+    if (restoredArea) {
+      setGraphArea(restoredArea);
+    }
+
     setGraphConfig((prev) => ({
       ...prev,
-      graphTitle: curve.config?.graphTitle || curve.graph_title || prev.graphTitle || '',
-      curveName: curve.config?.curveName || curve.curve_name || curve.name || prev.curveName || '',
-      partNumber: curve.config?.partNumber || curve.part_number || prev.partNumber || '',
-      xScale: curve.config?.xScale || curve.x_scale || prev.xScale || 'Linear',
-      yScale: curve.config?.yScale || curve.y_scale || prev.yScale || 'Linear',
-      xUnitPrefix: curve.config?.xUnitPrefix || curve.x_unit || prev.xUnitPrefix || '1',
-      yUnitPrefix: curve.config?.yUnitPrefix || curve.y_unit || prev.yUnitPrefix || '1',
-      xMin: resolveAxisValue(curve.config?.xMin, curve.x_min, prev.xMin),
-      xMax: resolveAxisValue(curve.config?.xMax, curve.x_max, prev.xMax),
-      yMin: resolveAxisValue(curve.config?.yMin, curve.y_min, prev.yMin),
-      yMax: resolveAxisValue(curve.config?.yMax, curve.y_max, prev.yMax),
-      temperature: curve.config?.temperature || curve.temperature || prev.temperature || '',
+      ...nextConfig,
     }));
 
-    const loadedPoints = Array.isArray(curve.points)
-      ? curve.points.map((point) => ({
-          x: point.x_value ?? point.x,
-          y: point.y_value ?? point.y,
-          imported: true,
-        }))
-      : [];
+    const mappingArea = restoredArea || graphArea;
+    const loadedPoints =
+      mappingArea.width > 0 && mappingArea.height > 0 && hasValidAxisMapping(nextConfig)
+        ? buildImportedPointsForCurve(curve, mappingArea, nextConfig)
+        : (Array.isArray(curve.points)
+            ? curve.points.map((point) => ({
+                x: Number(point.x_value ?? point.x),
+                y: Number(point.y_value ?? point.y),
+                imported: true,
+              }))
+            : []);
+
     replaceDataPoints(loadedPoints);
     setIsReadOnly(false);
-    setIsAxisMappingConfirmed(true);
+    setIsAxisMappingConfirmed(hasValidAxisMapping(nextConfig));
+    if (hasValidAxisMapping(nextConfig)) {
+      setFrozenGraphConfig(nextConfig);
+    }
 
     setEditingCurveId(curve.id);
     setEditCurveMeta({
-      xScale: curve.config?.xScale || curve.x_scale || 'Linear',
-      yScale: curve.config?.yScale || curve.y_scale || 'Linear',
-      xUnitPrefix: curve.config?.xUnitPrefix || curve.x_unit || '1',
-      yUnitPrefix: curve.config?.yUnitPrefix || curve.y_unit || '1',
+      xScale: nextConfig.xScale,
+      yScale: nextConfig.yScale,
+      xUnitPrefix: nextConfig.xUnitPrefix,
+      yUnitPrefix: nextConfig.yUnitPrefix,
     });
     setEditCurveSymbolValues(normalizeCurveSymbolValues(curve));
     setEditCurveName(curve.config?.curveName || curve.curve_name || curve.name || '');
-    
-    // Load saved annotations for this curve
-    loadAnnotationsForCurve(curve.id);
   };
 
   const handleEditCurveCancel = () => {
@@ -2847,6 +2972,10 @@ const GraphCapture = () => {
           };
         })
       );
+      const updatedGraphId = String(targetCurve.graphId || getGraphIdForCurve(targetCurve) || urlParams.graph_id || '').trim();
+      if (updatedGraphId && graphArea.width > 0 && graphArea.height > 0) {
+        persistGraphContext(updatedGraphId, graphArea, graphConfig);
+      }
       setEditingCurveId('');
       setEditCurveSymbolValues({});
       setEditCurveName('');
@@ -3574,6 +3703,11 @@ const GraphCapture = () => {
       const firstCurve = savedCurves[0];
       console.log('[DEBUG] Auto-loading graph context without points:', firstCurve.id);
 
+      const persistedContext = getPersistedGraphContext(graphId);
+      if (persistedContext?.graphArea) {
+        setGraphArea(persistedContext.graphArea);
+      }
+
       const autoLoadCandidates = [
         firstCurve.graphImageUrl,
         firstCurve.graph_img,
@@ -3606,16 +3740,35 @@ const GraphCapture = () => {
         graphTitle: firstCurve.config?.graphTitle || firstCurve.graph_title || firstCurve.name || '',
         curveName: '',
         partNumber: firstCurve.config?.partNumber || firstCurve.part_number || prev.partNumber || '',
-        xScale: firstCurve.config?.xScale || firstCurve.x_scale || 'Linear',
-        yScale: firstCurve.config?.yScale || firstCurve.y_scale || 'Linear',
-        xUnitPrefix: firstCurve.config?.xUnitPrefix || firstCurve.x_unit || '1',
-        yUnitPrefix: firstCurve.config?.yUnitPrefix || firstCurve.y_unit || '1',
-        xMin: resolveAxisValue(firstCurve.config?.xMin, firstCurve.x_min),
-        xMax: resolveAxisValue(firstCurve.config?.xMax, firstCurve.x_max),
-        yMin: resolveAxisValue(firstCurve.config?.yMin, firstCurve.y_min),
-        yMax: resolveAxisValue(firstCurve.config?.yMax, firstCurve.y_max),
+        xScale: firstCurve.config?.xScale || firstCurve.x_scale || persistedContext?.axis?.xScale || prev.xScale || 'Linear',
+        yScale: firstCurve.config?.yScale || firstCurve.y_scale || persistedContext?.axis?.yScale || prev.yScale || 'Linear',
+        xUnitPrefix: firstCurve.config?.xUnitPrefix || firstCurve.x_unit || persistedContext?.axis?.xUnitPrefix || prev.xUnitPrefix || '1',
+        yUnitPrefix: firstCurve.config?.yUnitPrefix || firstCurve.y_unit || persistedContext?.axis?.yUnitPrefix || prev.yUnitPrefix || '1',
+        xMin: resolveAxisValue(firstCurve.config?.xMin, firstCurve.x_min, persistedContext?.axis?.xMin, prev.xMin),
+        xMax: resolveAxisValue(firstCurve.config?.xMax, firstCurve.x_max, persistedContext?.axis?.xMax, prev.xMax),
+        yMin: resolveAxisValue(firstCurve.config?.yMin, firstCurve.y_min, persistedContext?.axis?.yMin, prev.yMin),
+        yMax: resolveAxisValue(firstCurve.config?.yMax, firstCurve.y_max, persistedContext?.axis?.yMax, prev.yMax),
+        xLabel: firstCurve.config?.xLabel || firstCurve.x_label || persistedContext?.axis?.xLabel || prev.xLabel || '',
+        yLabel: firstCurve.config?.yLabel || firstCurve.y_label || persistedContext?.axis?.yLabel || prev.yLabel || '',
         temperature: firstCurve.config?.temperature || firstCurve.temperature || '',
       }));
+
+      const restoredAxisConfig = {
+        xMin: resolveAxisValue(firstCurve.config?.xMin, firstCurve.x_min, persistedContext?.axis?.xMin),
+        xMax: resolveAxisValue(firstCurve.config?.xMax, firstCurve.x_max, persistedContext?.axis?.xMax),
+        yMin: resolveAxisValue(firstCurve.config?.yMin, firstCurve.y_min, persistedContext?.axis?.yMin),
+        yMax: resolveAxisValue(firstCurve.config?.yMax, firstCurve.y_max, persistedContext?.axis?.yMax),
+        xScale: firstCurve.config?.xScale || firstCurve.x_scale || persistedContext?.axis?.xScale || 'Linear',
+        yScale: firstCurve.config?.yScale || firstCurve.y_scale || persistedContext?.axis?.yScale || 'Linear',
+        xUnitPrefix: firstCurve.config?.xUnitPrefix || firstCurve.x_unit || persistedContext?.axis?.xUnitPrefix || '1',
+        yUnitPrefix: firstCurve.config?.yUnitPrefix || firstCurve.y_unit || persistedContext?.axis?.yUnitPrefix || '1',
+        xLabel: firstCurve.config?.xLabel || firstCurve.x_label || persistedContext?.axis?.xLabel || '',
+        yLabel: firstCurve.config?.yLabel || firstCurve.y_label || persistedContext?.axis?.yLabel || '',
+      };
+      if (hasValidAxisMapping(restoredAxisConfig)) {
+        setIsAxisMappingConfirmed(true);
+        setFrozenGraphConfig(restoredAxisConfig);
+      }
 
       replaceDataPoints([]);
       setIsReadOnly(false);
@@ -3623,6 +3776,31 @@ const GraphCapture = () => {
       console.log('[DEBUG] Graph context loaded. Captured points remain empty until View/Edit.');
     }
   }, [savedCurves, replaceDataPoints, setGraphConfig, setUploadedImage]);
+
+  // Keep blue box + axis mapping in localStorage so refresh restores them.
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    const graphId = String(searchParams.get('graph_id') || activeSessionGraphIdRef.current || '').trim();
+    if (!graphId || !isAxisMappingConfirmed) return;
+    if (graphArea.width <= 0 || graphArea.height <= 0) return;
+    persistGraphContext(graphId, graphArea, graphConfig);
+  }, [
+    graphArea.x,
+    graphArea.y,
+    graphArea.width,
+    graphArea.height,
+    isAxisMappingConfirmed,
+    graphConfig.xMin,
+    graphConfig.xMax,
+    graphConfig.yMin,
+    graphConfig.yMax,
+    graphConfig.xScale,
+    graphConfig.yScale,
+    graphConfig.xUnitPrefix,
+    graphConfig.yUnitPrefix,
+    graphConfig.xLabel,
+    graphConfig.yLabel,
+  ]);
 
   // Auto-scroll to Saved Graphs when opening with graph_id so edit/remove actions are visible immediately.
   useEffect(() => {
@@ -3955,6 +4133,11 @@ const GraphCapture = () => {
         ...prev,
         savedCurve,
       ]);
+
+      const persistGraphId = String(urlParams.graph_id || companyGraphId || '').trim();
+      if (persistGraphId && graphArea.width > 0 && graphArea.height > 0) {
+        persistGraphContext(persistGraphId, graphArea, graphConfig);
+      }
 
       clearDataPoints();
       setGraphConfig((prevConfig) => ({
@@ -4692,6 +4875,10 @@ const GraphCapture = () => {
                   setIsAxisMappingConfirmed(true);
                   setFrozenGraphConfig({ ...graphConfig });
                   setPartNumberLocked(true);
+                  const graphId = String(urlParams.graph_id || '').trim();
+                  if (graphId && graphArea.width > 0 && graphArea.height > 0) {
+                    persistGraphContext(graphId, graphArea, graphConfig);
+                  }
                 }}
                 onRetakeAxis={() => {
                   setIsAxisMappingConfirmed(false);
