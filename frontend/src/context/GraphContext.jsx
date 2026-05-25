@@ -294,22 +294,46 @@ export const GraphProvider = ({ children }) => {
   };
 
   const updateDataPoint = (index, newX, newY) => {
-    if (index < 0 || index >= dataPoints.length) return;
-    
-    const point = dataPoints[index];
-    const canvasCoords = convertGraphToCanvasCoordinates(newX, newY);
-    
-    const updatedPoint = {
-      ...point,
-      x: newX,
-      y: newY,
-      canvasX: canvasCoords.canvasX,
-      canvasY: canvasCoords.canvasY,
-    };
-    
-    const updatedPoints = [...dataPoints];
-    updatedPoints[index] = updatedPoint;
-    setDataPoints(updatedPoints);
+    setDataPoints((prev) => {
+      if (index < 0 || index >= prev.length) return prev;
+
+      const point = prev[index];
+      const canvasCoords = convertGraphToCanvasCoordinates(newX, newY);
+
+      const updatedPoint = {
+        ...point,
+        x: newX,
+        y: newY,
+        canvasX: canvasCoords.canvasX,
+        canvasY: canvasCoords.canvasY,
+      };
+
+      const updatedPoints = [...prev];
+      updatedPoints[index] = updatedPoint;
+      return updatedPoints;
+    });
+  };
+
+  const updateDataPointFromCanvas = (index, canvasX, canvasY) => {
+    setDataPoints((prev) => {
+      if (index < 0 || index >= prev.length) return prev;
+
+      const graphCoords = convertCanvasToGraphCoordinates(canvasX, canvasY);
+      if (!Number.isFinite(graphCoords.x) || !Number.isFinite(graphCoords.y)) return prev;
+
+      const point = prev[index];
+      const updatedPoint = {
+        ...point,
+        x: graphCoords.x,
+        y: graphCoords.y,
+        canvasX,
+        canvasY,
+      };
+
+      const updatedPoints = [...prev];
+      updatedPoints[index] = updatedPoint;
+      return updatedPoints;
+    });
   };
 
   const deleteDataPoint = (index) => {
@@ -405,6 +429,7 @@ export const GraphProvider = ({ children }) => {
     replaceDataPoints,
     importDataPoints,
     updateDataPoint,
+    updateDataPointFromCanvas,
     deleteDataPoint,
     savedCurves,
     setSavedCurves,

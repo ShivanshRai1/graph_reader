@@ -2,11 +2,33 @@ import { useGraph } from '../context/GraphContext';
 import { parseFile } from '../utils/fileParser';
 import { useEffect, useState } from 'react';
 
-const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false }) => {
+const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false, isEditingCurve = false }) => {
   const { dataPoints, clearDataPoints, importDataPoints, uploadedImage, updateDataPoint, deleteDataPoint, graphConfig, graphArea, convertCanvasToGraphCoordinates } = useGraph();
   const [editingIndex, setEditingIndex] = useState(null);
   const [editX, setEditX] = useState('');
   const [editY, setEditY] = useState('');
+
+  useEffect(() => {
+    if (editingIndex === null) return;
+
+    const point = dataPoints[editingIndex];
+    if (!point) {
+      setEditingIndex(null);
+      setEditX('');
+      setEditY('');
+      return;
+    }
+
+    setEditX(Number.isFinite(point.x) ? String(point.x) : '');
+    setEditY(Number.isFinite(point.y) ? String(point.y) : '');
+  }, [dataPoints, editingIndex]);
+
+  useEffect(() => {
+    if (!isEditingCurve) return;
+    setEditingIndex(null);
+    setEditX('');
+    setEditY('');
+  }, [isEditingCurve]);
 
   const getUnitSymbol = (prefix) => {
     const symbols = {

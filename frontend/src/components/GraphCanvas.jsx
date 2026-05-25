@@ -2,7 +2,7 @@ import { useRef, useState, useEffect } from 'react';
 import { useGraph } from '../context/GraphContext';
 
 const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', isAxisMappingConfirmed = false, hasReturnUrl = false, isEditingCurve = false }) => {
-  const { uploadedImage, graphArea, setGraphArea, dataPoints, addDataPoint, clearDataPoints, graphConfig, deleteDataPoint, convertGraphToCanvasCoordinates, convertCanvasToGraphCoordinates, replaceDataPoints, updateDataPoint } = useGraph();
+  const { uploadedImage, graphArea, setGraphArea, dataPoints, addDataPoint, clearDataPoints, graphConfig, deleteDataPoint, convertGraphToCanvasCoordinates, convertCanvasToGraphCoordinates, replaceDataPoints, updateDataPointFromCanvas } = useGraph();
   const [showRedrawMsg, setShowRedrawMsg] = useState(false);
   const canvasRef = useRef(null);
   const magnifierRef = useRef(null);
@@ -127,13 +127,8 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   };
 
   const updatePointFromCanvasPosition = (index, canvasX, canvasY) => {
-    if (index < 0 || index >= dataPoints.length) return;
-
     const clamped = clampCanvasPointToGraphArea(canvasX, canvasY);
-    const graphCoords = convertCanvasToGraphCoordinates(clamped.canvasX, clamped.canvasY);
-    if (!Number.isFinite(graphCoords.x) || !Number.isFinite(graphCoords.y)) return;
-
-    updateDataPoint(index, graphCoords.x, graphCoords.y);
+    updateDataPointFromCanvas(index, clamped.canvasX, clamped.canvasY);
   };
 
   useEffect(() => {
