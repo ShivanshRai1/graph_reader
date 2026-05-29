@@ -951,6 +951,193 @@ const resolveIntegerGraphIdFromAiResponse = (responsePayload) => {
   return '';
 };
 
+// TEMP: set false to re-enable Netlify + Render relays for AI extraction.
+const USE_FRONTEND_DIRECT_AI_ONLY = true;
+
+const DISCOVEREE_VISION_UPLOAD_URL = 'https://www.discoveree.io/vision_upload.php';
+const DISCOVEREE_GRAPH_CAPTURE_API_URL = 'https://www.discoveree.io/graph_capture_api.php';
+
+const describeAiDirectFailure = (attempt = {}) => {
+  const reasons = [];
+  if (attempt.networkError) {
+    reasons.push(`Network/CORS error: ${attempt.networkError}`);
+  }
+  if (attempt.httpStatus && !attempt.httpOk) {
+    reasons.push(`HTTP status ${attempt.httpStatus}`);
+  }
+  if (attempt.isHtml) {
+    reasons.push('Response is HTML (Imunify360 bot-protection or login page, not JSON API)');
+  }
+  if (attempt.isImunify) {
+    reasons.push('Imunify360 / Access denied detected in response body');
+  }
+  if (attempt.isInvalidBase64) {
+    reasons.push('Server returned "Invalid base64 format"');
+  }
+  if (!attempt.parsedResponse && attempt.rawText) {
+    reasons.push('Response body is not valid JSON');
+  }
+  if (!attempt.validGraphId && attempt.parsedResponse) {
+    reasons.push('JSON parsed but no valid integer graph_id found');
+  }
+  if (reasons.length === 0) {
+    reasons.push('Unknown failure');
+  }
+  return reasons;
+};
+
+const logAiDirectAttempt = (attempt, label) => {
+  const graphId = resolveIntegerGraphIdFromAiResponse(attempt.parsedResponse || {});
+  console.group(`%c[AI DIRECT] ${label}`, attempt.validGraphId ? 'color:#4CAF50;font-weight:bold;' : 'color:#F44336;font-weight:bold;');
+  console.log('URL:', attempt.target_url);
+  console.log('Mode:', attempt.mode);
+  console.log('Duration (ms):', attempt.durationMs);
+  console.log('HTTP status:', attempt.httpStatus);
+  console.log('Content-Type:', attempt.contentType);
+  console.log('graph_id:', graphId || '(none)');
+  if (attempt.networkError) {
+    console.log('Network error:', attempt.networkError);
+  }
+  if (attempt.validGraphId) {
+    console.log('%c✅ WORKED', 'color:#4CAF50;font-weight:bold;');
+  } else {
+    console.log('%c❌ DID NOT WORK — reasons:', 'color:#F44336;font-weight:bold;', describeAiDirectFailure(attempt));
+    console.log('Response preview:', String(attempt.rawText || '').substring(0, 500));
+  }
+  console.groupEnd();
+};
+
+const postAiExtractionDirectAttempt = async (targetUrl, body, mode, headers = {}) => {
+  const start = performance.now();
+  const attempt = {
+    mode,
+    target_url: targetUrl,
+    httpStatus: 0,
+    httpOk: false,
+    contentType: '',
+    raw_text: '',
+    parsedResponse: null,
+    validGraphId: false,
+    networkError: '',
+    isHtml: false,
+    isImunify: false,
+    isInvalidBase64: false,
+    durationMs: '0',
+  };
+
+  try {
+    const response = await fetch(targetUrl, {
+      method: 'POST',
+      body,
+      headers,
+      mode: 'cors',
+    });
+    attempt.httpStatus = response.status;
+    attempt.httpOk = response.ok;
+    attempt.contentType = response.headers.get('content-type') || '';
+    attempt.raw_text = await response.text();
+    attempt.durationMs = (performance.now() - start).toFixed(1);
+    attempt.isHtml =
+      attempt.contentType.toLowerCase().includes('text/html') ||
+      /<!DOCTYPE|<html/i.test(attempt.raw_text);
+    attempt.isImunify = /imunify360|access denied/i.test(attempt.raw_text);
+    attempt.isInvalidBase64 = attempt.raw_text.toLowerCase().includes('invalid base64 format');
+
+    try {
+      attempt.parsedResponse = parseCompanyApiText(attempt.raw_text);
+    } catch {
+      attempt.parsedResponse = null;
+    }
+
+    attempt.validGraphId = Boolean(resolveIntegerGraphIdFromAiResponse(attempt.parsedResponse || {}));
+  } catch (error) {
+    attempt.networkError = error?.message || String(error);
+    attempt.durationMs = (performance.now() - start).toFixed(1);
+  }
+
+  return attempt;
+};
+
+const fetchAiExtractionDirectFromBrowser = async (requestPayload) => {
+  console.group('%c[AI DIRECT] Browser → DiscoverEE (Netlify/Render relays paused)', 'color:#FF6B00;font-weight:bold;font-size:13px;');
+
+  const formData = new FormData();
+  for (const [key, value] of Object.entries(requestPayload)) {
+    formData.append(key, value == null ? '' : String(value));
+  }
+
+  const attempts = [];
+  const primary = await postAiExtractionDirectAttempt(
+    DISCOVEREE_VISION_UPLOAD_URL,
+    formData,
+    'browser_multipart_form'
+  );
+  attempts.push(primary);
+  logAiDirectAttempt(primary, 'Attempt 1 — vision_upload.php (primary)');
+
+  let finalAttempt = primary;
+  const shouldTryBackup =
+    !primary.validGraphId &&
+    (primary.networkError || primary.isHtml || primary.isImunify || primary.isInvalidBase64 || !primary.httpOk);
+
+  if (shouldTryBackup) {
+    console.log('%c[AI DIRECT] Primary failed — trying graph_capture_api.php backup', 'color:#FF9800;font-weight:bold;');
+    const backup = await postAiExtractionDirectAttempt(
+      DISCOVEREE_GRAPH_CAPTURE_API_URL,
+      JSON.stringify(requestPayload),
+      'browser_json_backup',
+      {
+        Accept: 'application/json, text/plain, */*',
+        'Content-Type': 'application/json',
+      }
+    );
+    attempts.push(backup);
+    logAiDirectAttempt(backup, 'Attempt 2 — graph_capture_api.php (backup)');
+    if (backup.validGraphId) {
+      finalAttempt = backup;
+    }
+  }
+
+  const graphId = resolveIntegerGraphIdFromAiResponse(finalAttempt.parsedResponse || {});
+  if (finalAttempt.validGraphId) {
+    console.log('%c✅ [AI DIRECT] OVERALL SUCCESS', 'color:#4CAF50;font-weight:bold;font-size:13px;', {
+      graph_id: graphId,
+      via: finalAttempt.target_url,
+    });
+  } else {
+    console.log('%c❌ [AI DIRECT] OVERALL FAILED', 'color:#F44336;font-weight:bold;font-size:13px;');
+    attempts.forEach((attempt, index) => {
+      console.log(`Attempt ${index + 1} summary:`, {
+        url: attempt.target_url,
+        worked: attempt.validGraphId,
+        whyNot: attempt.validGraphId ? 'n/a' : describeAiDirectFailure(attempt),
+      });
+    });
+  }
+  console.groupEnd();
+
+  return {
+    activeRelayUrl: finalAttempt.target_url,
+    result: {
+      target_url: finalAttempt.target_url,
+      upstream_status: finalAttempt.httpStatus,
+      upstream_ok: finalAttempt.validGraphId,
+      content_type: finalAttempt.contentType,
+      raw_text: finalAttempt.raw_text,
+      response: finalAttempt.parsedResponse || {},
+      attempts: attempts.map((attempt) => ({
+        target_url: attempt.target_url,
+        upstream_status: attempt.httpStatus,
+        upstream_ok: attempt.httpOk,
+        content_type: attempt.contentType,
+        raw_text: attempt.raw_text,
+        response: attempt.parsedResponse,
+        mode: attempt.mode,
+      })),
+    },
+  };
+};
+
 const hasCurveLineInAiResponse = (responsePayload) => {
   if (!responsePayload || typeof responsePayload !== 'object') return false;
 
@@ -1249,8 +1436,11 @@ const GraphCapture = () => {
     const renderRelayUrl = `${apiUrl}/api/ai-extraction`;
 
     console.log('=== AI EXTRACTION REQUEST ===', {
-      netlifyRelayUrl,
-      renderRelayUrl,
+      mode: USE_FRONTEND_DIRECT_AI_ONLY ? 'browser-direct-only (relays paused)' : 'netlify-then-render-relay',
+      netlifyRelayUrl: USE_FRONTEND_DIRECT_AI_ONLY ? '(paused)' : netlifyRelayUrl,
+      renderRelayUrl: USE_FRONTEND_DIRECT_AI_ONLY ? '(paused)' : renderRelayUrl,
+      visionUploadUrl: DISCOVEREE_VISION_UPLOAD_URL,
+      graphCaptureApiUrl: DISCOVEREE_GRAPH_CAPTURE_API_URL,
       base64imageLength: rawBase64.length,
       payload: requestPayload,
     });
@@ -1456,92 +1646,105 @@ const GraphCapture = () => {
         throw new Error('Simulated AI extraction failure for testing purposes');
       }
 
-      // Try Netlify function first (different IP, bypasses Imunify360), then fall back to Render
       let response;
       let activeRelayUrl;
-      let netlifyBlocked = false;
+      let result;
 
-      try {
-        console.log('[RELAY] Trying Netlify function first:', netlifyRelayUrl);
-        const netlifyResponse = await fetch(netlifyRelayUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(requestPayload),
-        });
-        const netlifyResponseClone = netlifyResponse.clone();
-        let netlifyResult = null;
+      if (USE_FRONTEND_DIRECT_AI_ONLY) {
+        console.log('%c[AI] RELAYS PAUSED — calling DiscoverEE directly from browser', 'color:#FF9800;font-weight:bold;');
+        const direct = await fetchAiExtractionDirectFromBrowser(requestPayload);
+        activeRelayUrl = direct.activeRelayUrl;
+        result = direct.result;
+        response = {
+          ok: Boolean(result.upstream_ok),
+          status: result.upstream_status || 502,
+        };
+      } else {
+        // Try Netlify function first (different IP, bypasses Imunify360), then fall back to Render
+        let netlifyBlocked = false;
+
         try {
-          netlifyResult = await netlifyResponseClone.json();
-        } catch {
-          netlifyResult = null;
-        }
-        const netlifyRawText = netlifyResult?.raw_text || '';
-        const netlifyIsImunify = typeof netlifyRawText === 'string' && (
-          netlifyRawText.includes('Imunify360') ||
-          netlifyRawText.includes('Access denied') ||
-          netlifyRawText.includes('<!DOCTYPE') ||
-          netlifyRawText.includes('<html')
-        );
-        const netlifyIsInvalidBase64 = typeof netlifyRawText === 'string' &&
-          netlifyRawText.toLowerCase().includes('invalid base64 format');
-        const netlifyGraphId = String(
-          netlifyResult?.response?.graph_id ??
-          netlifyResult?.response?.graphId ??
-          ''
-        ).trim();
-        const netlifyHasSuccessfulFallback = Array.isArray(netlifyResult?.attempts) &&
-          netlifyResult.attempts.some((attempt) => {
-            const targetUrl = String(attempt?.target_url || '');
-            const contentType = String(attempt?.content_type || '').toLowerCase();
-            const rawText = String(attempt?.raw_text || '');
-            const attemptGraphId = String(
-              attempt?.response?.graph_id ??
-              attempt?.response?.graphId ??
-              ''
-            ).trim();
-
-            return (
-              targetUrl.includes('graph_capture_api.php') &&
-              Number(attempt?.upstream_status) === 200 &&
-              contentType.includes('application/json') &&
-              (attemptGraphId !== '' || /"graph_id"\s*:\s*"?\d+"?/i.test(rawText))
-            );
-          });
-        const netlifySucceeded =
-          netlifyResponse.ok &&
-          netlifyResult?.upstream_ok !== false &&
-          (netlifyGraphId !== '' || netlifyHasSuccessfulFallback);
-
-        if (!netlifySucceeded && (!netlifyResponse.ok || netlifyIsImunify || netlifyIsInvalidBase64)) {
-          netlifyBlocked = true;
-          console.warn('[RELAY] Netlify function blocked or failed (status:', netlifyResponse.status, ', imunify:', netlifyIsImunify, ', invalidBase64:', netlifyIsInvalidBase64, '). Falling back to Render relay.');
-        } else {
-          response = new Response(JSON.stringify(netlifyResult), {
-            status: netlifyResponse.status,
+          console.log('[RELAY] Trying Netlify function first:', netlifyRelayUrl);
+          const netlifyResponse = await fetch(netlifyRelayUrl, {
+            method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestPayload),
           });
-          activeRelayUrl = netlifyRelayUrl;
-          console.log('[RELAY] Netlify function succeeded:', netlifyResponse.status);
-        }
-      } catch (netlifyError) {
-        netlifyBlocked = true;
-        console.warn('[RELAY] Netlify function threw an error:', netlifyError.message, '- falling back to Render relay.');
-      }
+          const netlifyResponseClone = netlifyResponse.clone();
+          let netlifyResult = null;
+          try {
+            netlifyResult = await netlifyResponseClone.json();
+          } catch {
+            netlifyResult = null;
+          }
+          const netlifyRawText = netlifyResult?.raw_text || '';
+          const netlifyIsImunify = typeof netlifyRawText === 'string' && (
+            netlifyRawText.includes('Imunify360') ||
+            netlifyRawText.includes('Access denied') ||
+            netlifyRawText.includes('<!DOCTYPE') ||
+            netlifyRawText.includes('<html')
+          );
+          const netlifyIsInvalidBase64 = typeof netlifyRawText === 'string' &&
+            netlifyRawText.toLowerCase().includes('invalid base64 format');
+          const netlifyGraphId = String(
+            netlifyResult?.response?.graph_id ??
+            netlifyResult?.response?.graphId ??
+            ''
+          ).trim();
+          const netlifyHasSuccessfulFallback = Array.isArray(netlifyResult?.attempts) &&
+            netlifyResult.attempts.some((attempt) => {
+              const targetUrl = String(attempt?.target_url || '');
+              const contentType = String(attempt?.content_type || '').toLowerCase();
+              const rawText = String(attempt?.raw_text || '');
+              const attemptGraphId = String(
+                attempt?.response?.graph_id ??
+                attempt?.response?.graphId ??
+                ''
+              ).trim();
 
-      if (netlifyBlocked || !response) {
-        if (isBackendFallbackDisabled) {
-          throw new Error('Netlify relay failed and backend fallback is disabled (ai_disable_backend_fallback=true).');
-        }
-        console.log('[RELAY] Using Render backend relay:', renderRelayUrl);
-        response = await fetch(renderRelayUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(requestPayload),
-        });
-        activeRelayUrl = renderRelayUrl;
-      }
+              return (
+                targetUrl.includes('graph_capture_api.php') &&
+                Number(attempt?.upstream_status) === 200 &&
+                contentType.includes('application/json') &&
+                (attemptGraphId !== '' || /"graph_id"\s*:\s*"?\d+"?/i.test(rawText))
+              );
+            });
+          const netlifySucceeded =
+            netlifyResponse.ok &&
+            netlifyResult?.upstream_ok !== false &&
+            (netlifyGraphId !== '' || netlifyHasSuccessfulFallback);
 
-      const result = await response.json();
+          if (!netlifySucceeded && (!netlifyResponse.ok || netlifyIsImunify || netlifyIsInvalidBase64)) {
+            netlifyBlocked = true;
+            console.warn('[RELAY] Netlify function blocked or failed (status:', netlifyResponse.status, ', imunify:', netlifyIsImunify, ', invalidBase64:', netlifyIsInvalidBase64, '). Falling back to Render relay.');
+          } else {
+            response = new Response(JSON.stringify(netlifyResult), {
+              status: netlifyResponse.status,
+              headers: { 'Content-Type': 'application/json' },
+            });
+            activeRelayUrl = netlifyRelayUrl;
+            console.log('[RELAY] Netlify function succeeded:', netlifyResponse.status);
+          }
+        } catch (netlifyError) {
+          netlifyBlocked = true;
+          console.warn('[RELAY] Netlify function threw an error:', netlifyError.message, '- falling back to Render relay.');
+        }
+
+        if (netlifyBlocked || !response) {
+          if (isBackendFallbackDisabled) {
+            throw new Error('Netlify relay failed and backend fallback is disabled (ai_disable_backend_fallback=true).');
+          }
+          console.log('[RELAY] Using Render backend relay:', renderRelayUrl);
+          response = await fetch(renderRelayUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestPayload),
+          });
+          activeRelayUrl = renderRelayUrl;
+        }
+
+        result = await response.json();
+      }
 
       console.log('=== RELAY RESPONSE ===', {
         activeRelayUrl,
