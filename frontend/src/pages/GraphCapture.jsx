@@ -892,24 +892,85 @@ const logAiExtractionFlowSummary = (attempts = [], { restored = false } = {}) =>
   console.groupEnd();
 };
 
-const logVisionUploadPrimaryExchange = (requestPayload = {}, attempts = []) => {
+const AI_SUPPORT_EXCHANGE_KEY = 'ai_support_exchange_log';
+
+const buildVisionUploadSupportSnapshot = (requestPayload = {}, attempts = [], meta = {}) => {
   const primary = (Array.isArray(attempts) ? attempts : []).find((attempt) =>
     String(attempt?.target_url || '').includes('vision_upload.php')
   );
-  if (!primary) return;
+  if (!primary) return null;
 
   const base64 = String(requestPayload.base64image || '');
-  console.group('[AI SUPPORT] vision_upload.php request/response (for DiscoverEE support)');
-  console.log('request payload:', {
-    ...requestPayload,
-    base64image: base64
-      ? `[${base64.length} chars] ${base64.substring(0, 80)}${base64.length > 80 ? '...' : ''}`
-      : '(empty)',
-  });
-  console.log('response HTTP status:', primary?.upstream_status);
-  console.log('response Content-Type:', primary?.content_type);
-  console.log('response raw_text (full):', primary?.raw_text ?? '(empty)');
+  return {
+    ts: Date.now(),
+    route: meta.route || '',
+    activeRelayUrl: meta.activeRelayUrl || '',
+    relayStatus: meta.relayStatus ?? '',
+    relayOk: meta.relayOk ?? '',
+    requestPayload: {
+      ...requestPayload,
+      base64image: base64
+        ? `[${base64.length} chars] ${base64.substring(0, 80)}${base64.length > 80 ? '...' : ''}`
+        : '(empty)',
+    },
+    response: {
+      target_url: primary?.target_url || '',
+      upstream_status: primary?.upstream_status,
+      content_type: primary?.content_type || '',
+      raw_text: primary?.raw_text ?? '',
+    },
+  };
+};
+
+const persistAiSupportExchangeLog = (snapshot) => {
+  try {
+    if (!snapshot) return;
+    window.sessionStorage.setItem(AI_SUPPORT_EXCHANGE_KEY, JSON.stringify(snapshot));
+  } catch (error) {
+    console.warn('Unable to persist AI support exchange log.', error);
+  }
+};
+
+const logVisionUploadSupportSnapshot = (snapshot, { restored = false } = {}) => {
+  if (!snapshot) return;
+
+  const groupLabel = restored
+    ? '[AI SUPPORT] vision_upload.php request/response (restored after navigation — copy for DiscoverEE)'
+    : '[AI SUPPORT] vision_upload.php request/response (saved — will restore after navigation)';
+
+  console.group(groupLabel);
+  if (snapshot.route || snapshot.activeRelayUrl) {
+    console.log('route / relay:', {
+      route: snapshot.route || '(unknown)',
+      activeRelayUrl: snapshot.activeRelayUrl || '(unknown)',
+      relayStatus: snapshot.relayStatus,
+      relayOk: snapshot.relayOk,
+    });
+  }
+  console.log('request payload:', snapshot.requestPayload);
+  console.log('response HTTP status:', snapshot.response?.upstream_status);
+  console.log('response Content-Type:', snapshot.response?.content_type);
+  console.log('response raw_text (full):', snapshot.response?.raw_text ?? '(empty)');
   console.groupEnd();
+};
+
+const logVisionUploadPrimaryExchange = (requestPayload = {}, attempts = [], meta = {}) => {
+  const snapshot = buildVisionUploadSupportSnapshot(requestPayload, attempts, meta);
+  if (!snapshot) return;
+  logVisionUploadSupportSnapshot(snapshot, { restored: false });
+  persistAiSupportExchangeLog(snapshot);
+};
+
+const restoreAndLogAiSupportExchange = () => {
+  try {
+    const raw = window.sessionStorage.getItem(AI_SUPPORT_EXCHANGE_KEY);
+    if (!raw) return;
+    const snapshot = JSON.parse(raw);
+    logVisionUploadSupportSnapshot(snapshot, { restored: true });
+    window.sessionStorage.removeItem(AI_SUPPORT_EXCHANGE_KEY);
+  } catch (error) {
+    console.warn('Unable to restore AI support exchange log.', error);
+  }
 };
 
 // Restore and re-log AI extraction flow after page navigation
@@ -1655,6 +1716,7 @@ const GraphCapture = () => {
 
   // Restore AI extraction flow logs on component mount
   useEffect(() => {
+    restoreAndLogAiSupportExchange();
     restoreAndLogAiExtractionFlow();
   }, []);
 
@@ -2252,7 +2314,12 @@ const GraphCapture = () => {
       })));
 
       // Enhanced logging — primary failure report first (most important for debugging)
-      logVisionUploadPrimaryExchange(requestPayload, result?.attempts || []);
+      logVisionUploadPrimaryExchange(requestPayload, result?.attempts || [], {
+        route: AI_EXTRACTION_ROUTE,
+        activeRelayUrl,
+        relayStatus: response.status,
+        relayOk: response.ok,
+      });
       logPrimaryVisionUploadFailureReport(result?.attempts || []);
       logAiExtractionFlowSummary(result?.attempts || []);
       
