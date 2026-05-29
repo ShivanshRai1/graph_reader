@@ -892,6 +892,26 @@ const logAiExtractionFlowSummary = (attempts = [], { restored = false } = {}) =>
   console.groupEnd();
 };
 
+const logVisionUploadPrimaryExchange = (requestPayload = {}, attempts = []) => {
+  const primary = (Array.isArray(attempts) ? attempts : []).find((attempt) =>
+    String(attempt?.target_url || '').includes('vision_upload.php')
+  );
+  if (!primary) return;
+
+  const base64 = String(requestPayload.base64image || '');
+  console.group('[AI SUPPORT] vision_upload.php request/response (for DiscoverEE support)');
+  console.log('request payload:', {
+    ...requestPayload,
+    base64image: base64
+      ? `[${base64.length} chars] ${base64.substring(0, 80)}${base64.length > 80 ? '...' : ''}`
+      : '(empty)',
+  });
+  console.log('response HTTP status:', primary?.upstream_status);
+  console.log('response Content-Type:', primary?.content_type);
+  console.log('response raw_text (full):', primary?.raw_text ?? '(empty)');
+  console.groupEnd();
+};
+
 // Restore and re-log AI extraction flow after page navigation
 const restoreAndLogAiExtractionFlow = () => {
   try {
@@ -934,6 +954,14 @@ const checkGraphHasCapturedCurves = async (graphId) => {
 };
 
 const resolveIntegerGraphIdFromAiResponse = (responsePayload) => {
+  if (typeof responsePayload === 'number' && Number.isInteger(responsePayload) && responsePayload > 0) {
+    return String(responsePayload);
+  }
+  if (typeof responsePayload === 'string') {
+    const trimmed = responsePayload.trim();
+    if (/^\d+$/.test(trimmed) && Number(trimmed) > 0) return trimmed;
+  }
+
   if (!responsePayload || typeof responsePayload !== 'object') return '';
 
   const candidateValues = [
@@ -961,16 +989,24 @@ const resolveIntegerGraphIdFromAiResponse = (responsePayload) => {
 // 'render-only' — Render backend relay only (browser + Netlify paused)
 // 'netlify-only' — Netlify function only (browser + Render paused)
 // 'browser-only' — browser → DiscoverEE direct only
-// 'production' — Netlify first, then Render fallback
-const AI_EXTRACTION_ROUTE = 'render-only';
+// 'production' — Netlify first, then Render fallback (live default)
+const AI_EXTRACTION_ROUTE = 'production';
 
 const DISCOVEREE_VISION_UPLOAD_URL = 'https://www.discoveree.io/vision_upload.php';
 const DISCOVEREE_GRAPH_CAPTURE_API_URL = 'https://www.discoveree.io/graph_capture_api.php';
+
+const extractPlainNumericGraphIdFromRawText = (rawText = '') => {
+  const trimmed = String(rawText || '').trim();
+  if (/^\d+$/.test(trimmed) && Number(trimmed) > 0) return trimmed;
+  return '';
+};
 
 const getGraphIdFromRelayAttempt = (attempt = {}) => {
   const fromResponse = resolveIntegerGraphIdFromAiResponse(attempt?.response || {});
   if (fromResponse) return fromResponse;
   const rawText = String(attempt?.raw_text || '');
+  const plainNumeric = extractPlainNumericGraphIdFromRawText(rawText);
+  if (plainNumeric) return plainNumeric;
   const match = rawText.match(/"graph_id"\s*:\s*"?\d+"?/i);
   return match ? match[1] : '';
 };
@@ -2216,6 +2252,7 @@ const GraphCapture = () => {
       })));
 
       // Enhanced logging — primary failure report first (most important for debugging)
+      logVisionUploadPrimaryExchange(requestPayload, result?.attempts || []);
       logPrimaryVisionUploadFailureReport(result?.attempts || []);
       logAiExtractionFlowSummary(result?.attempts || []);
       

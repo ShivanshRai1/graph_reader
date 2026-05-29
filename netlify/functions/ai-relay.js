@@ -14,6 +14,11 @@ function toBase64Uint8Array(base64) {
 }
 
 function parseJsonFromText(rawText) {
+  const trimmed = String(rawText || '').trim();
+  if (/^\d+$/.test(trimmed) && Number(trimmed) > 0) {
+    return { graph_id: Number(trimmed) };
+  }
+
   try {
     const objectStart = rawText.indexOf('{');
     const arrayStart = rawText.indexOf('[');
@@ -44,7 +49,19 @@ function hasValidGraphId(parsedResponse, rawText) {
     }
   }
 
-  const raw = String(rawText || '');
+  if (typeof parsedResponse === 'number' && isPositiveIntegerId(parsedResponse)) {
+    return true;
+  }
+
+  if (typeof parsedResponse === 'string' && isPositiveIntegerId(parsedResponse.trim())) {
+    return true;
+  }
+
+  const raw = String(rawText || '').trim();
+  if (isPositiveIntegerId(raw)) {
+    return true;
+  }
+
   return /"graph_id"\s*:\s*"?\d+"?/i.test(raw);
 }
 

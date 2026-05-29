@@ -109,6 +109,12 @@ def debug_backend_ip():
 
 
 def parse_company_api_text(raw_text: str):
+    stripped = (raw_text or "").strip()
+    if re.fullmatch(r"\d+", stripped):
+        graph_id = int(stripped)
+        if graph_id > 0:
+            return {"graph_id": graph_id}
+
     object_start = raw_text.find("{")
     array_start = raw_text.find("[")
     start_candidates = [index for index in [object_start, array_start] if index >= 0]
