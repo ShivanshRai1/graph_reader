@@ -787,6 +787,7 @@ const consumeAiPendingCapture = (expectedGraphId = '') => {
     const payloadGraphId = String(payload?.graphId || '').trim();
     const normalizedExpectedGraphId = String(expectedGraphId || '').trim();
     if (payloadGraphId && normalizedExpectedGraphId && payloadGraphId !== normalizedExpectedGraphId) {
+      window.sessionStorage.removeItem(AI_PENDING_CAPTURE_STORAGE_KEY);
       return null;
     }
 
@@ -1697,15 +1698,6 @@ const GraphCapture = () => {
     clearAiExtractedMetadata();
   }, []);
 
-  // Restore AI pending capture image on component mount
-  useEffect(() => {
-    const pending = consumeAiPendingCapture();
-    if (!pending || !pending.imageBase64) return;
-
-    console.log('[AI PENDING CAPTURE] Restoring captured image to display form view');
-    setUploadedImage(pending.imageBase64);
-  }, []);
-
   const handleAiExtensionCapture = async (imageBase64, source = '') => {
     // TEST MODE: Check at the very start before anything else runs
     const _testParams = new URLSearchParams(window.location.search);
@@ -2277,31 +2269,6 @@ const GraphCapture = () => {
       const currentUrlGraphId = String(urlParams.graph_id || '').trim();
       const graphIdForFlow = currentUrlGraphId || validGraphId;
 
-      if (!currentUrlGraphId) {
-        // Case 3: no graph_id in URL — always enter fresh capture mode.
-        // We use AI-extracted metadata to pre-fill the form but do NOT adopt
-        // the upstream graph_id; upstream deduplication always returns the same
-        // id for the same partno/manf/tctj context. The real graph_id is
-        // assigned only when the user saves a new capture.
-        console.log('=== AI EXTRACTION DECISION ===', {
-          action: 'redirect_for_fresh_capture_without_graph_id',
-          reason: 'Case 3: no graph_id in URL; entering fresh capture mode with AI metadata pre-filled',
-          ai_returned_graph_id: validGraphId,
-        });
-
-        persistAiPendingCapture(imageBase64, source);
-        persistAiExtractedMetadata(extractedMetadata);
-        const refreshUrl = new URL(window.location.href);
-        refreshUrl.searchParams.delete('graph_id');
-        refreshUrl.searchParams.delete(AI_DIRECT_CAPTURE_PARAM);
-        navigateWithAiFlowMessage(
-          'AI extracted graph data. Loading fresh capture mode with pre-filled data...',
-          refreshUrl.toString(),
-          900
-        );
-        return;
-      }
-
       let hasCapturedCurves = false;
       try {
         hasCapturedCurves = await checkGraphHasCapturedCurves(graphIdForFlow);
@@ -2312,17 +2279,19 @@ const GraphCapture = () => {
 
       const redirectUrl = new URL(window.location.href);
       redirectUrl.searchParams.set('graph_id', graphIdForFlow);
+      redirectUrl.searchParams.delete(AI_DIRECT_CAPTURE_PARAM);
 
       if (!hasCapturedCurves) {
         console.log('=== AI EXTRACTION DECISION ===', {
-          action: 'redirect_for_capture',
-          reason: 'graph_id exists but has no captured curves yet',
+          action: currentUrlGraphId ? 'redirect_for_capture_no_curves' : 'redirect_case3_with_graph_id_no_curves',
+          reason: currentUrlGraphId
+            ? 'graph_id in URL but no captured curves yet — upload mode with pending image'
+            : 'Case 3: AI returned graph_id but no captured curves — graph_id added to URL, upload mode with pending image',
           graph_id: graphIdForFlow,
         });
 
         persistAiPendingCapture(imageBase64, source, graphIdForFlow);
         persistAiExtractedMetadata(extractedMetadata);
-        redirectUrl.searchParams.delete(AI_DIRECT_CAPTURE_PARAM);
         navigateWithAiFlowMessage(
           'Graph found. Redirecting to graph capture page with pre-filled data...',
           redirectUrl.toString(),
@@ -2337,7 +2306,6 @@ const GraphCapture = () => {
         graph_id: graphIdForFlow,
       });
 
-      redirectUrl.searchParams.delete(AI_DIRECT_CAPTURE_PARAM);
       navigateWithAiFlowMessage(
         'Graph found with existing curves. Redirecting to graph capture page...',
         redirectUrl.toString()
@@ -2408,8 +2376,6 @@ const GraphCapture = () => {
   const [aiFlowStatusMessage, setAiFlowStatusMessage] = useState('');
   const [restoredPendingCapture, setRestoredPendingCapture] = useState(null);
   const [hasPendingCaptureChoice, setHasPendingCaptureChoice] = useState(false);
-  // Capture pending state at render time (before any effects consume sessionStorage)
-  const hasPendingAiCaptureOnMountRef = useRef(Boolean(sessionStorage.getItem(AI_PENDING_CAPTURE_STORAGE_KEY))); // Render-time check for pending capture (for reference if needed later)
   const [isInitialGraphFetchPending, setIsInitialGraphFetchPending] = useState(
     () => Boolean(new URLSearchParams(window.location.search).get('graph_id'))
   );
@@ -2777,6 +2743,10 @@ const GraphCapture = () => {
 
   const selectedGroup = groupedCurves.find((group) => group.id === combinedGroupId);
   const selectedCurvePoints = selectedCurve?.points ?? selectedCurve?.data_points ?? [];
+  // Page B: saved curves exist. Page A: upload-only until user confirms capture (not while pending AI image).
+  const showCaptureWorkspace =
+    savedCurves.length > 0 ||
+    (Boolean(uploadedImage) && !hasPendingCaptureChoice && !restoredPendingCapture?.imageBase64);
   const hasTemperatureInOtherSymbols = isTemperatureSymbol(urlParams.other_symbols);
   const shouldShowTemperatureInput =
     (urlParams.tctj !== '0' || hasTemperatureInOtherSymbols) &&
@@ -4018,6 +3988,9 @@ const GraphCapture = () => {
     setShouldSkipCaptureChoiceAfterAi(false);
     setRestoredPendingCapture(restoredPending);
     restoredPendingImageRef.current = String(restoredPending?.imageBase64 || '');
+    if (restoredPending?.imageBase64) {
+      console.log('[AI PENDING CAPTURE] Restoring captured image to upload panel (pending choice)');
+    }
 
     setIsXTitleUrlLocked(Boolean(xTitleFromUrl));
     setIsYTitleUrlLocked(Boolean(yTitleFromUrl));
@@ -4097,11 +4070,9 @@ const GraphCapture = () => {
       return;
     }
 
-    // Skip auto-fetch if there's a pending AI capture on mount (Cases 2 & 3)
-    // This prevents loading existing curves from DB and keeps user in manual capture mode
-    // The ref is set at render time before effects run, so it's reliable even if sessionStorage is modified
-    if (hasPendingAiCaptureOnMountRef.current) {
-      console.log('[DEBUG] Pending AI capture detected on mount, skipping auto-fetch to stay in manual capture mode');
+    // Skip auto-fetch when URL hydration restored a pending AI image (upload-only Page A).
+    if (String(restoredPendingImageRef.current || '').trim()) {
+      console.log('[DEBUG] Pending AI capture restored on mount, skipping auto-fetch to stay in upload mode');
       return;
     }
 
@@ -4284,11 +4255,7 @@ const GraphCapture = () => {
             setSavedCurves([]);
             setSavedCurvesSource('company');
             setShouldSkipCaptureChoiceAfterAi(false);
-            activateAppendSession(discovereeGraph.graph_id, graphImageUrl, 'fetchGraphById-emptyDetails');
-
-            if (graphImageUrl) {
-              setUploadedImageFromExistingGraph(graphImageUrl);
-            }
+            activateAppendSession(discovereeGraph.graph_id, '', 'fetchGraphById-emptyDetails');
 
             if (resolvedGraphTitle && !urlParams.graph_title) {
               setGraphConfig((prev) => ({
@@ -5504,7 +5471,7 @@ const GraphCapture = () => {
           initialPendingCapture={restoredPendingCapture}
           onPendingCaptureChange={setHasPendingCaptureChoice}
         />
-        {(uploadedImage || savedCurves.length > 0) && (
+        {(showCaptureWorkspace) && (
           <div ref={graphWorkspaceRef} className="flex flex-col lg:flex-row gap-8">
             <div className="w-full lg:w-2/5 flex flex-col gap-4">
               <GraphCanvas isReadOnly={isReadOnly} partNumber={urlParams.partno} manufacturer={urlParams.manufacturer || graphConfig.manufacturer} isAxisMappingConfirmed={isAxisMappingConfirmed} hasReturnUrl={!!urlParams.return_url} isEditingCurve={Boolean(editingCurveId)} />
