@@ -957,10 +957,11 @@ const resolveIntegerGraphIdFromAiResponse = (responsePayload) => {
 };
 
 // AI extraction route (temporary testing):
+// 'render-only' — Render backend relay only (browser + Netlify paused)
 // 'netlify-only' — Netlify function only (browser + Render paused)
 // 'browser-only' — browser → DiscoverEE direct only
 // 'production' — Netlify first, then Render fallback
-const AI_EXTRACTION_ROUTE = 'netlify-only';
+const AI_EXTRACTION_ROUTE = 'render-only';
 
 const DISCOVEREE_VISION_UPLOAD_URL = 'https://www.discoveree.io/vision_upload.php';
 const DISCOVEREE_GRAPH_CAPTURE_API_URL = 'https://www.discoveree.io/graph_capture_api.php';
@@ -1014,7 +1015,7 @@ const describeRelayUpstreamFailure = (attempt = {}) => {
   return reasons;
 };
 
-const logRelayUpstreamAttempt = (attempt, index, total) => {
+const logRelayUpstreamAttempt = (attempt, index, total, logPrefix = '[AI NETLIFY]') => {
   const graphId = getGraphIdFromRelayAttempt(attempt);
   const worked = relayAttemptHasValidGraphId(attempt);
   const label = attempt?.target_url?.includes('graph_capture_api.php')
@@ -1024,7 +1025,7 @@ const logRelayUpstreamAttempt = (attempt, index, total) => {
       : (attempt?.target_url || 'unknown');
 
   console.group(
-    `%c[AI NETLIFY] Upstream ${index + 1}/${total} — ${label}`,
+    `%c${logPrefix} Upstream ${index + 1}/${total} — ${label}`,
     worked ? 'color:#4CAF50;font-weight:bold;' : 'color:#F44336;font-weight:bold;'
   );
   console.log('target_url:', attempt?.target_url);
@@ -1070,31 +1071,34 @@ const classifyPrimaryVisionUploadFailure = (attempt = {}) => {
   return { reasons, rootCause };
 };
 
-/** Console report: why vision_upload.php failed (survives reload via sessionStorage). */
+/** Console report: primary vision_upload.php status (survives reload via sessionStorage). */
 const logPrimaryVisionUploadFailureReport = (attempts = [], { restored = false } = {}) => {
   const primaryAttempts = (Array.isArray(attempts) ? attempts : []).filter((attempt) =>
     String(attempt?.target_url || '').includes('vision_upload.php')
   );
 
+  const primaryWorked = primaryAttempts.some(relayAttemptHasValidGraphId);
   const groupLabel = restored
-    ? '%c🚨 WHY PRIMARY FAILED (vision_upload.php) — restored after navigation'
-    : '%c🚨 WHY PRIMARY FAILED (vision_upload.php)';
+    ? `%c${primaryWorked ? '✅' : '❌'} PRIMARY URL (vision_upload.php) — restored after navigation`
+    : `%c${primaryWorked ? '✅' : '❌'} PRIMARY URL (vision_upload.php)`;
 
-  console.group(groupLabel, 'color:#F44336;font-weight:bold;font-size:14px;');
+  console.group(
+    groupLabel,
+    primaryWorked ? 'color:#4CAF50;font-weight:bold;font-size:14px;' : 'color:#F44336;font-weight:bold;font-size:14px;'
+  );
 
   if (primaryAttempts.length === 0) {
-    console.log('No vision_upload.php attempts were recorded in this AI run.');
+    console.log('❌ PRIMARY URL NOT WORKING: No vision_upload.php attempts were recorded in this AI run.');
     console.groupEnd();
     return { primaryWorked: false, primaryAttempts: [] };
   }
 
-  const primaryWorked = primaryAttempts.some(relayAttemptHasValidGraphId);
-
   if (primaryWorked) {
-    console.log('%c✅ Primary vision_upload.php returned a valid graph_id', 'color:#4CAF50;font-weight:bold;');
+    console.log('✅ PRIMARY URL WORKING: vision_upload.php returned a valid graph_id.');
+    console.log('Primary AI URL:', DISCOVEREE_VISION_UPLOAD_URL);
     primaryAttempts.forEach((attempt) => {
       if (!relayAttemptHasValidGraphId(attempt)) return;
-      console.log(`Success via mode "${attempt?.mode}":`, {
+      console.log(`Success via mode "${attempt?.mode || 'render-json'}":`, {
         graph_id: getGraphIdFromRelayAttempt(attempt),
         status: attempt?.upstream_status,
         content_type: attempt?.content_type,
@@ -1104,6 +1108,7 @@ const logPrimaryVisionUploadFailureReport = (attempts = [], { restored = false }
     return { primaryWorked: true, primaryAttempts };
   }
 
+  console.log('❌ PRIMARY URL NOT WORKING: vision_upload.php did not return graph_id.');
   console.log('Primary AI URL:', DISCOVEREE_VISION_UPLOAD_URL);
   console.log(`${primaryAttempts.length} attempt(s) to vision_upload.php — none returned graph_id.`);
 
@@ -1280,6 +1285,98 @@ const fetchAiExtractionViaNetlifyOnly = async (netlifyRelayUrl, requestPayload) 
     result: netlifyResult,
     response: {
       ok: relayHttpOk && Boolean(analysis.overallWorked || netlifyResult?.upstream_ok),
+      status: relayHttpStatus || 502,
+    },
+  };
+};
+
+const fetchAiExtractionViaRenderOnly = async (renderRelayUrl, requestPayload) => {
+  console.group('%c[AI RENDER] Render backend relay only (browser + Netlify paused)', 'color:#4CAF50;font-weight:bold;font-size:13px;');
+  console.log('Relay URL:', renderRelayUrl);
+  console.log('Render backend sends primary + backup to DiscoverEE as application/json');
+  console.log('Payload keys:', Object.keys(requestPayload));
+  console.log('partno:', requestPayload.partno, '| manf:', requestPayload.manf, '| graph_title:', requestPayload.graph_title);
+  console.log('graph_id in payload:', requestPayload.graph_id || '(empty)');
+  console.log('identifier:', requestPayload.identifier);
+  console.log('ai_extraction_id:', requestPayload.ai_extraction_id);
+
+  const start = performance.now();
+  let relayHttpStatus = 0;
+  let relayHttpOk = false;
+  let renderResult = null;
+  let networkError = '';
+
+  try {
+    const renderResponse = await fetch(renderRelayUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestPayload),
+    });
+    relayHttpStatus = renderResponse.status;
+    relayHttpOk = renderResponse.ok;
+    console.log('Relay HTTP status:', relayHttpStatus, '| ok:', relayHttpOk);
+    try {
+      renderResult = await renderResponse.json();
+    } catch (parseError) {
+      networkError = `Render relay returned non-JSON body: ${parseError?.message || parseError}`;
+    }
+  } catch (error) {
+    networkError = error?.message || String(error);
+  }
+
+  console.log('Relay round-trip (ms):', (performance.now() - start).toFixed(1));
+
+  if (networkError) {
+    console.log('%c❌ [AI RENDER] RELAY REQUEST FAILED', 'color:#F44336;font-weight:bold;font-size:13px;', networkError);
+    console.groupEnd();
+    return {
+      activeRelayUrl: renderRelayUrl,
+      result: {
+        upstream_ok: false,
+        upstream_status: relayHttpStatus || 502,
+        raw_text: networkError,
+        response: {},
+        attempts: [],
+      },
+      response: { ok: false, status: relayHttpStatus || 502 },
+    };
+  }
+
+  console.log('final target_url:', renderResult?.target_url);
+  console.log('final upstream_status:', renderResult?.upstream_status);
+  console.log('final upstream_ok:', renderResult?.upstream_ok);
+  console.log('final content_type:', renderResult?.content_type);
+
+  const attempts = Array.isArray(renderResult?.attempts) ? renderResult.attempts : [];
+  if (attempts.length === 0) {
+    console.log('[AI RENDER] No attempts[] array in relay response — logging final raw_text only');
+    console.log('raw_text preview:', rawTextPreview(renderResult?.raw_text));
+  } else {
+    attempts.forEach((attempt, index) => logRelayUpstreamAttempt(attempt, index, attempts.length, '[AI RENDER]'));
+  }
+
+  const analysis = analyzeNetlifyRelayResult(renderResult, relayHttpOk);
+  if (analysis.overallWorked) {
+    console.log('%c✅ [AI RENDER] OVERALL SUCCESS', 'color:#4CAF50;font-weight:bold;font-size:13px;', {
+      graph_id: analysis.overallGraphId,
+      why: analysis.whyWorked,
+      wonViaBackup: analysis.wonViaBackup,
+      final_url: analysis.final_target_url,
+    });
+  } else {
+    console.log('%c❌ [AI RENDER] OVERALL FAILED', 'color:#F44336;font-weight:bold;font-size:13px;', {
+      whyNot: analysis.whyNot,
+      relayHttpOk: analysis.relayHttpOk,
+      upstream_ok: analysis.upstream_ok,
+    });
+  }
+  console.groupEnd();
+
+  return {
+    activeRelayUrl: renderRelayUrl,
+    result: renderResult,
+    response: {
+      ok: relayHttpOk && Boolean(analysis.overallWorked || renderResult?.upstream_ok),
       status: relayHttpStatus || 502,
     },
   };
@@ -1765,8 +1862,12 @@ const GraphCapture = () => {
 
     console.log('=== AI EXTRACTION REQUEST ===', {
       route: AI_EXTRACTION_ROUTE,
-      netlifyRelayUrl: AI_EXTRACTION_ROUTE !== 'browser-only' ? netlifyRelayUrl : '(paused)',
-      renderRelayUrl: AI_EXTRACTION_ROUTE === 'production' ? renderRelayUrl : '(paused)',
+      netlifyRelayUrl: AI_EXTRACTION_ROUTE === 'netlify-only' || AI_EXTRACTION_ROUTE === 'production'
+        ? netlifyRelayUrl
+        : '(paused)',
+      renderRelayUrl: AI_EXTRACTION_ROUTE === 'render-only' || AI_EXTRACTION_ROUTE === 'production'
+        ? renderRelayUrl
+        : '(paused)',
       browserDirect: AI_EXTRACTION_ROUTE === 'browser-only' ? 'active' : '(paused)',
       visionUploadUrl: DISCOVEREE_VISION_UPLOAD_URL,
       graphCaptureApiUrl: DISCOVEREE_GRAPH_CAPTURE_API_URL,
@@ -1994,6 +2095,12 @@ const GraphCapture = () => {
         activeRelayUrl = netlify.activeRelayUrl;
         result = netlify.result;
         response = netlify.response;
+      } else if (AI_EXTRACTION_ROUTE === 'render-only') {
+        console.log('%c[AI] Render backend relay only (browser + Netlify paused)', 'color:#4CAF50;font-weight:bold;');
+        const render = await fetchAiExtractionViaRenderOnly(renderRelayUrl, requestPayload);
+        activeRelayUrl = render.activeRelayUrl;
+        result = render.result;
+        response = render.response;
       } else {
         // production: Netlify first, then Render fallback
         let netlifyBlocked = false;
