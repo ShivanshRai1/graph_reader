@@ -852,6 +852,10 @@ const logAiExtractionFlowSummary = (attempts = [], { restored = false } = {}) =>
     console.log('%c❌ BLOCKED: Response is HTML (not JSON)', 'color: #F44336; font-weight: bold;');
     console.log('This means: Imunify360 bot-protection blocked the request');
     console.log('Error Details:', primaryAttempt?.raw_text?.substring(0, 500));
+  } else if ((primaryAttempt?.raw_text || '').toLowerCase().includes('invalid base64 format')) {
+    console.log('%c❌ BLOCKED: Server returned Invalid base64 format', 'color: #F44336; font-weight: bold;');
+    console.log('This often appears with WAF blocks — request may not have reached the AI handler');
+    console.log('Error Details:', primaryAttempt?.raw_text?.substring(0, 500));
   } else if ((primaryAttempt?.raw_text || '').toLowerCase().includes('imunify360')) {
     console.log('%c❌ BLOCKED: Imunify360 bot-protection detected', 'color: #F44336; font-weight: bold;');
     console.log('Error Message:', primaryAttempt?.raw_text?.substring(0, 500));
@@ -895,6 +899,7 @@ const restoreAndLogAiExtractionFlow = () => {
     if (!raw) return;
 
     const flowData = JSON.parse(raw);
+    logPrimaryVisionUploadFailureReport(flowData?.attempts || [], { restored: true });
     logAiExtractionFlowSummary(flowData?.attempts || [], { restored: true });
     
     // Clear after restoring so it doesn't get logged again
@@ -1040,6 +1045,106 @@ const logRelayUpstreamAttempt = (attempt, index, total) => {
 
 const rawTextPreview = (rawText, max = 500) => String(rawText || '').substring(0, max);
 
+const classifyPrimaryVisionUploadFailure = (attempt = {}) => {
+  const rawText = String(attempt?.raw_text || '');
+  const contentType = String(attempt?.content_type || '').toLowerCase();
+  const reasons = describeRelayUpstreamFailure(attempt);
+
+  let rootCause = 'unknown';
+  if (/imunify360|access denied/i.test(rawText)) {
+    rootCause = 'imunify360_bot_protection';
+  } else if (contentType.includes('text/html') || /<!DOCTYPE|<html/i.test(rawText)) {
+    rootCause = contentType.includes('text/html') && /login|session has expired/i.test(rawText)
+      ? 'discoveree_login_html_page'
+      : 'html_response_not_json_api';
+  } else if (rawText.toLowerCase().includes('invalid base64 format')) {
+    rootCause = 'server_rejected_base64';
+  } else if (Number(attempt?.upstream_status) >= 500) {
+    rootCause = 'server_5xx_error';
+  } else if (Number(attempt?.upstream_status) >= 400) {
+    rootCause = 'server_4xx_error';
+  } else if (!relayAttemptHasValidGraphId(attempt)) {
+    rootCause = 'no_graph_id_in_response';
+  }
+
+  return { reasons, rootCause };
+};
+
+/** Console report: why vision_upload.php failed (survives reload via sessionStorage). */
+const logPrimaryVisionUploadFailureReport = (attempts = [], { restored = false } = {}) => {
+  const primaryAttempts = (Array.isArray(attempts) ? attempts : []).filter((attempt) =>
+    String(attempt?.target_url || '').includes('vision_upload.php')
+  );
+
+  const groupLabel = restored
+    ? '%c🚨 WHY PRIMARY FAILED (vision_upload.php) — restored after navigation'
+    : '%c🚨 WHY PRIMARY FAILED (vision_upload.php)';
+
+  console.group(groupLabel, 'color:#F44336;font-weight:bold;font-size:14px;');
+
+  if (primaryAttempts.length === 0) {
+    console.log('No vision_upload.php attempts were recorded in this AI run.');
+    console.groupEnd();
+    return { primaryWorked: false, primaryAttempts: [] };
+  }
+
+  const primaryWorked = primaryAttempts.some(relayAttemptHasValidGraphId);
+
+  if (primaryWorked) {
+    console.log('%c✅ Primary vision_upload.php returned a valid graph_id', 'color:#4CAF50;font-weight:bold;');
+    primaryAttempts.forEach((attempt) => {
+      if (!relayAttemptHasValidGraphId(attempt)) return;
+      console.log(`Success via mode "${attempt?.mode}":`, {
+        graph_id: getGraphIdFromRelayAttempt(attempt),
+        status: attempt?.upstream_status,
+        content_type: attempt?.content_type,
+      });
+    });
+    console.groupEnd();
+    return { primaryWorked: true, primaryAttempts };
+  }
+
+  console.log('Primary AI URL:', DISCOVEREE_VISION_UPLOAD_URL);
+  console.log(`${primaryAttempts.length} attempt(s) to vision_upload.php — none returned graph_id.`);
+
+  primaryAttempts.forEach((attempt, index) => {
+    const { reasons, rootCause } = classifyPrimaryVisionUploadFailure(attempt);
+    console.group(`%cPrimary attempt ${index + 1}/${primaryAttempts.length}`, 'color:#FF9800;font-weight:bold;');
+    console.log('encoding/mode:', attempt?.mode || '(unknown)');
+    console.log('HTTP status:', attempt?.upstream_status);
+    console.log('Content-Type:', attempt?.content_type);
+    console.log('root_cause:', rootCause);
+    console.log('failure_reasons:', reasons);
+    console.log('Response body (first 800 chars):', rawTextPreview(attempt?.raw_text, 800));
+    console.groupEnd();
+  });
+
+  const first = primaryAttempts[0] || {};
+  const firstRaw = String(first?.raw_text || '');
+  const firstContentType = String(first?.content_type || '');
+
+  console.log('%c--- PLAIN ENGLISH (why Capture with AI primary failed) ---', 'color:#FF5722;font-weight:bold;');
+  if (firstContentType.includes('text/html') || /<!DOCTYPE|<html/i.test(firstRaw)) {
+    console.log(
+      'DiscoverEE returned an HTML web page instead of JSON. Imunify360 / bot-protection on vision_upload.php blocked the request before the real AI handler ran.'
+    );
+  }
+  if (firstRaw.toLowerCase().includes('invalid base64 format')) {
+    console.log(
+      'Body contains "Invalid base64 format". This usually means the request was rejected at the edge — not that your image is corrupt (the same image often works via graph_capture_api.php backup).'
+    );
+  }
+  if (/login|session has expired/i.test(firstRaw)) {
+    console.log('Response looks like a DiscoverEE login/session page — not an API error from your app.');
+  }
+  console.log(
+    'Netlify relay may still succeed using backup POST to graph_capture_api.php (different endpoint, different handler on DiscoverEE).'
+  );
+
+  console.groupEnd();
+  return { primaryWorked: false, primaryAttempts };
+};
+
 const analyzeNetlifyRelayResult = (netlifyResult, relayHttpOk) => {
   const attempts = Array.isArray(netlifyResult?.attempts) ? netlifyResult.attempts : [];
   const responseGraphId = resolveIntegerGraphIdFromAiResponse(netlifyResult?.response || {});
@@ -1147,7 +1252,7 @@ const fetchAiExtractionViaNetlifyOnly = async (netlifyRelayUrl, requestPayload) 
 
   const attempts = Array.isArray(netlifyResult?.attempts) ? netlifyResult.attempts : [];
   if (attempts.length === 0) {
-    console.warn('[AI NETLIFY] No attempts[] array in relay response — logging final raw_text only');
+    console.log('[AI NETLIFY] No attempts[] array in relay response — logging final raw_text only');
     console.log('raw_text preview:', rawTextPreview(netlifyResult?.raw_text));
   } else {
     attempts.forEach((attempt, index) => logRelayUpstreamAttempt(attempt, index, attempts.length));
@@ -2011,7 +2116,8 @@ const GraphCapture = () => {
         responseLength: (a?.raw_text || '').length,
       })));
 
-      // Enhanced logging for colleagues to see what happened
+      // Enhanced logging — primary failure report first (most important for debugging)
+      logPrimaryVisionUploadFailureReport(result?.attempts || []);
       logAiExtractionFlowSummary(result?.attempts || []);
       
       // Save flow data to sessionStorage so it persists across page navigation
