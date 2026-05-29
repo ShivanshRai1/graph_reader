@@ -951,11 +951,234 @@ const resolveIntegerGraphIdFromAiResponse = (responsePayload) => {
   return '';
 };
 
-// TEMP: set false to re-enable Netlify + Render relays for AI extraction.
-const USE_FRONTEND_DIRECT_AI_ONLY = true;
+// AI extraction route (temporary testing):
+// 'netlify-only' — Netlify function only (browser + Render paused)
+// 'browser-only' — browser → DiscoverEE direct only
+// 'production' — Netlify first, then Render fallback
+const AI_EXTRACTION_ROUTE = 'netlify-only';
 
 const DISCOVEREE_VISION_UPLOAD_URL = 'https://www.discoveree.io/vision_upload.php';
 const DISCOVEREE_GRAPH_CAPTURE_API_URL = 'https://www.discoveree.io/graph_capture_api.php';
+
+const getGraphIdFromRelayAttempt = (attempt = {}) => {
+  const fromResponse = resolveIntegerGraphIdFromAiResponse(attempt?.response || {});
+  if (fromResponse) return fromResponse;
+  const rawText = String(attempt?.raw_text || '');
+  const match = rawText.match(/"graph_id"\s*:\s*"?\d+"?/i);
+  return match ? match[1] : '';
+};
+
+const relayAttemptHasValidGraphId = (attempt = {}) => {
+  if (attempt?.valid_graph_id) return true;
+  return Boolean(getGraphIdFromRelayAttempt(attempt));
+};
+
+const describeRelayUpstreamFailure = (attempt = {}) => {
+  const reasons = [];
+  const rawText = String(attempt?.raw_text || '');
+  const contentType = String(attempt?.content_type || '').toLowerCase();
+  const upstreamStatus = Number(attempt?.upstream_status || 0);
+
+  if (upstreamStatus >= 400) {
+    reasons.push(`HTTP ${upstreamStatus}`);
+  }
+  if (contentType.includes('text/html') || /<!DOCTYPE|<html/i.test(rawText)) {
+    reasons.push('Response is HTML (Imunify360 bot-protection or login page, not JSON API)');
+  }
+  if (/imunify360|access denied/i.test(rawText)) {
+    reasons.push('Imunify360 / Access denied in response body');
+  }
+  if (rawText.toLowerCase().includes('invalid base64 format')) {
+    reasons.push('Server returned "Invalid base64 format"');
+  }
+  if (attempt?.upstream_ok === false && upstreamStatus > 0 && upstreamStatus < 400) {
+    reasons.push('upstream_ok is false despite HTTP success');
+  }
+  if (!relayAttemptHasValidGraphId(attempt)) {
+    if (rawText && !contentType.includes('application/json')) {
+      reasons.push('Response body is not JSON');
+    } else if (attempt?.response) {
+      reasons.push('JSON parsed but no valid integer graph_id');
+    } else {
+      reasons.push('No parseable response / graph_id');
+    }
+  }
+  if (reasons.length === 0) {
+    reasons.push('Unknown failure');
+  }
+  return reasons;
+};
+
+const logRelayUpstreamAttempt = (attempt, index, total) => {
+  const graphId = getGraphIdFromRelayAttempt(attempt);
+  const worked = relayAttemptHasValidGraphId(attempt);
+  const label = attempt?.target_url?.includes('graph_capture_api.php')
+    ? 'graph_capture_api.php (backup)'
+    : attempt?.target_url?.includes('vision_upload.php')
+      ? 'vision_upload.php (primary)'
+      : (attempt?.target_url || 'unknown');
+
+  console.group(
+    `%c[AI NETLIFY] Upstream ${index + 1}/${total} — ${label}`,
+    worked ? 'color:#4CAF50;font-weight:bold;' : 'color:#F44336;font-weight:bold;'
+  );
+  console.log('target_url:', attempt?.target_url);
+  console.log('mode:', attempt?.mode);
+  console.log('upstream_status:', attempt?.upstream_status);
+  console.log('upstream_ok:', attempt?.upstream_ok);
+  console.log('content_type:', attempt?.content_type);
+  console.log('valid_graph_id flag:', attempt?.valid_graph_id);
+  console.log('graph_id:', graphId || '(none)');
+  if (worked) {
+    console.log('%c✅ WORKED', 'color:#4CAF50;font-weight:bold;');
+  } else {
+    console.log('%c❌ DID NOT WORK — reasons:', 'color:#F44336;font-weight:bold;', describeRelayUpstreamFailure(attempt));
+    console.log('Response preview:', rawTextPreview(attempt?.raw_text));
+  }
+  console.groupEnd();
+};
+
+const rawTextPreview = (rawText, max = 500) => String(rawText || '').substring(0, max);
+
+const analyzeNetlifyRelayResult = (netlifyResult, relayHttpOk) => {
+  const attempts = Array.isArray(netlifyResult?.attempts) ? netlifyResult.attempts : [];
+  const responseGraphId = resolveIntegerGraphIdFromAiResponse(netlifyResult?.response || {});
+  const winningAttempt = attempts.find((attempt) => relayAttemptHasValidGraphId(attempt));
+  const backupWin = winningAttempt?.target_url?.includes('graph_capture_api.php');
+  const primaryAttempts = attempts.filter((a) => String(a?.target_url || '').includes('vision_upload.php'));
+  const backupAttempts = attempts.filter((a) => String(a?.target_url || '').includes('graph_capture_api.php'));
+  const primaryWorked = primaryAttempts.some(relayAttemptHasValidGraphId);
+  const backupWorked = backupAttempts.some(relayAttemptHasValidGraphId);
+
+  const overallGraphId = responseGraphId || getGraphIdFromRelayAttempt(winningAttempt || {});
+  const overallWorked = Boolean(overallGraphId) || Boolean(netlifyResult?.upstream_ok);
+
+  const summary = {
+    overallWorked,
+    overallGraphId: overallGraphId || '',
+    relayHttpOk,
+    upstream_ok: netlifyResult?.upstream_ok,
+    upstream_status: netlifyResult?.upstream_status,
+    final_target_url: netlifyResult?.target_url || winningAttempt?.target_url || '',
+    primaryWorked,
+    backupWorked,
+    wonViaBackup: backupWin,
+    totalAttempts: attempts.length,
+  };
+
+  if (!overallWorked) {
+    summary.whyNot = [];
+    if (!relayHttpOk) summary.whyNot.push(`Netlify relay HTTP not OK`);
+    if (attempts.length === 0) summary.whyNot.push('No upstream attempts recorded in relay response');
+    if (!primaryWorked && primaryAttempts.length > 0) {
+      summary.whyNot.push('All vision_upload.php attempts failed (see attempt logs above)');
+    }
+    if (!backupWorked && backupAttempts.length > 0) {
+      summary.whyNot.push('graph_capture_api.php backup also failed');
+    }
+    if (!overallGraphId) summary.whyNot.push('No valid graph_id in final relay response');
+  } else {
+    summary.whyWorked = primaryWorked
+      ? 'Primary vision_upload.php returned graph_id'
+      : backupWorked
+        ? 'Primary failed but graph_capture_api.php backup returned graph_id'
+        : 'graph_id found in relay final response';
+  }
+
+  return summary;
+};
+
+const fetchAiExtractionViaNetlifyOnly = async (netlifyRelayUrl, requestPayload) => {
+  console.group('%c[AI NETLIFY] Netlify relay only (browser + Render paused)', 'color:#2196F3;font-weight:bold;font-size:13px;');
+  console.log('Relay URL:', netlifyRelayUrl);
+  console.log('Payload keys:', Object.keys(requestPayload));
+  console.log('partno:', requestPayload.partno, '| manf:', requestPayload.manf, '| graph_title:', requestPayload.graph_title);
+  console.log('graph_id in payload:', requestPayload.graph_id || '(empty)');
+  console.log('identifier:', requestPayload.identifier);
+  console.log('ai_extraction_id:', requestPayload.ai_extraction_id);
+
+  const start = performance.now();
+  let relayHttpStatus = 0;
+  let relayHttpOk = false;
+  let netlifyResult = null;
+  let networkError = '';
+
+  try {
+    const netlifyResponse = await fetch(netlifyRelayUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestPayload),
+    });
+    relayHttpStatus = netlifyResponse.status;
+    relayHttpOk = netlifyResponse.ok;
+    console.log('Relay HTTP status:', relayHttpStatus, '| ok:', relayHttpOk);
+    try {
+      netlifyResult = await netlifyResponse.json();
+    } catch (parseError) {
+      networkError = `Netlify relay returned non-JSON body: ${parseError?.message || parseError}`;
+    }
+  } catch (error) {
+    networkError = error?.message || String(error);
+  }
+
+  console.log('Relay round-trip (ms):', (performance.now() - start).toFixed(1));
+
+  if (networkError) {
+    console.log('%c❌ [AI NETLIFY] RELAY REQUEST FAILED', 'color:#F44336;font-weight:bold;font-size:13px;', networkError);
+    console.groupEnd();
+    return {
+      activeRelayUrl: netlifyRelayUrl,
+      result: {
+        upstream_ok: false,
+        upstream_status: relayHttpStatus || 502,
+        raw_text: networkError,
+        response: {},
+        attempts: [],
+      },
+      response: { ok: false, status: relayHttpStatus || 502 },
+    };
+  }
+
+  console.log('relay_context:', netlifyResult?.relay_context || '(none)');
+  console.log('final target_url:', netlifyResult?.target_url);
+  console.log('final upstream_status:', netlifyResult?.upstream_status);
+  console.log('final upstream_ok:', netlifyResult?.upstream_ok);
+  console.log('final content_type:', netlifyResult?.content_type);
+
+  const attempts = Array.isArray(netlifyResult?.attempts) ? netlifyResult.attempts : [];
+  if (attempts.length === 0) {
+    console.warn('[AI NETLIFY] No attempts[] array in relay response — logging final raw_text only');
+    console.log('raw_text preview:', rawTextPreview(netlifyResult?.raw_text));
+  } else {
+    attempts.forEach((attempt, index) => logRelayUpstreamAttempt(attempt, index, attempts.length));
+  }
+
+  const analysis = analyzeNetlifyRelayResult(netlifyResult, relayHttpOk);
+  if (analysis.overallWorked) {
+    console.log('%c✅ [AI NETLIFY] OVERALL SUCCESS', 'color:#4CAF50;font-weight:bold;font-size:13px;', {
+      graph_id: analysis.overallGraphId,
+      why: analysis.whyWorked,
+      wonViaBackup: analysis.wonViaBackup,
+      final_url: analysis.final_target_url,
+    });
+  } else {
+    console.log('%c❌ [AI NETLIFY] OVERALL FAILED', 'color:#F44336;font-weight:bold;font-size:13px;', {
+      whyNot: analysis.whyNot,
+      relayHttpOk: analysis.relayHttpOk,
+      upstream_ok: analysis.upstream_ok,
+    });
+  }
+  console.groupEnd();
+
+  return {
+    activeRelayUrl: netlifyRelayUrl,
+    result: netlifyResult,
+    response: {
+      ok: relayHttpOk && Boolean(analysis.overallWorked || netlifyResult?.upstream_ok),
+      status: relayHttpStatus || 502,
+    },
+  };
+};
 
 const describeAiDirectFailure = (attempt = {}) => {
   const reasons = [];
@@ -1436,9 +1659,10 @@ const GraphCapture = () => {
     const renderRelayUrl = `${apiUrl}/api/ai-extraction`;
 
     console.log('=== AI EXTRACTION REQUEST ===', {
-      mode: USE_FRONTEND_DIRECT_AI_ONLY ? 'browser-direct-only (relays paused)' : 'netlify-then-render-relay',
-      netlifyRelayUrl: USE_FRONTEND_DIRECT_AI_ONLY ? '(paused)' : netlifyRelayUrl,
-      renderRelayUrl: USE_FRONTEND_DIRECT_AI_ONLY ? '(paused)' : renderRelayUrl,
+      route: AI_EXTRACTION_ROUTE,
+      netlifyRelayUrl: AI_EXTRACTION_ROUTE !== 'browser-only' ? netlifyRelayUrl : '(paused)',
+      renderRelayUrl: AI_EXTRACTION_ROUTE === 'production' ? renderRelayUrl : '(paused)',
+      browserDirect: AI_EXTRACTION_ROUTE === 'browser-only' ? 'active' : '(paused)',
       visionUploadUrl: DISCOVEREE_VISION_UPLOAD_URL,
       graphCaptureApiUrl: DISCOVEREE_GRAPH_CAPTURE_API_URL,
       base64imageLength: rawBase64.length,
@@ -1650,8 +1874,8 @@ const GraphCapture = () => {
       let activeRelayUrl;
       let result;
 
-      if (USE_FRONTEND_DIRECT_AI_ONLY) {
-        console.log('%c[AI] RELAYS PAUSED — calling DiscoverEE directly from browser', 'color:#FF9800;font-weight:bold;');
+      if (AI_EXTRACTION_ROUTE === 'browser-only') {
+        console.log('%c[AI] Browser-direct only (relays paused)', 'color:#FF9800;font-weight:bold;');
         const direct = await fetchAiExtractionDirectFromBrowser(requestPayload);
         activeRelayUrl = direct.activeRelayUrl;
         result = direct.result;
@@ -1659,8 +1883,14 @@ const GraphCapture = () => {
           ok: Boolean(result.upstream_ok),
           status: result.upstream_status || 502,
         };
+      } else if (AI_EXTRACTION_ROUTE === 'netlify-only') {
+        console.log('%c[AI] Netlify relay only (browser + Render paused)', 'color:#2196F3;font-weight:bold;');
+        const netlify = await fetchAiExtractionViaNetlifyOnly(netlifyRelayUrl, requestPayload);
+        activeRelayUrl = netlify.activeRelayUrl;
+        result = netlify.result;
+        response = netlify.response;
       } else {
-        // Try Netlify function first (different IP, bypasses Imunify360), then fall back to Render
+        // production: Netlify first, then Render fallback
         let netlifyBlocked = false;
 
         try {
