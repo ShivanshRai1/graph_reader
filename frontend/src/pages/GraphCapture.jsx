@@ -830,6 +830,8 @@ const persistAiExtractionFlowLog = (flowData) => {
 };
 
 const logAiExtractionFlowSummary = (attempts = [], { restored = false } = {}) => {
+  if (!isAiExtractionVerboseLogEnabled()) return;
+
   const list = Array.isArray(attempts) ? attempts : [];
   const groupLabel = restored
     ? '%c📊 AI EXTRACTION FLOW SUMMARY (restored after navigation)'
@@ -931,63 +933,95 @@ const persistAiSupportExchangeLog = (snapshot) => {
   }
 };
 
-const logVisionUploadSupportSnapshot = (snapshot, { restored = false } = {}) => {
-  if (!snapshot) return;
-
-  const groupLabel = restored
-    ? '[AI SUPPORT] vision_upload.php request/response (restored after navigation — copy for DiscoverEE)'
-    : '[AI SUPPORT] vision_upload.php request/response (saved — will restore after navigation)';
-
-  console.group(groupLabel);
-  if (snapshot.route || snapshot.activeRelayUrl) {
-    console.log('route / relay:', {
-      route: snapshot.route || '(unknown)',
-      activeRelayUrl: snapshot.activeRelayUrl || '(unknown)',
-      relayStatus: snapshot.relayStatus,
-      relayOk: snapshot.relayOk,
-    });
-  }
-  console.log('request payload:', snapshot.requestPayload);
-  console.log('response HTTP status:', snapshot.response?.upstream_status);
-  console.log('response Content-Type:', snapshot.response?.content_type);
-  console.log('response raw_text (full):', snapshot.response?.raw_text ?? '(empty)');
-  console.groupEnd();
-};
-
 const logVisionUploadPrimaryExchange = (requestPayload = {}, attempts = [], meta = {}) => {
   const snapshot = buildVisionUploadSupportSnapshot(requestPayload, attempts, meta);
   if (!snapshot) return;
-  logVisionUploadSupportSnapshot(snapshot, { restored: false });
   persistAiSupportExchangeLog(snapshot);
 };
 
-const restoreAndLogAiSupportExchange = () => {
+const AI_EXCHANGE_LOG_KEY = 'ai_extraction_exchange_log';
+
+const formatAiRequestPayloadForLog = (requestPayload = {}) => {
+  const base64 = String(requestPayload.base64image || '');
+  if (/^\[\d+ chars\]/.test(base64)) {
+    return requestPayload;
+  }
+  return {
+    ...requestPayload,
+    base64image: base64
+      ? `[${base64.length} chars] ${base64.substring(0, 80)}${base64.length > 80 ? '...' : ''}`
+      : '(empty)',
+  };
+};
+
+const logAiExtractionRequestResponse = ({
+  requestPayload = {},
+  result = {},
+  meta = {},
+  restored = false,
+  outcome = '',
+} = {}) => {
+  const attempts = Array.isArray(result?.attempts) ? result.attempts : [];
+  const graphId = relayResultHasGraphId(result);
+  const groupLabel = restored
+    ? `[AI] request / response (restored after navigation${graphId ? ` — graph_id ${graphId}` : ''})`
+    : `[AI] request / response${graphId ? ` — graph_id ${graphId}` : ''}`;
+
+  console.group(groupLabel);
+  if (meta.route || meta.activeRelayUrl) {
+    console.log('route / relay:', {
+      route: meta.route || AI_EXTRACTION_ROUTE,
+      activeRelayUrl: meta.activeRelayUrl || '(unknown)',
+      relayStatus: meta.relayStatus,
+      relayOk: meta.relayOk,
+    });
+  }
+  console.log('request payload:', formatAiRequestPayloadForLog(requestPayload));
+
+  if (attempts.length > 0) {
+    attempts.forEach((attempt, index) => {
+      console.log(`response attempt ${index + 1}/${attempts.length}:`, {
+        target_url: attempt?.target_url,
+        mode: attempt?.mode,
+        upstream_status: attempt?.upstream_status,
+        content_type: attempt?.content_type,
+        raw_text: attempt?.raw_text ?? '(empty)',
+        parsed: attempt?.response,
+      });
+    });
+  } else {
+    console.log('response:', {
+      upstream_status: result?.upstream_status,
+      content_type: result?.content_type,
+      raw_text: result?.raw_text ?? '(empty)',
+      parsed: result?.response,
+    });
+  }
+
+  if (outcome) console.log('outcome:', outcome);
+  if (!restored && !isAiExtractionVerboseLogEnabled()) {
+    console.log('tip: add ?ai_debug=true for extra relay/debug logs');
+  }
+  console.groupEnd();
+};
+
+const persistAiExtractionExchangeLog = (exchangeData) => {
   try {
-    const raw = window.sessionStorage.getItem(AI_SUPPORT_EXCHANGE_KEY);
-    if (!raw) return;
-    const snapshot = JSON.parse(raw);
-    logVisionUploadSupportSnapshot(snapshot, { restored: true });
-    window.sessionStorage.removeItem(AI_SUPPORT_EXCHANGE_KEY);
+    window.sessionStorage.setItem(AI_EXCHANGE_LOG_KEY, JSON.stringify(exchangeData));
   } catch (error) {
-    console.warn('Unable to restore AI support exchange log.', error);
+    console.warn('Unable to persist AI extraction exchange log.', error);
   }
 };
 
-// Restore and re-log AI extraction flow after page navigation
-const restoreAndLogAiExtractionFlow = () => {
+const restoreAndLogAiExtractionExchange = () => {
   try {
-    const KEY = 'ai_extraction_flow_log';
-    const raw = window.sessionStorage.getItem(KEY);
+    const raw = window.sessionStorage.getItem(AI_EXCHANGE_LOG_KEY);
     if (!raw) return;
-
-    const flowData = JSON.parse(raw);
-    logPrimaryVisionUploadFailureReport(flowData?.attempts || [], { restored: true });
-    logAiExtractionFlowSummary(flowData?.attempts || [], { restored: true });
-    
-    // Clear after restoring so it doesn't get logged again
-    window.sessionStorage.removeItem(KEY);
+    const exchange = JSON.parse(raw);
+    logAiExtractionRequestResponse({ ...exchange, restored: true });
+    window.sessionStorage.removeItem(AI_EXCHANGE_LOG_KEY);
   } catch (error) {
-    console.warn('Unable to restore AI extraction flow log.', error);
+    console.warn('Unable to restore AI extraction exchange log.', error);
   }
 };
 
@@ -1054,6 +1088,22 @@ const resolveIntegerGraphIdFromAiResponse = (responsePayload) => {
 const AI_EXTRACTION_ROUTE = 'production';
 const AI_RELAY_FETCH_TIMEOUT_MS = 130000;
 const AI_MANUAL_CAPTURE_MESSAGE = 'There is an issue with AI fetching the graph image. Please try capturing manually.';
+
+const isAiExtractionVerboseLogEnabled = () => {
+  try {
+    return new URLSearchParams(window.location.search).get('ai_debug') === 'true';
+  } catch {
+    return false;
+  }
+};
+
+const aiLogVerbose = (...args) => {
+  if (isAiExtractionVerboseLogEnabled()) console.log(...args);
+};
+
+const aiWarnVerbose = (...args) => {
+  if (isAiExtractionVerboseLogEnabled()) console.warn(...args);
+};
 
 const isAiProviderFailureText = (rawText = '') => {
   const raw = String(rawText || '').toLowerCase();
@@ -1202,6 +1252,8 @@ const describeRelayUpstreamFailure = (attempt = {}) => {
 };
 
 const logRelayUpstreamAttempt = (attempt, index, total, logPrefix = '[AI NETLIFY]') => {
+  if (!isAiExtractionVerboseLogEnabled()) return;
+
   const graphId = getGraphIdFromRelayAttempt(attempt);
   const worked = relayAttemptHasValidGraphId(attempt);
   const label = attempt?.target_url?.includes('graph_capture_api.php')
@@ -1259,6 +1311,10 @@ const classifyPrimaryVisionUploadFailure = (attempt = {}) => {
 
 /** Console report: primary vision_upload.php status (survives reload via sessionStorage). */
 const logPrimaryVisionUploadFailureReport = (attempts = [], { restored = false } = {}) => {
+  if (!isAiExtractionVerboseLogEnabled()) {
+    return { primaryWorked: false, primaryAttempts: [] };
+  }
+
   const primaryAttempts = (Array.isArray(attempts) ? attempts : []).filter((attempt) =>
     String(attempt?.target_url || '').includes('vision_upload.php')
   );
@@ -1385,13 +1441,15 @@ const analyzeNetlifyRelayResult = (netlifyResult, relayHttpOk) => {
 };
 
 const fetchAiExtractionViaNetlifyOnly = async (netlifyRelayUrl, requestPayload) => {
-  console.group('%c[AI NETLIFY] Netlify relay only (browser + Render paused)', 'color:#2196F3;font-weight:bold;font-size:13px;');
-  console.log('Relay URL:', netlifyRelayUrl);
-  console.log('Payload keys:', Object.keys(requestPayload));
-  console.log('partno:', requestPayload.partno, '| manf:', requestPayload.manf, '| graph_title:', requestPayload.graph_title);
-  console.log('graph_id in payload:', requestPayload.graph_id || '(empty)');
-  console.log('identifier:', requestPayload.identifier);
-  console.log('ai_extraction_id:', requestPayload.ai_extraction_id);
+  if (isAiExtractionVerboseLogEnabled()) {
+    console.group('%c[AI NETLIFY] Netlify relay only (browser + Render paused)', 'color:#2196F3;font-weight:bold;font-size:13px;');
+    console.log('Relay URL:', netlifyRelayUrl);
+    console.log('Payload keys:', Object.keys(requestPayload));
+    console.log('partno:', requestPayload.partno, '| manf:', requestPayload.manf, '| graph_title:', requestPayload.graph_title);
+    console.log('graph_id in payload:', requestPayload.graph_id || '(empty)');
+    console.log('identifier:', requestPayload.identifier);
+    console.log('ai_extraction_id:', requestPayload.ai_extraction_id);
+  }
 
   const start = performance.now();
   let relayHttpStatus = 0;
@@ -1405,16 +1463,18 @@ const fetchAiExtractionViaNetlifyOnly = async (netlifyRelayUrl, requestPayload) 
     relayHttpOk = relay.response.ok;
     netlifyResult = relay.result;
     networkError = relay.networkError;
-    console.log('Relay HTTP status:', relayHttpStatus, '| ok:', relayHttpOk);
+    aiLogVerbose('Relay HTTP status:', relayHttpStatus, '| ok:', relayHttpOk);
   } catch (error) {
     networkError = error?.message || String(error);
   }
 
-  console.log('Relay round-trip (ms):', (performance.now() - start).toFixed(1));
+  aiLogVerbose('Relay round-trip (ms):', (performance.now() - start).toFixed(1));
 
   if (networkError) {
-    console.log('%c❌ [AI NETLIFY] RELAY REQUEST FAILED', 'color:#F44336;font-weight:bold;font-size:13px;', networkError);
-    console.groupEnd();
+    if (isAiExtractionVerboseLogEnabled()) {
+      console.log('%c❌ [AI NETLIFY] RELAY REQUEST FAILED', 'color:#F44336;font-weight:bold;font-size:13px;', networkError);
+      console.groupEnd();
+    }
     return {
       activeRelayUrl: netlifyRelayUrl,
       result: {
@@ -1428,36 +1488,40 @@ const fetchAiExtractionViaNetlifyOnly = async (netlifyRelayUrl, requestPayload) 
     };
   }
 
-  console.log('relay_context:', netlifyResult?.relay_context || '(none)');
-  console.log('final target_url:', netlifyResult?.target_url);
-  console.log('final upstream_status:', netlifyResult?.upstream_status);
-  console.log('final upstream_ok:', netlifyResult?.upstream_ok);
-  console.log('final content_type:', netlifyResult?.content_type);
+  if (isAiExtractionVerboseLogEnabled()) {
+    console.log('relay_context:', netlifyResult?.relay_context || '(none)');
+    console.log('final target_url:', netlifyResult?.target_url);
+    console.log('final upstream_status:', netlifyResult?.upstream_status);
+    console.log('final upstream_ok:', netlifyResult?.upstream_ok);
+    console.log('final content_type:', netlifyResult?.content_type);
 
-  const attempts = Array.isArray(netlifyResult?.attempts) ? netlifyResult.attempts : [];
-  if (attempts.length === 0) {
-    console.log('[AI NETLIFY] No attempts[] array in relay response — logging final raw_text only');
-    console.log('raw_text preview:', rawTextPreview(netlifyResult?.raw_text));
-  } else {
-    attempts.forEach((attempt, index) => logRelayUpstreamAttempt(attempt, index, attempts.length));
+    const attempts = Array.isArray(netlifyResult?.attempts) ? netlifyResult.attempts : [];
+    if (attempts.length === 0) {
+      console.log('[AI NETLIFY] No attempts[] array in relay response — logging final raw_text only');
+      console.log('raw_text preview:', rawTextPreview(netlifyResult?.raw_text));
+    } else {
+      attempts.forEach((attempt, index) => logRelayUpstreamAttempt(attempt, index, attempts.length));
+    }
+
+    const analysis = analyzeNetlifyRelayResult(netlifyResult, relayHttpOk);
+    if (analysis.overallWorked) {
+      console.log('%c✅ [AI NETLIFY] OVERALL SUCCESS', 'color:#4CAF50;font-weight:bold;font-size:13px;', {
+        graph_id: analysis.overallGraphId,
+        why: analysis.whyWorked,
+        wonViaBackup: analysis.wonViaBackup,
+        final_url: analysis.final_target_url,
+      });
+    } else {
+      console.log('%c❌ [AI NETLIFY] OVERALL FAILED', 'color:#F44336;font-weight:bold;font-size:13px;', {
+        whyNot: analysis.whyNot,
+        relayHttpOk: analysis.relayHttpOk,
+        upstream_ok: analysis.upstream_ok,
+      });
+    }
+    console.groupEnd();
   }
 
   const analysis = analyzeNetlifyRelayResult(netlifyResult, relayHttpOk);
-  if (analysis.overallWorked) {
-    console.log('%c✅ [AI NETLIFY] OVERALL SUCCESS', 'color:#4CAF50;font-weight:bold;font-size:13px;', {
-      graph_id: analysis.overallGraphId,
-      why: analysis.whyWorked,
-      wonViaBackup: analysis.wonViaBackup,
-      final_url: analysis.final_target_url,
-    });
-  } else {
-    console.log('%c❌ [AI NETLIFY] OVERALL FAILED', 'color:#F44336;font-weight:bold;font-size:13px;', {
-      whyNot: analysis.whyNot,
-      relayHttpOk: analysis.relayHttpOk,
-      upstream_ok: analysis.upstream_ok,
-    });
-  }
-  console.groupEnd();
 
   return {
     activeRelayUrl: netlifyRelayUrl,
@@ -1470,14 +1534,16 @@ const fetchAiExtractionViaNetlifyOnly = async (netlifyRelayUrl, requestPayload) 
 };
 
 const fetchAiExtractionViaRenderOnly = async (renderRelayUrl, requestPayload) => {
-  console.group('%c[AI RENDER] Render backend relay only (browser + Netlify paused)', 'color:#4CAF50;font-weight:bold;font-size:13px;');
-  console.log('Relay URL:', renderRelayUrl);
-  console.log('Render backend: one primary multipart call (120s wait), backup only on WAF block');
-  console.log('Payload keys:', Object.keys(requestPayload));
-  console.log('partno:', requestPayload.partno, '| manf:', requestPayload.manf, '| graph_title:', requestPayload.graph_title);
-  console.log('graph_id in payload:', requestPayload.graph_id || '(empty)');
-  console.log('identifier:', requestPayload.identifier);
-  console.log('ai_extraction_id:', requestPayload.ai_extraction_id);
+  if (isAiExtractionVerboseLogEnabled()) {
+    console.group('%c[AI RENDER] Render backend relay only (browser + Netlify paused)', 'color:#4CAF50;font-weight:bold;font-size:13px;');
+    console.log('Relay URL:', renderRelayUrl);
+    console.log('Render backend: one primary multipart call (120s wait), backup only on WAF block');
+    console.log('Payload keys:', Object.keys(requestPayload));
+    console.log('partno:', requestPayload.partno, '| manf:', requestPayload.manf, '| graph_title:', requestPayload.graph_title);
+    console.log('graph_id in payload:', requestPayload.graph_id || '(empty)');
+    console.log('identifier:', requestPayload.identifier);
+    console.log('ai_extraction_id:', requestPayload.ai_extraction_id);
+  }
 
   const start = performance.now();
   let relayHttpStatus = 0;
@@ -1491,16 +1557,18 @@ const fetchAiExtractionViaRenderOnly = async (renderRelayUrl, requestPayload) =>
     relayHttpOk = relay.response.ok;
     renderResult = relay.result;
     networkError = relay.networkError;
-    console.log('Relay HTTP status:', relayHttpStatus, '| ok:', relayHttpOk);
+    aiLogVerbose('Relay HTTP status:', relayHttpStatus, '| ok:', relayHttpOk);
   } catch (error) {
     networkError = error?.message || String(error);
   }
 
-  console.log('Relay round-trip (ms):', (performance.now() - start).toFixed(1));
+  aiLogVerbose('Relay round-trip (ms):', (performance.now() - start).toFixed(1));
 
   if (networkError) {
-    console.log('%c❌ [AI RENDER] RELAY REQUEST FAILED', 'color:#F44336;font-weight:bold;font-size:13px;', networkError);
-    console.groupEnd();
+    if (isAiExtractionVerboseLogEnabled()) {
+      console.log('%c❌ [AI RENDER] RELAY REQUEST FAILED', 'color:#F44336;font-weight:bold;font-size:13px;', networkError);
+      console.groupEnd();
+    }
     return {
       activeRelayUrl: renderRelayUrl,
       result: {
@@ -1514,35 +1582,39 @@ const fetchAiExtractionViaRenderOnly = async (renderRelayUrl, requestPayload) =>
     };
   }
 
-  console.log('final target_url:', renderResult?.target_url);
-  console.log('final upstream_status:', renderResult?.upstream_status);
-  console.log('final upstream_ok:', renderResult?.upstream_ok);
-  console.log('final content_type:', renderResult?.content_type);
+  if (isAiExtractionVerboseLogEnabled()) {
+    console.log('final target_url:', renderResult?.target_url);
+    console.log('final upstream_status:', renderResult?.upstream_status);
+    console.log('final upstream_ok:', renderResult?.upstream_ok);
+    console.log('final content_type:', renderResult?.content_type);
 
-  const attempts = Array.isArray(renderResult?.attempts) ? renderResult.attempts : [];
-  if (attempts.length === 0) {
-    console.log('[AI RENDER] No attempts[] array in relay response — logging final raw_text only');
-    console.log('raw_text preview:', rawTextPreview(renderResult?.raw_text));
-  } else {
-    attempts.forEach((attempt, index) => logRelayUpstreamAttempt(attempt, index, attempts.length, '[AI RENDER]'));
+    const attempts = Array.isArray(renderResult?.attempts) ? renderResult.attempts : [];
+    if (attempts.length === 0) {
+      console.log('[AI RENDER] No attempts[] array in relay response — logging final raw_text only');
+      console.log('raw_text preview:', rawTextPreview(renderResult?.raw_text));
+    } else {
+      attempts.forEach((attempt, index) => logRelayUpstreamAttempt(attempt, index, attempts.length, '[AI RENDER]'));
+    }
+
+    const analysis = analyzeNetlifyRelayResult(renderResult, relayHttpOk);
+    if (analysis.overallWorked) {
+      console.log('%c✅ [AI RENDER] OVERALL SUCCESS', 'color:#4CAF50;font-weight:bold;font-size:13px;', {
+        graph_id: analysis.overallGraphId,
+        why: analysis.whyWorked,
+        wonViaBackup: analysis.wonViaBackup,
+        final_url: analysis.final_target_url,
+      });
+    } else {
+      console.log('%c❌ [AI RENDER] OVERALL FAILED', 'color:#F44336;font-weight:bold;font-size:13px;', {
+        whyNot: analysis.whyNot,
+        relayHttpOk: analysis.relayHttpOk,
+        upstream_ok: analysis.upstream_ok,
+      });
+    }
+    console.groupEnd();
   }
 
   const analysis = analyzeNetlifyRelayResult(renderResult, relayHttpOk);
-  if (analysis.overallWorked) {
-    console.log('%c✅ [AI RENDER] OVERALL SUCCESS', 'color:#4CAF50;font-weight:bold;font-size:13px;', {
-      graph_id: analysis.overallGraphId,
-      why: analysis.whyWorked,
-      wonViaBackup: analysis.wonViaBackup,
-      final_url: analysis.final_target_url,
-    });
-  } else {
-    console.log('%c❌ [AI RENDER] OVERALL FAILED', 'color:#F44336;font-weight:bold;font-size:13px;', {
-      whyNot: analysis.whyNot,
-      relayHttpOk: analysis.relayHttpOk,
-      upstream_ok: analysis.upstream_ok,
-    });
-  }
-  console.groupEnd();
 
   return {
     activeRelayUrl: renderRelayUrl,
@@ -1788,10 +1860,9 @@ const GraphCapture = () => {
   } = useGraph();
   const graphWorkspaceRef = useRef(null);
 
-  // Restore AI extraction flow logs on component mount
+  // Restore AI extraction logs on component mount
   useEffect(() => {
-    restoreAndLogAiSupportExchange();
-    restoreAndLogAiExtractionFlow();
+    restoreAndLogAiExtractionExchange();
   }, []);
 
   // Display stored dual-call test results from previous test run
@@ -1817,7 +1888,7 @@ const GraphCapture = () => {
     const metadata = restoreAiExtractedMetadata();
     if (!metadata) return;
 
-    console.log('[AI METADATA] Restoring extracted metadata to form:', metadata);
+    aiLogVerbose('[AI METADATA] Restoring extracted metadata to form:', metadata);
 
     // Apply metadata to graphConfig state
     setGraphConfig((prev) => {
@@ -1866,7 +1937,7 @@ const GraphCapture = () => {
       return updated;
     });
 
-    console.log('[AI METADATA] Form values restored from extracted metadata');
+    aiLogVerbose('[AI METADATA] Form values restored from extracted metadata');
     clearAiExtractedMetadata();
   }, []);
 
@@ -1874,9 +1945,9 @@ const GraphCapture = () => {
     // TEST MODE: Check at the very start before anything else runs
     const _testParams = new URLSearchParams(window.location.search);
     const _isDualCallTest = _testParams.get('ai_test_dual_call') === 'true';
-    console.log('[TEST MODE EARLY CHECK] window.location.search:', window.location.search);
-    console.log('[TEST MODE EARLY CHECK] ai_test_dual_call value:', _testParams.get('ai_test_dual_call'));
-    console.log('[TEST MODE EARLY CHECK] isDualCallTest:', _isDualCallTest);
+    aiLogVerbose('[TEST MODE EARLY CHECK] window.location.search:', window.location.search);
+    aiLogVerbose('[TEST MODE EARLY CHECK] ai_test_dual_call value:', _testParams.get('ai_test_dual_call'));
+    aiLogVerbose('[TEST MODE EARLY CHECK] isDualCallTest:', _isDualCallTest);
 
     const reencodeImageBase64 = async (base64Str) => {
       return new Promise((resolve, reject) => {
@@ -1969,9 +2040,9 @@ const GraphCapture = () => {
     let freshBase64 = imageBase64;
     try {
       freshBase64 = await reencodeImageBase64(imageBase64);
-      console.log('[AI] Image re-encoded via Canvas. Fresh base64 length:', freshBase64.length);
+      aiLogVerbose('[AI] Image re-encoded via Canvas. Fresh base64 length:', freshBase64.length);
     } catch (reencodeErr) {
-      console.warn('[AI] Canvas re-encoding failed, using original base64:', reencodeErr.message);
+      aiWarnVerbose('[AI] Canvas re-encoding failed, using original base64:', reencodeErr.message);
       // Fall back to original if re-encoding fails
     }
 
@@ -2024,7 +2095,7 @@ const GraphCapture = () => {
     const netlifyRelayUrl = '/.netlify/functions/ai-relay';
     const renderRelayUrl = `${apiUrl}/api/ai-extraction`;
 
-    console.log('=== AI EXTRACTION REQUEST ===', {
+    aiLogVerbose('=== AI EXTRACTION REQUEST ===', {
       route: AI_EXTRACTION_ROUTE,
       netlifyRelayUrl: AI_EXTRACTION_ROUTE === 'netlify-only' || AI_EXTRACTION_ROUTE === 'production'
         ? netlifyRelayUrl
@@ -2038,7 +2109,7 @@ const GraphCapture = () => {
       base64imageLength: rawBase64.length,
       payload: requestPayload,
     });
-    console.log('[DEBUG] Sending base64 string of length:', rawBase64.length, 'first 100 chars:', rawBase64.substring(0, 100));
+    aiLogVerbose('[DEBUG] Sending base64 string of length:', rawBase64.length, 'first 100 chars:', rawBase64.substring(0, 100));
 
     setIsAiExtractionLoading(true);
 
@@ -2063,7 +2134,7 @@ const GraphCapture = () => {
       }
       return false;
     })();
-    console.log('[DEBUG] ai_test_endpoint_proof enabled:', isEndpointProofTest, 'search:', window.location.search);
+    aiLogVerbose('[DEBUG] ai_test_endpoint_proof enabled:', isEndpointProofTest, 'search:', window.location.search);
 
     if (isEndpointProofTest) {
       setIsAiExtractionLoading(true);
@@ -2252,7 +2323,7 @@ const GraphCapture = () => {
       let result;
 
       if (AI_EXTRACTION_ROUTE === 'browser-only') {
-        console.log('%c[AI] Browser-direct only (relays paused)', 'color:#FF9800;font-weight:bold;');
+        aiLogVerbose('%c[AI] Browser-direct only (relays paused)', 'color:#FF9800;font-weight:bold;');
         const direct = await fetchAiExtractionDirectFromBrowser(requestPayload);
         activeRelayUrl = direct.activeRelayUrl;
         result = direct.result;
@@ -2261,20 +2332,20 @@ const GraphCapture = () => {
           status: result.upstream_status || 502,
         };
       } else if (AI_EXTRACTION_ROUTE === 'netlify-only') {
-        console.log('%c[AI] Netlify relay only (browser + Render paused)', 'color:#2196F3;font-weight:bold;');
+        aiLogVerbose('%c[AI] Netlify relay only (browser + Render paused)', 'color:#2196F3;font-weight:bold;');
         const netlify = await fetchAiExtractionViaNetlifyOnly(netlifyRelayUrl, requestPayload);
         activeRelayUrl = netlify.activeRelayUrl;
         result = netlify.result;
         response = netlify.response;
       } else if (AI_EXTRACTION_ROUTE === 'render-only') {
-        console.log('%c[AI] Render backend relay only (browser + Netlify paused)', 'color:#4CAF50;font-weight:bold;');
+        aiLogVerbose('%c[AI] Render backend relay only (browser + Netlify paused)', 'color:#4CAF50;font-weight:bold;');
         const render = await fetchAiExtractionViaRenderOnly(renderRelayUrl, requestPayload);
         activeRelayUrl = render.activeRelayUrl;
         result = render.result;
         response = render.response;
       } else {
         // production: Render first (long upstream wait), Netlify only if Render relay is unreachable
-        console.log('[RELAY] Trying Render backend first (long AI wait):', renderRelayUrl);
+        aiLogVerbose('[RELAY] Trying Render backend first (long AI wait):', renderRelayUrl);
         const renderRelay = await fetchAiRelayPost(renderRelayUrl, requestPayload);
         activeRelayUrl = renderRelayUrl;
         result = renderRelay.result;
@@ -2293,7 +2364,7 @@ const GraphCapture = () => {
           if (isBackendFallbackDisabled) {
             throw new Error('Render relay failed and Netlify fallback is disabled (ai_disable_backend_fallback=true).');
           }
-          console.warn('[RELAY] Render relay unreachable. Falling back to Netlify relay:', netlifyRelayUrl);
+          aiWarnVerbose('[RELAY] Render relay unreachable. Falling back to Netlify relay:', netlifyRelayUrl);
           const netlifyRelay = await fetchAiRelayPost(netlifyRelayUrl, requestPayload);
           activeRelayUrl = netlifyRelayUrl;
           result = netlifyRelay.result;
@@ -2302,19 +2373,19 @@ const GraphCapture = () => {
             status: netlifyRelay.response.status,
           };
         } else if (renderHasGraphId) {
-          console.log('[RELAY] Render backend succeeded with graph_id.');
+          aiLogVerbose('[RELAY] Render backend succeeded with graph_id.');
         } else {
-          console.log('[RELAY] Using Render response without Netlify retry (avoids duplicate AI captures).');
+          aiLogVerbose('[RELAY] Using Render response without Netlify retry (avoids duplicate AI captures).');
         }
       }
 
-      console.log('=== RELAY RESPONSE ===', {
+      aiLogVerbose('=== RELAY RESPONSE ===', {
         activeRelayUrl,
         relayStatus: response.status,
         relayOk: response.ok,
       });
 
-      console.log('=== UPSTREAM RESPONSE ===', {
+      aiLogVerbose('=== UPSTREAM RESPONSE ===', {
         upstreamStatus: result?.upstream_status,
         upstreamOk: result?.upstream_ok,
         contentType: result?.content_type,
@@ -2322,11 +2393,11 @@ const GraphCapture = () => {
         firstRawTextChars: (result?.raw_text || '').substring(0, 200),
       });
 
-      console.log('=== PARSED RESPONSE ===', {
+      aiLogVerbose('=== PARSED RESPONSE ===', {
         response: result?.response,
       });
 
-      console.log('=== AI EXTRACTION RESPONSE ===', {
+      aiLogVerbose('=== AI EXTRACTION RESPONSE ===', {
         url: activeRelayUrl,
         relayStatus: response.status,
         upstreamStatus: result?.upstream_status,
@@ -2336,27 +2407,40 @@ const GraphCapture = () => {
         parsedResponse: result?.response,
       });
 
-      console.log('[DEBUG] Attempts (which URLs were tried):', result?.attempts?.map(a => ({
+      aiLogVerbose('[DEBUG] Attempts (which URLs were tried):', result?.attempts?.map(a => ({
         targetUrl: a?.target_url,
         status: a?.upstream_status,
         isHtml: (a?.content_type || '').includes('text/html'),
         responseLength: (a?.raw_text || '').length,
       })));
 
-      // Enhanced logging — primary failure report first (most important for debugging)
-      logVisionUploadPrimaryExchange(requestPayload, result?.attempts || [], {
+      const aiLogMeta = {
         route: AI_EXTRACTION_ROUTE,
         activeRelayUrl,
         relayStatus: response.status,
         relayOk: response.ok,
-      });
+      };
+
+      logVisionUploadPrimaryExchange(requestPayload, result?.attempts || [], aiLogMeta);
       logPrimaryVisionUploadFailureReport(result?.attempts || []);
       logAiExtractionFlowSummary(result?.attempts || []);
       
       // Save flow data to sessionStorage so it persists across page navigation
       persistAiExtractionFlowLog({ attempts: result?.attempts || [] });
 
+      const logAndPersistAiExchange = (outcome) => {
+        const exchange = {
+          requestPayload: formatAiRequestPayloadForLog(requestPayload),
+          result,
+          meta: aiLogMeta,
+          outcome,
+        };
+        persistAiExtractionExchangeLog(exchange);
+        logAiExtractionRequestResponse({ ...exchange, restored: false });
+      };
+
       if (!response.ok) {
+        logAndPersistAiExchange('relay error');
         // Relay itself failed (502/503) — network/server issue
         throw new Error(`Relay error (${response.status}): ${JSON.stringify(result)}`);
       }
@@ -2365,7 +2449,8 @@ const GraphCapture = () => {
 
       // Upstream responded (even 4xx/5xx) — surface AI failures without duplicate retries
       if (!result?.upstream_ok && !resolvedGraphId) {
-        console.warn('=== AI EXTRACTION UPSTREAM ERROR ===', result?.raw_text || `HTTP ${result?.upstream_status}`);
+        aiWarnVerbose('=== AI EXTRACTION UPSTREAM ERROR ===', result?.raw_text || `HTTP ${result?.upstream_status}`);
+        logAndPersistAiExchange('try manual capture (upstream error)');
         return showAiManualCaptureMessage();
       }
 
@@ -2392,12 +2477,12 @@ const GraphCapture = () => {
       };
       
       if (!validGraphId) {
-        console.log('=== AI EXTRACTION DECISION ===', {
+        aiLogVerbose('=== AI EXTRACTION DECISION ===', {
           action: 'stay',
           reason: 'Missing valid integer graph_id in response',
           response: aiResponsePayload,
         });
-        console.warn('AI extraction completed, but no valid graph ID was returned. Staying on this page.');
+        logAndPersistAiExchange('try manual capture (no graph_id)');
         return showAiManualCaptureMessage();
       }
 
@@ -2417,7 +2502,7 @@ const GraphCapture = () => {
       redirectUrl.searchParams.delete(AI_DIRECT_CAPTURE_PARAM);
 
       if (!hasCapturedCurves) {
-        console.log('=== AI EXTRACTION DECISION ===', {
+        aiLogVerbose('=== AI EXTRACTION DECISION ===', {
           action: currentUrlGraphId ? 'redirect_for_capture_no_curves' : 'redirect_case3_with_graph_id_no_curves',
           reason: currentUrlGraphId
             ? 'graph_id in URL but no captured curves yet — upload mode with pending image'
@@ -2427,6 +2512,7 @@ const GraphCapture = () => {
 
         persistAiPendingCapture(imageBase64, source, graphIdForFlow);
         persistAiExtractedMetadata(extractedMetadata);
+        logAndPersistAiExchange('redirect — upload mode with pending image');
         navigateWithAiFlowMessage(
           'Graph found. Redirecting to graph capture page with pre-filled data...',
           redirectUrl.toString(),
@@ -2435,12 +2521,13 @@ const GraphCapture = () => {
         return true;
       }
 
-      console.log('=== AI EXTRACTION DECISION ===', {
+      aiLogVerbose('=== AI EXTRACTION DECISION ===', {
         action: 'redirect',
         reason: 'Valid graph_id found and existing captured curves detected',
         graph_id: graphIdForFlow,
       });
 
+      logAndPersistAiExchange('redirect — graph has existing curves');
       navigateWithAiFlowMessage(
         'Graph found with existing curves. Redirecting to graph capture page...',
         redirectUrl.toString()
@@ -4112,7 +4199,7 @@ const GraphCapture = () => {
     setRestoredPendingCapture(restoredPending);
     restoredPendingImageRef.current = String(restoredPending?.imageBase64 || '');
     if (restoredPending?.imageBase64) {
-      console.log('[AI PENDING CAPTURE] Restoring captured image to upload panel (pending choice)');
+      aiLogVerbose('[AI PENDING CAPTURE] Restoring captured image to upload panel (pending choice)');
     }
 
     setIsXTitleUrlLocked(Boolean(xTitleFromUrl));
@@ -4195,7 +4282,7 @@ const GraphCapture = () => {
 
     // Skip auto-fetch when URL hydration restored a pending AI image (upload-only Page A).
     if (String(restoredPendingImageRef.current || '').trim()) {
-      console.log('[DEBUG] Pending AI capture restored on mount, skipping auto-fetch to stay in upload mode');
+      aiLogVerbose('[DEBUG] Pending AI capture restored on mount, skipping auto-fetch to stay in upload mode');
       return;
     }
 
