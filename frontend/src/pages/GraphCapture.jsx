@@ -1050,8 +1050,76 @@ const resolveIntegerGraphIdFromAiResponse = (responsePayload) => {
 // 'render-only' — Render backend relay only (browser + Netlify paused)
 // 'netlify-only' — Netlify function only (browser + Render paused)
 // 'browser-only' — browser → DiscoverEE direct only
-// 'production' — Netlify first, then Render fallback (live default)
+// 'production' — Render first (long AI wait), Netlify fallback if Render unreachable
 const AI_EXTRACTION_ROUTE = 'production';
+const AI_RELAY_FETCH_TIMEOUT_MS = 130000;
+const AI_MANUAL_CAPTURE_MESSAGE = 'There is an issue with AI fetching the graph image. Please try capturing manually.';
+
+const isAiProviderFailureText = (rawText = '') => {
+  const raw = String(rawText || '').toLowerCase();
+  return (
+    raw.includes('resource_exhausted') ||
+    raw.includes('quota exceeded') ||
+    raw.includes('"code": 429') ||
+    raw.includes('"code":429')
+  );
+};
+
+const collectAiFailureText = (result) => {
+  const chunks = [result?.raw_text];
+  if (Array.isArray(result?.attempts)) {
+    result.attempts.forEach((attempt) => chunks.push(attempt?.raw_text));
+  }
+  return chunks.filter(Boolean).join('\n');
+};
+
+const isAiProviderFailureResult = (result) =>
+  isAiProviderFailureText(collectAiFailureText(result));
+
+const isRelayTransportFailure = (responseStatus, networkError) =>
+  Boolean(networkError) || responseStatus === 502 || responseStatus === 503 || responseStatus === 504;
+
+const fetchAiRelayPost = async (relayUrl, requestPayload, timeoutMs = AI_RELAY_FETCH_TIMEOUT_MS) => {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(relayUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestPayload),
+      signal: controller.signal,
+    });
+
+    let result = null;
+    try {
+      result = await response.json();
+    } catch {
+      result = null;
+    }
+
+    return { response, result, networkError: '' };
+  } catch (error) {
+    const isAbort = error?.name === 'AbortError';
+    const message = isAbort
+      ? `Relay request timed out after ${timeoutMs}ms`
+      : (error?.message || String(error));
+
+    return {
+      response: { ok: false, status: isAbort ? 504 : 502 },
+      result: {
+        upstream_ok: false,
+        upstream_status: isAbort ? 504 : 502,
+        raw_text: message,
+        response: {},
+        attempts: [],
+      },
+      networkError: message,
+    };
+  } finally {
+    window.clearTimeout(timer);
+  }
+};
 
 const DISCOVEREE_VISION_UPLOAD_URL = 'https://www.discoveree.io/vision_upload.php';
 const DISCOVEREE_GRAPH_CAPTURE_API_URL = 'https://www.discoveree.io/graph_capture_api.php';
@@ -1077,6 +1145,23 @@ const relayAttemptHasValidGraphId = (attempt = {}) => {
   return Boolean(getGraphIdFromRelayAttempt(attempt));
 };
 
+const relayResultHasGraphId = (result) => {
+  const fromTop = resolveIntegerGraphIdFromAiResponse(
+    result?.response && typeof result.response === 'object' ? result.response : {}
+  );
+  if (fromTop) return fromTop;
+
+  if (Array.isArray(result?.attempts)) {
+    for (const attempt of result.attempts) {
+      const attemptId = getGraphIdFromRelayAttempt(attempt);
+      if (attemptId) return Number(attemptId);
+    }
+  }
+
+  const plainNumeric = extractPlainNumericGraphIdFromRawText(result?.raw_text);
+  return plainNumeric ? Number(plainNumeric) : null;
+};
+
 const describeRelayUpstreamFailure = (attempt = {}) => {
   const reasons = [];
   const rawText = String(attempt?.raw_text || '');
@@ -1094,6 +1179,9 @@ const describeRelayUpstreamFailure = (attempt = {}) => {
   }
   if (rawText.toLowerCase().includes('invalid base64 format')) {
     reasons.push('Server returned "Invalid base64 format"');
+  }
+  if (isAiProviderFailureText(rawText)) {
+    reasons.push('AI provider error (quota/rate limit)');
   }
   if (attempt?.upstream_ok === false && upstreamStatus > 0 && upstreamStatus < 400) {
     reasons.push('upstream_ok is false despite HTTP success');
@@ -1312,19 +1400,12 @@ const fetchAiExtractionViaNetlifyOnly = async (netlifyRelayUrl, requestPayload) 
   let networkError = '';
 
   try {
-    const netlifyResponse = await fetch(netlifyRelayUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestPayload),
-    });
-    relayHttpStatus = netlifyResponse.status;
-    relayHttpOk = netlifyResponse.ok;
+    const relay = await fetchAiRelayPost(netlifyRelayUrl, requestPayload);
+    relayHttpStatus = relay.response.status;
+    relayHttpOk = relay.response.ok;
+    netlifyResult = relay.result;
+    networkError = relay.networkError;
     console.log('Relay HTTP status:', relayHttpStatus, '| ok:', relayHttpOk);
-    try {
-      netlifyResult = await netlifyResponse.json();
-    } catch (parseError) {
-      networkError = `Netlify relay returned non-JSON body: ${parseError?.message || parseError}`;
-    }
   } catch (error) {
     networkError = error?.message || String(error);
   }
@@ -1391,7 +1472,7 @@ const fetchAiExtractionViaNetlifyOnly = async (netlifyRelayUrl, requestPayload) 
 const fetchAiExtractionViaRenderOnly = async (renderRelayUrl, requestPayload) => {
   console.group('%c[AI RENDER] Render backend relay only (browser + Netlify paused)', 'color:#4CAF50;font-weight:bold;font-size:13px;');
   console.log('Relay URL:', renderRelayUrl);
-  console.log('Render backend sends primary + backup to DiscoverEE as application/json');
+  console.log('Render backend: one primary multipart call (120s wait), backup only on WAF block');
   console.log('Payload keys:', Object.keys(requestPayload));
   console.log('partno:', requestPayload.partno, '| manf:', requestPayload.manf, '| graph_title:', requestPayload.graph_title);
   console.log('graph_id in payload:', requestPayload.graph_id || '(empty)');
@@ -1405,19 +1486,12 @@ const fetchAiExtractionViaRenderOnly = async (renderRelayUrl, requestPayload) =>
   let networkError = '';
 
   try {
-    const renderResponse = await fetch(renderRelayUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestPayload),
-    });
-    relayHttpStatus = renderResponse.status;
-    relayHttpOk = renderResponse.ok;
+    const relay = await fetchAiRelayPost(renderRelayUrl, requestPayload);
+    relayHttpStatus = relay.response.status;
+    relayHttpOk = relay.response.ok;
+    renderResult = relay.result;
+    networkError = relay.networkError;
     console.log('Relay HTTP status:', relayHttpStatus, '| ok:', relayHttpOk);
-    try {
-      renderResult = await renderResponse.json();
-    } catch (parseError) {
-      networkError = `Render relay returned non-JSON body: ${parseError?.message || parseError}`;
-    }
   } catch (error) {
     networkError = error?.message || String(error);
   }
@@ -1907,7 +1981,7 @@ const GraphCapture = () => {
       .replace(/[^A-Za-z0-9+/=]/g, '');
     if (!rawBase64) {
       alert('No valid image data found for AI extraction. Please paste or upload an image and try again.');
-      return;
+      return false;
     }
 
     const hasExistingGraphContextForAi = String(urlParams.graph_id || '').trim() !== '';
@@ -1967,6 +2041,13 @@ const GraphCapture = () => {
     console.log('[DEBUG] Sending base64 string of length:', rawBase64.length, 'first 100 chars:', rawBase64.substring(0, 100));
 
     setIsAiExtractionLoading(true);
+
+    const showAiManualCaptureMessage = (message = AI_MANUAL_CAPTURE_MESSAGE, displayMs = 5000) => {
+      setIsAiExtractionLoading(false);
+      setAiFlowStatusMessage(message);
+      window.setTimeout(() => setAiFlowStatusMessage(''), displayMs);
+      return false;
+    };
     
     // TEST MODE: If ai_test_dual_call=true, run frontend and backend calls in parallel
     const urlSearchParams = new URLSearchParams(window.location.search);
@@ -2119,7 +2200,7 @@ const GraphCapture = () => {
       console.groupEnd();
       console.groupEnd();
       setIsAiExtractionLoading(false);
-      return;
+      return false;
     }
 
     if (isDualCallTest) {
@@ -2150,13 +2231,13 @@ const GraphCapture = () => {
         console.groupEnd();
         console.groupEnd();
         setIsAiExtractionLoading(false);
-        return; // Stop here — do not navigate so logs stay visible
+        return false; // Stop here — do not navigate so logs stay visible
       } catch (testErr) {
         console.error('[TEST] Error during dual call test:', testErr);
       }
       console.groupEnd();
       setIsAiExtractionLoading(false);
-      return; // Stop here in test mode regardless
+      return false; // Stop here in test mode regardless
     }
     
     try {
@@ -2192,90 +2273,39 @@ const GraphCapture = () => {
         result = render.result;
         response = render.response;
       } else {
-        // production: Netlify first, then Render fallback
-        let netlifyBlocked = false;
+        // production: Render first (long upstream wait), Netlify only if Render relay is unreachable
+        console.log('[RELAY] Trying Render backend first (long AI wait):', renderRelayUrl);
+        const renderRelay = await fetchAiRelayPost(renderRelayUrl, requestPayload);
+        activeRelayUrl = renderRelayUrl;
+        result = renderRelay.result;
+        response = {
+          ok: renderRelay.response.ok,
+          status: renderRelay.response.status,
+        };
 
-        try {
-          console.log('[RELAY] Trying Netlify function first:', netlifyRelayUrl);
-          const netlifyResponse = await fetch(netlifyRelayUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(requestPayload),
-          });
-          const netlifyResponseClone = netlifyResponse.clone();
-          let netlifyResult = null;
-          try {
-            netlifyResult = await netlifyResponseClone.json();
-          } catch {
-            netlifyResult = null;
-          }
-          const netlifyRawText = netlifyResult?.raw_text || '';
-          const netlifyIsImunify = typeof netlifyRawText === 'string' && (
-            netlifyRawText.includes('Imunify360') ||
-            netlifyRawText.includes('Access denied') ||
-            netlifyRawText.includes('<!DOCTYPE') ||
-            netlifyRawText.includes('<html')
-          );
-          const netlifyIsInvalidBase64 = typeof netlifyRawText === 'string' &&
-            netlifyRawText.toLowerCase().includes('invalid base64 format');
-          const netlifyGraphId = String(
-            netlifyResult?.response?.graph_id ??
-            netlifyResult?.response?.graphId ??
-            ''
-          ).trim();
-          const netlifyHasSuccessfulFallback = Array.isArray(netlifyResult?.attempts) &&
-            netlifyResult.attempts.some((attempt) => {
-              const targetUrl = String(attempt?.target_url || '');
-              const contentType = String(attempt?.content_type || '').toLowerCase();
-              const rawText = String(attempt?.raw_text || '');
-              const attemptGraphId = String(
-                attempt?.response?.graph_id ??
-                attempt?.response?.graphId ??
-                ''
-              ).trim();
+        const renderHasGraphId = Boolean(relayResultHasGraphId(result));
+        const renderRelayUnreachable =
+          Boolean(renderRelay.networkError) ||
+          renderRelay.response.status === 502 ||
+          renderRelay.response.status === 503;
 
-              return (
-                targetUrl.includes('graph_capture_api.php') &&
-                Number(attempt?.upstream_status) === 200 &&
-                contentType.includes('application/json') &&
-                (attemptGraphId !== '' || /"graph_id"\s*:\s*"?\d+"?/i.test(rawText))
-              );
-            });
-          const netlifySucceeded =
-            netlifyResponse.ok &&
-            netlifyResult?.upstream_ok !== false &&
-            (netlifyGraphId !== '' || netlifyHasSuccessfulFallback);
-
-          if (!netlifySucceeded && (!netlifyResponse.ok || netlifyIsImunify || netlifyIsInvalidBase64)) {
-            netlifyBlocked = true;
-            console.warn('[RELAY] Netlify function blocked or failed (status:', netlifyResponse.status, ', imunify:', netlifyIsImunify, ', invalidBase64:', netlifyIsInvalidBase64, '). Falling back to Render relay.');
-          } else {
-            response = new Response(JSON.stringify(netlifyResult), {
-              status: netlifyResponse.status,
-              headers: { 'Content-Type': 'application/json' },
-            });
-            activeRelayUrl = netlifyRelayUrl;
-            console.log('[RELAY] Netlify function succeeded:', netlifyResponse.status);
-          }
-        } catch (netlifyError) {
-          netlifyBlocked = true;
-          console.warn('[RELAY] Netlify function threw an error:', netlifyError.message, '- falling back to Render relay.');
-        }
-
-        if (netlifyBlocked || !response) {
+        if (!renderHasGraphId && renderRelayUnreachable && !isAiProviderFailureResult(result)) {
           if (isBackendFallbackDisabled) {
-            throw new Error('Netlify relay failed and backend fallback is disabled (ai_disable_backend_fallback=true).');
+            throw new Error('Render relay failed and Netlify fallback is disabled (ai_disable_backend_fallback=true).');
           }
-          console.log('[RELAY] Using Render backend relay:', renderRelayUrl);
-          response = await fetch(renderRelayUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(requestPayload),
-          });
-          activeRelayUrl = renderRelayUrl;
+          console.warn('[RELAY] Render relay unreachable. Falling back to Netlify relay:', netlifyRelayUrl);
+          const netlifyRelay = await fetchAiRelayPost(netlifyRelayUrl, requestPayload);
+          activeRelayUrl = netlifyRelayUrl;
+          result = netlifyRelay.result;
+          response = {
+            ok: netlifyRelay.response.ok,
+            status: netlifyRelay.response.status,
+          };
+        } else if (renderHasGraphId) {
+          console.log('[RELAY] Render backend succeeded with graph_id.');
+        } else {
+          console.log('[RELAY] Using Render response without Netlify retry (avoids duplicate AI captures).');
         }
-
-        result = await response.json();
       }
 
       console.log('=== RELAY RESPONSE ===', {
@@ -2331,17 +2361,18 @@ const GraphCapture = () => {
         throw new Error(`Relay error (${response.status}): ${JSON.stringify(result)}`);
       }
 
-      // Upstream responded (even 4xx/5xx) — log and surface to user
-      if (!result?.upstream_ok) {
+      const resolvedGraphId = relayResultHasGraphId(result);
+
+      // Upstream responded (even 4xx/5xx) — surface AI failures without duplicate retries
+      if (!result?.upstream_ok && !resolvedGraphId) {
         console.warn('=== AI EXTRACTION UPSTREAM ERROR ===', result?.raw_text || `HTTP ${result?.upstream_status}`);
-        alert(`AI extraction server responded with status ${result?.upstream_status}.\nResponse: ${result?.raw_text || '(empty)'}\nCheck console for full details.`);
-        return;
+        return showAiManualCaptureMessage();
       }
 
       const aiResponsePayload = result?.response && typeof result.response === 'object'
         ? result.response
         : {};
-      const validGraphId = resolveIntegerGraphIdFromAiResponse(aiResponsePayload);
+      const validGraphId = resolvedGraphId || resolveIntegerGraphIdFromAiResponse(aiResponsePayload);
       
       // Extract metadata from AI response for auto-population
       const extractedMetadata = {
@@ -2367,7 +2398,7 @@ const GraphCapture = () => {
           response: aiResponsePayload,
         });
         console.warn('AI extraction completed, but no valid graph ID was returned. Staying on this page.');
-        return;
+        return showAiManualCaptureMessage();
       }
 
       const currentUrlGraphId = String(urlParams.graph_id || '').trim();
@@ -2401,7 +2432,7 @@ const GraphCapture = () => {
           redirectUrl.toString(),
           900
         );
-        return;
+        return true;
       }
 
       console.log('=== AI EXTRACTION DECISION ===', {
@@ -2414,22 +2445,10 @@ const GraphCapture = () => {
         'Graph found with existing curves. Redirecting to graph capture page...',
         redirectUrl.toString()
       );
+      return true;
     } catch (error) {
       console.error('AI extraction request failed:', error);
-
-      // Show user-friendly error message on screen for 4 seconds, then redirect
-      setIsAiExtractionLoading(false);
-      const currentUrlGraphId = String(urlParams.graph_id || '').trim();
-      const errorUrl = new URL(window.location.href);
-      if (currentUrlGraphId) {
-        errorUrl.searchParams.set('graph_id', currentUrlGraphId);
-      }
-      errorUrl.searchParams.delete(AI_DIRECT_CAPTURE_PARAM);
-      navigateWithAiFlowMessage(
-        "Sorry, we couldn't read your graph automatically. You can still upload the image and capture the data yourself",
-        errorUrl.toString(),
-        4000
-      );
+      return showAiManualCaptureMessage();
     } finally {
       // Loading state already cleared above in catch, safe to call again here for non-error paths
       setIsAiExtractionLoading(false);
@@ -5547,7 +5566,7 @@ const GraphCapture = () => {
       {(isAiExtractionLoading || aiFlowStatusMessage) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
           <div className="rounded-md bg-white px-5 py-3 text-sm font-medium" style={{ color: '#213547' }}>
-            {isAiExtractionLoading ? 'Loading, please wait...' : aiFlowStatusMessage}
+            {isAiExtractionLoading ? 'AI extraction in progress, please wait...' : aiFlowStatusMessage}
           </div>
         </div>
       )}

@@ -134,6 +134,57 @@ def parse_company_api_text(raw_text: str):
     return json.loads(raw_text[match_start:match_end + 1])
 
 
+def has_valid_graph_id_in_result(result: dict) -> bool:
+    parsed = result.get("response")
+    raw_text = str(result.get("raw_text") or "")
+
+    if isinstance(parsed, dict):
+        graph_id = parsed.get("graph_id") or parsed.get("graphId")
+        if graph_id is not None and str(graph_id).strip() != "":
+            return True
+
+    stripped = raw_text.strip()
+    if re.fullmatch(r"\d+", stripped) and int(stripped) > 0:
+        return True
+
+    return bool(re.search(r'"graph_id"\s*:\s*"?\d+"?', raw_text, re.IGNORECASE))
+
+
+def is_ai_provider_error(raw_text: str) -> bool:
+    lower = str(raw_text or "").lower()
+    return (
+        "resource_exhausted" in lower
+        or "quota exceeded" in lower
+        or '"code": 429' in lower
+        or '"code":429' in lower
+    )
+
+
+def should_use_backup_after_primary(primary_result: dict) -> bool:
+    if has_valid_graph_id_in_result(primary_result):
+        return False
+
+    raw_text = str(primary_result.get("raw_text") or "")
+    if is_ai_provider_error(raw_text):
+        return False
+
+    primary_content_type = str(primary_result.get("content_type") or "").lower()
+    primary_response_is_html = "text/html" in primary_content_type
+    primary_response_is_error_text = "Invalid base64 format" in raw_text
+    primary_response_is_imunify_blocked = "imunify360" in raw_text.lower()
+
+    return (
+        primary_response_is_html
+        or primary_response_is_error_text
+        or primary_response_is_imunify_blocked
+        or (
+            not primary_result.get("upstream_ok")
+            and int(primary_result.get("upstream_status") or 0) >= 500
+            and not raw_text.strip()
+        )
+    )
+
+
 def post_ai_extraction_to_company(target_url: str, normalized_payload: dict, send_as_json: bool = False):
     request_headers = {
         "Accept": "application/json, text/plain, */*",
@@ -225,32 +276,18 @@ def relay_ai_extraction(payload: dict):
     try:
         attempts = []
 
-        primary_result = post_ai_extraction_to_company(primary_url, normalized_payload, send_as_json=True)
+        primary_result = post_ai_extraction_to_company(primary_url, normalized_payload, send_as_json=False)
         attempts.append(primary_result)
 
-        primary_content_type = str(primary_result.get("content_type") or "").lower()
-        primary_response_is_html = "text/html" in primary_content_type
-        primary_response_is_error_text = "Invalid base64 format" in str(primary_result.get("raw_text") or "")
-        primary_response_is_imunify_blocked = "imunify360" in str(primary_result.get("raw_text") or "").lower()
-        should_try_fallback = (
-            primary_response_is_html
-            or primary_response_is_error_text
-            or primary_response_is_imunify_blocked
-            or (
-                not primary_result.get("upstream_ok")
-                and int(primary_result.get("upstream_status") or 0) >= 500
-                and not str(primary_result.get("raw_text") or "").strip()
-            )
-        )
-
         final_result = primary_result
-        if should_try_fallback:
-            reason = ""
-            if primary_response_is_html:
+        if should_use_backup_after_primary(primary_result):
+            raw_text = str(primary_result.get("raw_text") or "")
+            primary_content_type = str(primary_result.get("content_type") or "").lower()
+            if "text/html" in primary_content_type:
                 reason = "HTML response"
-            elif primary_response_is_imunify_blocked:
+            elif "imunify360" in raw_text.lower():
                 reason = "Imunify360 bot-protection blocked"
-            elif primary_response_is_error_text:
+            elif "Invalid base64 format" in raw_text:
                 reason = "Invalid base64 format"
             else:
                 reason = "5xx error"
@@ -259,8 +296,12 @@ def relay_ai_extraction(payload: dict):
             attempts.append(fallback_result)
             final_result = fallback_result
             print(f"[AI_EXTRACTION] FALLBACK RESULT. Final graph_id: {final_result.get('response', {}).get('graph_id', 'N/A')}")
-        else:
+        elif has_valid_graph_id_in_result(primary_result):
             print(f"[AI_EXTRACTION] PRIMARY SUCCEEDED. Final graph_id: {final_result.get('response', {}).get('graph_id', 'N/A')}")
+        elif is_ai_provider_error(str(primary_result.get('raw_text') or '')):
+            print("[AI_EXTRACTION] PRIMARY AI PROVIDER ERROR - skipping backup to avoid duplicate capture.")
+        else:
+            print("[AI_EXTRACTION] PRIMARY returned no graph_id - skipping backup (not a WAF block).")
 
         response_content = {
             **final_result,

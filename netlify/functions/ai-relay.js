@@ -7,11 +7,8 @@
 
 const PRIMARY_URL = 'https://www.discoveree.io/vision_upload.php';
 const BACKUP_URL = 'https://www.discoveree.io/graph_capture_api.php';
-const UPSTREAM_TIMEOUT_MS = 8000;
-
-function toBase64Uint8Array(base64) {
-  return Uint8Array.from(Buffer.from(base64, 'base64'));
-}
+// Netlify functions cap around 26s — one upstream call only on primary.
+const UPSTREAM_TIMEOUT_MS = 24000;
 
 function parseJsonFromText(rawText) {
   const trimmed = String(rawText || '').trim();
@@ -70,6 +67,10 @@ function shouldUseBackupEndpoint(attempt) {
   const rawText = String(attempt?.raw_text || '');
   const lowerRawText = rawText.toLowerCase();
   const upstreamStatus = Number(attempt?.upstream_status || 0);
+
+  if (lowerRawText.includes('resource_exhausted') || lowerRawText.includes('quota exceeded')) {
+    return false;
+  }
 
   return (
     contentType.includes('text/html') ||
@@ -214,130 +215,8 @@ exports.handler = async function (event) {
     }
     attempts.push(await postAttempt({ body: formDataRaw, requestHeaders, mode: 'multipart_raw_base64' }));
 
-    const firstAttempt = attempts[0];
-    const shouldSkipRemainingPrimaryAttempts = shouldUseBackupEndpoint(firstAttempt);
-
-    if (!firstAttempt.valid_graph_id && !shouldSkipRemainingPrimaryAttempts) {
-      const formDataPrefixed = new FormData();
-      for (const [key, value] of Object.entries(normalizedPayload)) {
-        if (key === 'base64image') {
-          formDataPrefixed.append(key, `data:image/png;base64,${value}`);
-        } else {
-          formDataPrefixed.append(key, value);
-        }
-      }
-      attempts.push(await postAttempt({ body: formDataPrefixed, requestHeaders, mode: 'multipart_data_uri_base64' }));
-    }
-
-    const secondAttempt = attempts[attempts.length - 1];
-    if (!secondAttempt.valid_graph_id && !shouldSkipRemainingPrimaryAttempts) {
-      const formDataAltImageKeys = new FormData();
-      for (const [key, value] of Object.entries(normalizedPayload)) {
-        if (key !== 'base64image') {
-          formDataAltImageKeys.append(key, value);
-        }
-      }
-      formDataAltImageKeys.append('base64image', base64image);
-      formDataAltImageKeys.append('graph_img', `data:image/png;base64,${base64image}`);
-      formDataAltImageKeys.append('image_data', base64image);
-      attempts.push(await postAttempt({ body: formDataAltImageKeys, requestHeaders, mode: 'multipart_alt_image_keys' }));
-    }
-
-    const thirdAttempt = attempts[attempts.length - 1];
-    if (!thirdAttempt.valid_graph_id && !shouldSkipRemainingPrimaryAttempts) {
-      try {
-        const imageBytes = toBase64Uint8Array(base64image);
-        const imageBlob = new Blob([imageBytes], { type: 'image/png' });
-
-        const formDataFile = new FormData();
-        for (const [key, value] of Object.entries(normalizedPayload)) {
-          if (key !== 'base64image') {
-            formDataFile.append(key, value);
-          }
-        }
-        formDataFile.append('base64image', base64image);
-        formDataFile.append('image', imageBlob, 'capture.png');
-        formDataFile.append('file', imageBlob, 'capture.png');
-        attempts.push(await postAttempt({ body: formDataFile, requestHeaders, mode: 'multipart_with_file_blob' }));
-      } catch (fileAttemptError) {
-        attempts.push({
-          mode: 'multipart_with_file_blob',
-          target_url: PRIMARY_URL,
-          upstream_status: 500,
-          upstream_ok: false,
-          content_type: 'application/json',
-          raw_text: `File blob conversion failed: ${fileAttemptError.message}`,
-          response: { error: `File blob conversion failed: ${fileAttemptError.message}` },
-          valid_graph_id: false,
-        });
-      }
-    }
-
-    const fourthAttempt = attempts[attempts.length - 1];
-    if (!fourthAttempt.valid_graph_id && !shouldSkipRemainingPrimaryAttempts) {
-      const urlEncodedRaw = new URLSearchParams();
-      for (const [key, value] of Object.entries(normalizedPayload)) {
-        urlEncodedRaw.set(key, value);
-      }
-      attempts.push(await postAttempt({
-        body: urlEncodedRaw.toString(),
-        requestHeaders: {
-          ...requestHeaders,
-          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-        },
-        mode: 'urlencoded_raw_base64',
-      }));
-    }
-
-    const fifthAttempt = attempts[attempts.length - 1];
-    if (!fifthAttempt.valid_graph_id && !shouldSkipRemainingPrimaryAttempts) {
-      const urlEncodedPrefixed = new URLSearchParams();
-      for (const [key, value] of Object.entries(normalizedPayload)) {
-        if (key === 'base64image') {
-          urlEncodedPrefixed.set(key, `data:image/png;base64,${value}`);
-        } else {
-          urlEncodedPrefixed.set(key, value);
-        }
-      }
-      attempts.push(await postAttempt({
-        body: urlEncodedPrefixed.toString(),
-        requestHeaders: {
-          ...requestHeaders,
-          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-        },
-        mode: 'urlencoded_data_uri_base64',
-      }));
-    }
-
-    const sixthAttempt = attempts[attempts.length - 1];
-    if (!sixthAttempt.valid_graph_id && !shouldSkipRemainingPrimaryAttempts) {
-      const jsonRawPayload = { ...normalizedPayload, base64image };
-      attempts.push(await postAttempt({
-        body: JSON.stringify(jsonRawPayload),
-        requestHeaders: {
-          ...requestHeaders,
-          'Content-Type': 'application/json',
-        },
-        mode: 'json_raw_base64',
-      }));
-    }
-
-    const seventhAttempt = attempts[attempts.length - 1];
-    if (!seventhAttempt.valid_graph_id && !shouldSkipRemainingPrimaryAttempts) {
-      const jsonPrefixedPayload = { ...normalizedPayload, base64image: `data:image/png;base64,${base64image}` };
-      attempts.push(await postAttempt({
-        body: JSON.stringify(jsonPrefixedPayload),
-        requestHeaders: {
-          ...requestHeaders,
-          'Content-Type': 'application/json',
-        },
-        mode: 'json_data_uri_base64',
-      }));
-    }
-
-    const latestPrimaryAttempt = attempts[attempts.length - 1];
-    const shouldTryBackup = !latestPrimaryAttempt.valid_graph_id && attempts.some(shouldUseBackupEndpoint);
-    if (shouldTryBackup) {
+    const primaryAttempt = attempts[0];
+    if (!primaryAttempt.valid_graph_id && shouldUseBackupEndpoint(primaryAttempt)) {
       const backupJsonPayload = { ...normalizedPayload, base64image };
       attempts.push(await postAttempt({
         body: JSON.stringify(backupJsonPayload),
@@ -352,7 +231,7 @@ exports.handler = async function (event) {
 
     let finalAttempt = attempts.find((attempt) => attempt.valid_graph_id);
     if (!finalAttempt) {
-      finalAttempt = attempts[attempts.length - 1] || firstAttempt;
+      finalAttempt = attempts[attempts.length - 1] || primaryAttempt;
     }
 
     const result = {
