@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect } from 'react';
 import { useGraph } from '../context/GraphContext';
 
-const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', isAxisMappingConfirmed = false, hasReturnUrl = false, isEditingCurve = false }) => {
+const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', isAxisMappingConfirmed = false, hasReturnUrl = false, isEditingCurve = false, savedCurveViewActive = false }) => {
   const { uploadedImage, graphArea, setGraphArea, dataPoints, addDataPoint, clearDataPoints, graphConfig, deleteDataPoint, convertGraphToCanvasCoordinates, convertCanvasToGraphCoordinates, replaceDataPoints, updateDataPointFromCanvas } = useGraph();
   const [showRedrawMsg, setShowRedrawMsg] = useState(false);
   const canvasRef = useRef(null);
@@ -48,6 +48,26 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   const editDragMovedRef = useRef(false);
 
   const MARGIN = 6; // Margin from edges for resize handles visibility
+
+  const hasValidAxisForOverlay = () => {
+    const xMin = parseFloat(graphConfig.xMin);
+    const xMax = parseFloat(graphConfig.xMax);
+    const yMin = parseFloat(graphConfig.yMin);
+    const yMax = parseFloat(graphConfig.yMax);
+    return (
+      Number.isFinite(xMin) &&
+      Number.isFinite(xMax) &&
+      Number.isFinite(yMin) &&
+      Number.isFinite(yMax) &&
+      xMax !== xMin &&
+      yMax !== yMin
+    );
+  };
+
+  const canShowImportedCurveOverlay = () => {
+    if (isAxisMappingConfirmed || isEditingCurve) return true;
+    return savedCurveViewActive && hasValidAxisForOverlay() && graphArea.width > 0 && graphArea.height > 0;
+  };
   const EDGE_GAP = 12; // Hysteresis for edge checks to reduce flicker
   const EPS = 1e-6;
   const WARN_CLEAR_DELAY = 180; // ms to hold warning before clearing
@@ -170,7 +190,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
             const currentArea = normalizeArea(graphAreaRef.current);
-            if (currentArea.width === 0 && currentArea.height === 0 && dataPointsRef.current.length === 0) {
+            if (currentArea.width === 0 || currentArea.height === 0) {
               const initialBox = constrainAreaToMargin(
                 {
                   x: 0,
@@ -183,6 +203,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
               );
               setGraphArea(initialBox);
               lastUserBoxRef.current = initialBox;
+              setBoxTransparent(false);
             }
 
             drawLoadedImage();
@@ -201,6 +222,28 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     }
   }, [uploadedImage]);
 
+  // Ensure a visible default axis box whenever the image is ready but no box exists yet.
+  useEffect(() => {
+    if (!uploadedImage || imageSize.width <= 0 || imageSize.height <= 0) return;
+
+    const area = normalizeArea(graphArea);
+    if (area.width > 0 && area.height > 0) return;
+
+    const initialBox = constrainAreaToMargin(
+      {
+        x: 0,
+        y: 0,
+        width: imageSize.width,
+        height: imageSize.height,
+      },
+      imageSize.width,
+      imageSize.height
+    );
+    setGraphArea(initialBox);
+    lastUserBoxRef.current = initialBox;
+    setBoxTransparent(false);
+  }, [uploadedImage, imageSize.width, imageSize.height, graphArea.width, graphArea.height, graphArea.x, graphArea.y, setGraphArea]);
+
   // Separate effect to redraw selection box and points without reloading image
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -212,7 +255,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     drawSelection(ctx);
     drawDataPoints(ctx);
     if (showFixPoints) drawFixPoints(ctx);
-  }, [graphArea, dataPoints, showFixPoints, hoveredHandle, resizeMode, previewMousePos, connectSortByX, isAxisMappingConfirmed, isEditingCurve, editDragPointIndex, graphConfig.xMin, graphConfig.xMax, graphConfig.yMin, graphConfig.yMax, graphConfig.xScale, graphConfig.yScale]);
+  }, [graphArea, dataPoints, showFixPoints, hoveredHandle, resizeMode, previewMousePos, connectSortByX, isAxisMappingConfirmed, isEditingCurve, savedCurveViewActive, editDragPointIndex, graphConfig.xMin, graphConfig.xMax, graphConfig.yMin, graphConfig.yMax, graphConfig.xScale, graphConfig.yScale]);
 
   // Keep live refs always in sync with latest state
   const graphConfigRef = useRef(graphConfig);
@@ -228,13 +271,19 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     }
 
     const hasOnlyImported = dataPoints.every((point) => point.imported);
-    if (hasOnlyImported && !isAxisMappingConfirmed && !isEditingCurve) {
+    if (hasOnlyImported && !canShowImportedCurveOverlay()) {
       setBoxTransparent(false);
       return;
     }
 
     setBoxTransparent(true);
-  }, [dataPoints, isAxisMappingConfirmed, isEditingCurve]);
+  }, [dataPoints, isAxisMappingConfirmed, isEditingCurve, savedCurveViewActive, graphArea.width, graphArea.height]);
+
+  useEffect(() => {
+    if (savedCurveViewActive && dataPoints.some((point) => point.imported)) {
+      setShowFixPoints(true);
+    }
+  }, [savedCurveViewActive, dataPoints]);
 
   // After resize finishes, recalculate graph values from original canvas positions and remove out-of-bounds points.
   // All values are read from refs (never from stale closures) so timing with React renders is irrelevant.
@@ -426,7 +475,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     if (dataPoints.length === 0) return;
 
     const hasImportedPoints = dataPoints.some((point) => point.imported);
-    if (hasImportedPoints && !isAxisMappingConfirmed && !isEditingCurve) return;
+    if (hasImportedPoints && !canShowImportedCurveOverlay()) return;
 
     dataPoints.forEach((point, index) => {
       // Use graph value -> canvas position so dots update when box is resized
@@ -443,7 +492,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       // - Yellow/Orange for annotations (user-captured points)
       const fillColor = isActiveEditPoint
         ? '#FFD700'
-        : (isAnnotation ? '#FFD700' : 'red'); // Gold for annotations, red for imported
+        : (isAnnotation ? '#FFD700' : (point.overlayColor || 'red'));
       
       ctx.strokeStyle = isActiveEditPoint ? '#1976d2' : 'white';
       ctx.lineWidth = isActiveEditPoint ? 2 : 1;
@@ -461,7 +510,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   // Draw lines connecting all captured points
   const drawFixPoints = (ctx) => {
     const hasImportedPoints = dataPoints.some((point) => point.imported);
-    if (hasImportedPoints && !isAxisMappingConfirmed && !isEditingCurve) return;
+    if (hasImportedPoints && !canShowImportedCurveOverlay()) return;
 
     // Only draw if there are at least 2 valid points with graph values
     const validPoints = dataPoints
@@ -473,37 +522,48 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       .filter(p => Number.isFinite(p.canvasX) && Number.isFinite(p.canvasY));
     if (validPoints.length < 2) return;
 
-    const orderedPoints = connectSortByX
-      ? validPoints
-        .map((point, index) => ({ point, index }))
-        .sort((a, b) => {
-          if (a.point.canvasX !== b.point.canvasX) return a.point.canvasX - b.point.canvasX;
-          return a.index - b.index;
-        })
-        .map((entry) => entry.point)
-      : validPoints;
+    const curveGroups = new Map();
+    validPoints.forEach((point, index) => {
+      const groupKey = point.overlayCurveId ?? '__single__';
+      if (!curveGroups.has(groupKey)) {
+        curveGroups.set(groupKey, []);
+      }
+      curveGroups.get(groupKey).push({ point, index });
+    });
 
     ctx.save();
-    ctx.strokeStyle = '#1976d2';
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.moveTo(orderedPoints[0].canvasX, orderedPoints[0].canvasY);
-    for (let i = 1; i < orderedPoints.length; i++) {
-      ctx.lineTo(orderedPoints[i].canvasX, orderedPoints[i].canvasY);
-    }
-    ctx.stroke();
+    curveGroups.forEach((entries) => {
+      const orderedPoints = connectSortByX
+        ? [...entries].sort((a, b) => {
+          if (a.point.canvasX !== b.point.canvasX) return a.point.canvasX - b.point.canvasX;
+          return a.index - b.index;
+        }).map((entry) => entry.point)
+        : entries.map((entry) => entry.point);
 
-    // Draw dashed preview line from last point to current mouse position
-    if (!isEditingCurve && orderedPoints.length > 0 && previewMousePos.x !== null && previewMousePos.y !== null) {
+      if (orderedPoints.length < 2) return;
+
+      ctx.strokeStyle = orderedPoints[0].overlayColor || '#1976d2';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(orderedPoints[0].canvasX, orderedPoints[0].canvasY);
+      for (let i = 1; i < orderedPoints.length; i++) {
+        ctx.lineTo(orderedPoints[i].canvasX, orderedPoints[i].canvasY);
+      }
+      ctx.stroke();
+    });
+
+    // Draw dashed preview line from last point to current mouse position (manual capture only)
+    if (!isEditingCurve && !savedCurveViewActive && validPoints.length > 0 && previewMousePos.x !== null && previewMousePos.y !== null) {
+      const lastPoint = validPoints[validPoints.length - 1];
       ctx.strokeStyle = '#FFD700';
       ctx.lineWidth = 4;
-      ctx.setLineDash([5, 5]); // 5px dash, 5px gap
+      ctx.setLineDash([5, 5]);
       ctx.globalAlpha = 0.9;
       ctx.beginPath();
-      ctx.moveTo(orderedPoints[orderedPoints.length - 1].canvasX, orderedPoints[orderedPoints.length - 1].canvasY);
+      ctx.moveTo(lastPoint.canvasX, lastPoint.canvasY);
       ctx.lineTo(previewMousePos.x, previewMousePos.y);
       ctx.stroke();
-      ctx.setLineDash([]); // Clear dash pattern
+      ctx.setLineDash([]);
       ctx.globalAlpha = 1;
     }
 
@@ -1217,7 +1277,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
             Please redraw the axis box
           </div>
         )}
-        {dataPoints.some((point) => point.imported) && !isAxisMappingConfirmed && !isEditingCurve && (
+        {dataPoints.some((point) => point.imported) && !canShowImportedCurveOverlay() && (
           <div className="text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2 mt-2 text-sm">
             AI curve points are loaded. Adjust the blue axis box if needed, then confirm axis mapping to show them on the graph.
           </div>

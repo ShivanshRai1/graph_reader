@@ -774,6 +774,26 @@ const resolveAxisBoundsWithFallback = (curves) => {
   return { xMin: storedXMin, xMax: storedXMax, yMin: storedYMin, yMax: storedYMax, source: 'fallback' };
 };
 
+const COMBINED_OVERLAY_COLORS = ['#2563eb', '#16a34a', '#f97316', '#e11d48', '#0ea5e9', '#8b5cf6', '#14b8a6'];
+
+const buildCombinedOverlayPoints = (curves) => {
+  const curveList = Array.isArray(curves) ? curves : [];
+  return curveList.flatMap((curve, curveIndex) => {
+    const points = curve?.points ?? curve?.data_points ?? [];
+    const overlayColor = COMBINED_OVERLAY_COLORS[curveIndex % COMBINED_OVERLAY_COLORS.length];
+    const overlayCurveId = String(curve?.id ?? curveIndex);
+    return points
+      .map((point) => ({
+        x: Number(point.x_value ?? point.x),
+        y: Number(point.y_value ?? point.y),
+        imported: true,
+        overlayColor,
+        overlayCurveId,
+      }))
+      .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
+  });
+};
+
 const resolveSymbolValue = (source = {}, requestedKey = '', contextKeys = []) => {
   const key = String(requestedKey || '').trim();
   if (!key || !source || typeof source !== 'object') return '';
@@ -3015,8 +3035,6 @@ const GraphCapture = () => {
         xLabel: persistedContext.axis.xLabel ?? prev.xLabel,
         yLabel: persistedContext.axis.yLabel ?? prev.yLabel,
       }));
-      setIsAxisMappingConfirmed(true);
-      setFrozenGraphConfig(persistedContext.axis);
     }
   }, [setGraphArea, setGraphConfig]);
 
@@ -3192,7 +3210,7 @@ const GraphCapture = () => {
     temperature: curve.config?.temperature || curve.temperature || prevConfig.temperature || '',
   });
 
-  const restoreGraphDisplayFromSavedCurve = (curve, graphId, { keepCurveNameEmpty = false, allCurves = null } = {}) => {
+  const restoreGraphDisplayFromSavedCurve = (curve, graphId, { keepCurveNameEmpty = false, allCurves = null, loadPoints = true } = {}) => {
     const persistedContext = getPersistedGraphContext(graphId);
     const persistedAxis = persistedContext?.axis;
     const restoredArea =
@@ -3235,15 +3253,13 @@ const GraphCapture = () => {
           .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y))
         : [];
 
-    replaceDataPoints(loadedPoints);
-
-    const mappingConfirmed = Boolean(persistedAxis && hasValidAxisMapping(persistedAxis));
-    setIsAxisMappingConfirmed(mappingConfirmed);
-    if (mappingConfirmed) {
-      setFrozenGraphConfig(buildCurveConfigFromSaved(curve, graphConfig, persistedAxis));
-    } else {
-      setFrozenGraphConfig(null);
+    if (loadPoints) {
+      replaceDataPoints(loadedPoints);
     }
+
+    const mappingConfirmed = false;
+    setIsAxisMappingConfirmed(false);
+    setFrozenGraphConfig(null);
 
     return { nextConfig, loadedPoints, mappingConfirmed };
   };
@@ -3284,44 +3300,68 @@ const GraphCapture = () => {
   };
 
   const handleViewCurve = (curve) => {
-    // console.log('[GRAPH SESSION] handleViewCurve', {
-    //   curveId: curve.id,
-    //   curveGraphId: curve.graphId || '',
-    //   sessionActive: hasActiveAppendSessionRef.current,
-    //   sessionGraphId: activeSessionGraphIdRef.current || '',
-    // });
+    setCombinedGroupId('');
+    setShowAllCombinedModal(false);
     setSelectedCurveId(curve.id);
+
+    const graphId = String(curve.graphId || getGraphIdForCurve(curve) || urlParams.graph_id || '').trim();
+    const curvesForGraph = savedCurves.filter(
+      (savedCurve) => String(savedCurve.graphId || graphId) === graphId
+    );
+
     if (curve.graphImageUrl) {
       setUploadedImageFromExistingGraph(curve.graphImageUrl);
     }
 
-    setGraphConfig((prev) => ({
-      ...prev,
-      graphTitle: curve.config?.graphTitle || curve.graph_title || prev.graphTitle || '',
-      curveName: curve.config?.curveName || curve.curve_name || curve.name || prev.curveName || '',
-      partNumber: curve.config?.partNumber || curve.part_number || prev.partNumber || '',
-      xScale: curve.config?.xScale || curve.x_scale || prev.xScale || 'Linear',
-      yScale: curve.config?.yScale || curve.y_scale || prev.yScale || 'Linear',
-      xUnitPrefix: curve.config?.xUnitPrefix || curve.x_unit || prev.xUnitPrefix || '1',
-      yUnitPrefix: curve.config?.yUnitPrefix || curve.y_unit || prev.yUnitPrefix || '1',
-      xMin: resolveAxisValue(curve.config?.xMin, curve.x_min, prev.xMin),
-      xMax: resolveAxisValue(curve.config?.xMax, curve.x_max, prev.xMax),
-      yMin: resolveAxisValue(curve.config?.yMin, curve.y_min, prev.yMin),
-      yMax: resolveAxisValue(curve.config?.yMax, curve.y_max, prev.yMax),
-      temperature: curve.config?.temperature || curve.temperature || prev.temperature || '',
-    }));
-
-    // Viewing a saved curve should not pollute capture state with old points.
-    clearDataPoints();
-    setIsReadOnly(false);
+    restoreGraphDisplayFromSavedCurve(curve, graphId, {
+      allCurves: curvesForGraph.length > 0 ? curvesForGraph : [curve],
+    });
 
     const curveSymbols = normalizeCurveSymbolValues(curve);
     if (Object.keys(curveSymbols).length > 0) {
       setSymbolValues((prev) => ({ ...prev, ...curveSymbols }));
     }
-    
-    // Load saved annotations for this curve
-    loadAnnotationsForCurve(curve.id);
+
+    setIsReadOnly(true);
+  };
+
+  const applyCombinedGraphOverlay = (curves) => {
+    const curveList = Array.isArray(curves) ? curves.filter(Boolean) : [];
+    if (curveList.length === 0) return;
+
+    const referenceCurve = curveList[0];
+    const graphId = String(referenceCurve.graphId || getGraphIdForCurve(referenceCurve) || urlParams.graph_id || '').trim();
+
+    if (referenceCurve.graphImageUrl) {
+      setUploadedImageFromExistingGraph(referenceCurve.graphImageUrl);
+    }
+
+    restoreGraphDisplayFromSavedCurve(referenceCurve, graphId, {
+      allCurves: curveList,
+      keepCurveNameEmpty: true,
+      loadPoints: false,
+    });
+    replaceDataPoints(buildCombinedOverlayPoints(curveList));
+    setIsReadOnly(true);
+  };
+
+  const clearSavedViewOverlay = () => {
+    clearDataPoints();
+    setIsReadOnly(false);
+  };
+
+  const handleViewCombinedGroup = (group) => {
+    setSelectedCurveId('');
+    setShowAllCombinedModal(false);
+    setCombinedGroupId(group.id);
+    applyCombinedGraphOverlay(group.curves);
+  };
+
+  const handleViewAllCombinedGraphs = () => {
+    setSelectedCurveId('');
+    setCombinedGroupId('');
+    setShowAllCombinedModal(true);
+    applyCombinedGraphOverlay(uniqueSavedCurves);
   };
 
   const handleEditCurveStart = (curve) => {
@@ -3332,6 +3372,8 @@ const GraphCapture = () => {
     //   sessionGraphId: activeSessionGraphIdRef.current || '',
     // });
     setSelectedCurveId('');
+    setCombinedGroupId('');
+    setShowAllCombinedModal(false);
     const graphId = String(curve.graphId || getGraphIdForCurve(curve) || urlParams.graph_id || '').trim();
     const curvesForGraph = savedCurves.filter(
       (savedCurve) => String(savedCurve.graphId || graphId) === graphId
@@ -4679,6 +4721,8 @@ const GraphCapture = () => {
         keepCurveNameEmpty: true,
         allCurves: savedCurves,
       });
+      setIsAxisMappingConfirmed(false);
+      setFrozenGraphConfig(null);
       setIsReadOnly(false);
 
       console.log('[DEBUG] Graph context and captured points restored after refresh.');
@@ -5763,7 +5807,15 @@ const GraphCapture = () => {
         {(showCaptureWorkspace) && (
           <div ref={graphWorkspaceRef} className="flex flex-col lg:flex-row gap-8">
             <div className="w-full lg:w-2/5 flex flex-col gap-4">
-              <GraphCanvas isReadOnly={isReadOnly} partNumber={urlParams.partno} manufacturer={urlParams.manufacturer || graphConfig.manufacturer} isAxisMappingConfirmed={isAxisMappingConfirmed} hasReturnUrl={!!urlParams.return_url} isEditingCurve={Boolean(editingCurveId)} />
+              <GraphCanvas
+                isReadOnly={isReadOnly}
+                partNumber={urlParams.partno}
+                manufacturer={urlParams.manufacturer || graphConfig.manufacturer}
+                isAxisMappingConfirmed={isAxisMappingConfirmed}
+                hasReturnUrl={!!urlParams.return_url}
+                isEditingCurve={Boolean(editingCurveId)}
+                savedCurveViewActive={Boolean((selectedCurveId || combinedGroupId || showAllCombinedModal) && !editingCurveId)}
+              />
               <CapturedPointsList isReadOnly={isReadOnly} hasReturnUrl={!!urlParams.return_url} isEditingCurve={Boolean(editingCurveId)} />
             </div>
             <div className="w-full lg:w-3/5">
@@ -5895,7 +5947,7 @@ const GraphCapture = () => {
                     <button
                       className="px-3 py-1 rounded bg-yellow-400 text-black text-xs"
                       style={{ backgroundColor: '#facc15', color: '#111827', borderColor: '#facc15' }}
-                      onClick={() => setShowAllCombinedModal(true)}
+                      onClick={handleViewAllCombinedGraphs}
                     >
                       View all graphs combined
                     </button>
@@ -5909,7 +5961,7 @@ const GraphCapture = () => {
                           </div>
                           <button
                             className="px-3 py-1 rounded bg-gray-900 text-white text-xs"
-                            onClick={() => setCombinedGroupId(group.id)}
+                            onClick={() => handleViewCombinedGroup(group)}
                           >
                             View combined graph
                           </button>
@@ -6223,7 +6275,8 @@ const GraphCapture = () => {
             if (singleDragRef.current.wasDragged) { singleDragRef.current.wasDragged = false; return; }
             setSingleModalPos(null);
             setSelectedCurveId('');
-            clearDataPoints();
+            clearSavedViewOverlay();
+            setIsReadOnly(false);
           }}
                     ref={singleModalRef}
         >
@@ -6259,7 +6312,7 @@ const GraphCapture = () => {
                 color: '#888',
                 cursor: 'pointer',
               }}
-              onClick={() => { setSingleModalPos(null); setSelectedCurveId(''); clearDataPoints(); }}
+              onClick={() => { setSingleModalPos(null); setSelectedCurveId(''); clearSavedViewOverlay(); }}
               aria-label="Close"
             >
               ×
@@ -6480,6 +6533,7 @@ const GraphCapture = () => {
             if (combinedDragRef.current.wasDragged) { combinedDragRef.current.wasDragged = false; return; }
             setCombinedModalPos(null);
             setCombinedGroupId('');
+            clearSavedViewOverlay();
           }}
                     ref={combinedModalRef}
         >
@@ -6515,7 +6569,7 @@ const GraphCapture = () => {
                 color: '#888',
                 cursor: 'pointer',
               }}
-              onClick={() => { setCombinedModalPos(null); setCombinedGroupId(''); }}
+              onClick={() => { setCombinedModalPos(null); setCombinedGroupId(''); clearSavedViewOverlay(); }}
               aria-label="Close"
             >
               ×
@@ -6680,7 +6734,7 @@ const GraphCapture = () => {
             background: 'rgba(0,0,0,0.35)',
             zIndex: 1000,
           }}
-          onClick={() => setShowAllCombinedModal(false)}
+          onClick={() => { setShowAllCombinedModal(false); clearSavedViewOverlay(); }}
         >
           <div
             style={{
@@ -6714,7 +6768,7 @@ const GraphCapture = () => {
                 color: '#888',
                 cursor: 'pointer',
               }}
-              onClick={() => setShowAllCombinedModal(false)}
+              onClick={() => { setShowAllCombinedModal(false); clearSavedViewOverlay(); }}
               aria-label="Close"
             >
               ×
