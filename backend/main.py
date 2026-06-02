@@ -193,7 +193,8 @@ def post_ai_extraction_to_company(target_url: str, normalized_payload: dict, sen
     request_headers = {
         "Accept": "application/json, text/plain, */*",
         "Accept-Language": "en-US,en;q=0.9",
-        "Accept-Encoding": "gzip, deflate, br",
+        # Ask for uncompressed body — gzip + wrong Content-Type can yield garbled vision_upload.php responses.
+        "Accept-Encoding": "identity",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         "Origin": "https://graph-capture.netlify.app",
         "Referer": "https://graph-capture.netlify.app/",
