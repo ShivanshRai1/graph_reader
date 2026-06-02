@@ -182,8 +182,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
         const drawLoadedImage = () => {
           ctx.drawImage(img, 0, 0);
           drawSelection(ctx);
-          drawDataPoints(ctx);
-          if (showFixPoints) drawFixPoints(ctx);
+          drawCurveOverlayLayers(ctx);
         };
 
         // Defer so persisted graphArea from parent can sync into graphAreaRef first.
@@ -253,8 +252,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(imageRef.current, 0, 0);
     drawSelection(ctx);
-    drawDataPoints(ctx);
-    if (showFixPoints) drawFixPoints(ctx);
+    drawCurveOverlayLayers(ctx);
   }, [graphArea, dataPoints, showFixPoints, hoveredHandle, resizeMode, previewMousePos, connectSortByX, isAxisMappingConfirmed, isEditingCurve, savedCurveViewActive, editDragPointIndex, graphConfig.xMin, graphConfig.xMax, graphConfig.yMin, graphConfig.yMax, graphConfig.xScale, graphConfig.yScale]);
 
   // Keep live refs always in sync with latest state
@@ -471,11 +469,23 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     }
   };
 
+  const drawCurveOverlayLayers = (ctx) => {
+    if (savedCurveViewActive) {
+      if (showFixPoints) drawFixPoints(ctx);
+      drawDataPoints(ctx);
+      return;
+    }
+    drawDataPoints(ctx);
+    if (showFixPoints) drawFixPoints(ctx);
+  };
+
   const drawDataPoints = (ctx) => {
     if (dataPoints.length === 0) return;
 
     const hasImportedPoints = dataPoints.some((point) => point.imported);
     if (hasImportedPoints && !canShowImportedCurveOverlay()) return;
+
+    const inSavedView = savedCurveViewActive && canShowImportedCurveOverlay();
 
     dataPoints.forEach((point, index) => {
       // Use graph value -> canvas position so dots update when box is resized
@@ -485,7 +495,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       
       const isAnnotation = point.isAnnotation === true;
       const isActiveEditPoint = isEditingCurve && editDragPointIndex === index;
-      const pointRadius = isEditingCurve ? 5 : 2.5;
+      const pointRadius = isActiveEditPoint ? 5 : (inSavedView ? 5.5 : 2.5);
 
       // Different colors for different point types:
       // - Red for imported points
@@ -494,8 +504,18 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
         ? '#FFD700'
         : (isAnnotation ? '#FFD700' : (point.overlayColor || 'red'));
       
-      ctx.strokeStyle = isActiveEditPoint ? '#1976d2' : 'white';
-      ctx.lineWidth = isActiveEditPoint ? 2 : 1;
+      if (inSavedView) {
+        ctx.strokeStyle = '#111827';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(drawX, drawY, pointRadius + 0.5, 0, 2 * Math.PI);
+        ctx.stroke();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+      } else {
+        ctx.strokeStyle = isActiveEditPoint ? '#1976d2' : 'white';
+        ctx.lineWidth = isActiveEditPoint ? 2 : 1;
+      }
       ctx.beginPath();
       ctx.arc(drawX, drawY, pointRadius, 0, 2 * Math.PI);
       ctx.stroke();
@@ -531,6 +551,8 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       curveGroups.get(groupKey).push({ point, index });
     });
 
+    const inSavedView = savedCurveViewActive && canShowImportedCurveOverlay();
+
     ctx.save();
     curveGroups.forEach((entries) => {
       const orderedPoints = connectSortByX
@@ -543,7 +565,8 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       if (orderedPoints.length < 2) return;
 
       ctx.strokeStyle = orderedPoints[0].overlayColor || '#1976d2';
-      ctx.lineWidth = 4;
+      ctx.lineWidth = inSavedView ? 3 : 4;
+      ctx.globalAlpha = inSavedView ? 0.78 : 1;
       ctx.beginPath();
       ctx.moveTo(orderedPoints[0].canvasX, orderedPoints[0].canvasY);
       for (let i = 1; i < orderedPoints.length; i++) {

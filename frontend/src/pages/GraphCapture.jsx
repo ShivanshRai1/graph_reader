@@ -74,6 +74,34 @@ const MiniGraphCanvas = ({ points }) => {
   );
 };
 
+const ViewModalBackdropDimControl = ({ value, onChange }) => (
+  <div
+    style={{
+      fontSize: 12,
+      color: '#4b5563',
+      marginBottom: 10,
+      display: 'flex',
+      alignItems: 'center',
+      gap: 10,
+      flexWrap: 'wrap',
+    }}
+  >
+    <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>Background dim</span>
+    <input
+      type="range"
+      min="0"
+      max="0.65"
+      step="0.05"
+      value={value}
+      onChange={(e) => onChange(Number(e.target.value))}
+      style={{ flex: '1 1 120px', minWidth: 120 }}
+      aria-label="Background dim amount"
+    />
+    <span style={{ minWidth: 36, textAlign: 'right' }}>{Math.round(value * 100)}%</span>
+    <span style={{ fontSize: 11, color: '#6b7280' }}>Drag modal aside to compare overlay on graph.</span>
+  </div>
+);
+
 const buildGraphGroupId = (imageUrl) => {
   if (!imageUrl) return 'graph_unknown';
   let hash = 0;
@@ -3006,6 +3034,7 @@ const GraphCapture = () => {
   const [singleModalPos, setSingleModalPos] = useState(null);
   const [combinedModalPos, setCombinedModalPos] = useState(null);
   const [showAllCombinedModal, setShowAllCombinedModal] = useState(false);
+  const [viewModalBackdropOpacity, setViewModalBackdropOpacity] = useState(0.15);
   const singleModalRef = useRef(null);
   const combinedModalRef = useRef(null);
   const singleDragRef = useRef({ wasDragged: false });
@@ -6268,7 +6297,7 @@ const GraphCapture = () => {
             left: 0,
             width: '100vw',
             height: '100vh',
-            background: 'rgba(0,0,0,0.35)',
+            background: `rgba(0,0,0,${viewModalBackdropOpacity})`,
             zIndex: 1000,
           }}
           onClick={() => {
@@ -6317,6 +6346,10 @@ const GraphCapture = () => {
             >
               ×
             </button>
+            <ViewModalBackdropDimControl
+              value={viewModalBackdropOpacity}
+              onChange={setViewModalBackdropOpacity}
+            />
             <div
               className="font-semibold mb-2"
               style={{ color: '#213547', fontSize: 18, cursor: 'move', userSelect: 'none' }}
@@ -6526,7 +6559,7 @@ const GraphCapture = () => {
             left: 0,
             width: '100vw',
             height: '100vh',
-            background: 'rgba(0,0,0,0.35)',
+            background: `rgba(0,0,0,${viewModalBackdropOpacity})`,
             zIndex: 1000,
           }}
           onClick={() => {
@@ -6574,6 +6607,10 @@ const GraphCapture = () => {
             >
               ×
             </button>
+            <ViewModalBackdropDimControl
+              value={viewModalBackdropOpacity}
+              onChange={setViewModalBackdropOpacity}
+            />
             <div
               className="font-semibold mb-2"
               style={{ color: '#213547', fontSize: 18, cursor: 'move', userSelect: 'none' }}
@@ -6731,7 +6768,7 @@ const GraphCapture = () => {
             left: 0,
             width: '100vw',
             height: '100vh',
-            background: 'rgba(0,0,0,0.35)',
+            background: `rgba(0,0,0,${viewModalBackdropOpacity})`,
             zIndex: 1000,
           }}
           onClick={() => { setShowAllCombinedModal(false); clearSavedViewOverlay(); }}
@@ -6773,6 +6810,10 @@ const GraphCapture = () => {
             >
               ×
             </button>
+            <ViewModalBackdropDimControl
+              value={viewModalBackdropOpacity}
+              onChange={setViewModalBackdropOpacity}
+            />
             <div className="font-semibold mb-3" style={{ color: '#213547', fontSize: 18 }}>
               View all graphs combined ({uniqueSavedCurves.length} curves)
             </div>
