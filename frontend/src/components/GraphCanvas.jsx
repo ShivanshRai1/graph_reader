@@ -220,12 +220,21 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   useEffect(() => { dataPointsRef.current = dataPoints; }, [dataPoints]);
   useEffect(() => { graphConfigRef.current = graphConfig; }, [graphConfig]);
 
-  // Set box to transparent when points are captured (manually or imported)
+  // Hide the box border only after capture is underway (manual points or confirmed AI overlay).
   useEffect(() => {
-    if (dataPoints.length > 0) {
-      setBoxTransparent(true);
+    if (dataPoints.length === 0) {
+      setBoxTransparent(false);
+      return;
     }
-  }, [dataPoints.length]);
+
+    const hasOnlyImported = dataPoints.every((point) => point.imported);
+    if (hasOnlyImported && !isAxisMappingConfirmed && !isEditingCurve) {
+      setBoxTransparent(false);
+      return;
+    }
+
+    setBoxTransparent(true);
+  }, [dataPoints, isAxisMappingConfirmed, isEditingCurve]);
 
   // After resize finishes, recalculate graph values from original canvas positions and remove out-of-bounds points.
   // All values are read from refs (never from stale closures) so timing with React renders is irrelevant.
@@ -416,6 +425,9 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   const drawDataPoints = (ctx) => {
     if (dataPoints.length === 0) return;
 
+    const hasImportedPoints = dataPoints.some((point) => point.imported);
+    if (hasImportedPoints && !isAxisMappingConfirmed && !isEditingCurve) return;
+
     dataPoints.forEach((point, index) => {
       // Use graph value -> canvas position so dots update when box is resized
       if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) return;
@@ -448,6 +460,9 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
 
   // Draw lines connecting all captured points
   const drawFixPoints = (ctx) => {
+    const hasImportedPoints = dataPoints.some((point) => point.imported);
+    if (hasImportedPoints && !isAxisMappingConfirmed && !isEditingCurve) return;
+
     // Only draw if there are at least 2 valid points with graph values
     const validPoints = dataPoints
       .filter(p => Number.isFinite(p.x) && Number.isFinite(p.y))
@@ -1200,6 +1215,11 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
         {showRedrawMsg && (
           <div className="text-red-600 font-bold mt-2">
             Please redraw the axis box
+          </div>
+        )}
+        {dataPoints.some((point) => point.imported) && !isAxisMappingConfirmed && !isEditingCurve && (
+          <div className="text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2 mt-2 text-sm">
+            AI curve points are loaded. Adjust the blue axis box if needed, then confirm axis mapping to show them on the graph.
           </div>
         )}
         {removedPointsMsg && (

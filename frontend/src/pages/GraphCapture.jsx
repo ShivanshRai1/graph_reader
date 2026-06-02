@@ -664,6 +664,116 @@ const buildImportedPointsForCurve = (curve, area, config) => {
     .filter(Boolean);
 };
 
+const normalizeCurveConfigFields = (curve) => ({
+  xMin: curve?.config?.xMin ?? curve?.x_min,
+  xMax: curve?.config?.xMax ?? curve?.x_max,
+  yMin: curve?.config?.yMin ?? curve?.y_min,
+  yMax: curve?.config?.yMax ?? curve?.y_max,
+  xScale: curve?.config?.xScale ?? curve?.x_scale,
+  yScale: curve?.config?.yScale ?? curve?.y_scale,
+  xUnit: curve?.config?.xUnitPrefix ?? curve?.x_unit,
+  yUnit: curve?.config?.yUnitPrefix ?? curve?.y_unit,
+  logDataModeX: curve?.config?.logDataModeX ?? curve?.logDataModeX,
+  logDataModeY: curve?.config?.logDataModeY ?? curve?.logDataModeY,
+  xLabel: curve?.config?.xLabel ?? curve?.x_label,
+  yLabel: curve?.config?.yLabel ?? curve?.y_label,
+  graphTitle: curve?.config?.graphTitle ?? curve?.graph_title ?? curve?.name,
+  curveName: curve?.config?.curveName ?? curve?.curve_name ?? curve?.name,
+});
+
+const snapAxisMinBound = (min, max) => {
+  const lo = Number(min);
+  const hi = Number(max);
+  if (!Number.isFinite(lo) || !Number.isFinite(hi)) return min;
+  const span = Math.max(hi - lo, 1e-9);
+  if (lo >= 0 && lo <= span * 0.05) return 0;
+  return lo;
+};
+
+const snapAxisMaxBound = (max) => {
+  const value = Number(max);
+  if (!Number.isFinite(value)) return max;
+  if (value <= 0) return value;
+
+  const abs = Math.abs(value);
+  const exponent = Math.floor(Math.log10(abs));
+  const fraction = abs / (10 ** exponent);
+  const niceFractions = [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10];
+  const niceFraction = niceFractions.find((candidate) => candidate >= fraction) || 10;
+  return niceFraction * (10 ** exponent);
+};
+
+const snapAxisBounds = ({ xMin, xMax, yMin, yMax }) => {
+  const rawXMin = Number(xMin);
+  const rawXMax = Number(xMax);
+  const rawYMin = Number(yMin);
+  const rawYMax = Number(yMax);
+  if (
+    !Number.isFinite(rawXMin) || !Number.isFinite(rawXMax) ||
+    !Number.isFinite(rawYMin) || !Number.isFinite(rawYMax) ||
+    rawXMax <= rawXMin || rawYMax <= rawYMin
+  ) {
+    return { xMin, xMax, yMin, yMax };
+  }
+
+  const snappedXMin = snapAxisMinBound(rawXMin, rawXMax);
+  const snappedYMin = snapAxisMinBound(rawYMin, rawYMax);
+  return {
+    xMin: snappedXMin,
+    xMax: snapAxisMaxBound(rawXMax),
+    yMin: snappedYMin,
+    yMax: snapAxisMaxBound(rawYMax),
+  };
+};
+
+// Returns axis bounds with 3-tier priority:
+// 1. Stored config value (from local backend or original save), if valid and non-zero
+// 2. Computed from actual captured points (snapped to nice ticks)
+// 3. Raw stored value even if zero (last resort)
+const resolveAxisBoundsWithFallback = (curves) => {
+  const curveList = Array.isArray(curves) ? curves : (curves ? [curves] : []);
+  if (curveList.length === 0) return { xMin: '', xMax: '', yMin: '', yMax: '', source: 'none' };
+
+  const cfg = normalizeCurveConfigFields(curveList[0]);
+  const storedXMin = Number(cfg.xMin);
+  const storedXMax = Number(cfg.xMax);
+  const storedYMin = Number(cfg.yMin);
+  const storedYMax = Number(cfg.yMax);
+
+  const storedValid =
+    Number.isFinite(storedXMin) && Number.isFinite(storedXMax) &&
+    Number.isFinite(storedYMin) && Number.isFinite(storedYMax) &&
+    storedXMax > storedXMin && storedYMax > storedYMin;
+
+  if (storedValid) {
+    return { xMin: storedXMin, xMax: storedXMax, yMin: storedYMin, yMax: storedYMax, source: 'stored' };
+  }
+
+  const allPoints = curveList.flatMap((curve) => {
+    const pts = curve?.points ?? curve?.data_points ?? [];
+    return pts.map((pt) => ({
+      x: Number(pt.x_value ?? pt.x),
+      y: Number(pt.y_value ?? pt.y),
+    })).filter((pt) => Number.isFinite(pt.x) && Number.isFinite(pt.y));
+  });
+
+  if (allPoints.length > 0) {
+    const xs = allPoints.map((pt) => pt.x);
+    const ys = allPoints.map((pt) => pt.y);
+    return {
+      ...snapAxisBounds({
+        xMin: Math.min(...xs),
+        xMax: Math.max(...xs),
+        yMin: Math.min(...ys),
+        yMax: Math.max(...ys),
+      }),
+      source: 'computed',
+    };
+  }
+
+  return { xMin: storedXMin, xMax: storedXMax, yMin: storedYMin, yMax: storedYMax, source: 'fallback' };
+};
+
 const resolveSymbolValue = (source = {}, requestedKey = '', contextKeys = []) => {
   const key = String(requestedKey || '').trim();
   if (!key || !source || typeof source !== 'object') return '';
@@ -3082,12 +3192,27 @@ const GraphCapture = () => {
     temperature: curve.config?.temperature || curve.temperature || prevConfig.temperature || '',
   });
 
-  const restoreGraphDisplayFromSavedCurve = (curve, graphId, { keepCurveNameEmpty = false } = {}) => {
+  const restoreGraphDisplayFromSavedCurve = (curve, graphId, { keepCurveNameEmpty = false, allCurves = null } = {}) => {
     const persistedContext = getPersistedGraphContext(graphId);
+    const persistedAxis = persistedContext?.axis;
     const restoredArea =
       persistedContext?.graphArea ||
       (graphArea.width > 0 && graphArea.height > 0 ? graphArea : null);
-    const nextConfig = buildCurveConfigFromSaved(curve, graphConfig, persistedContext?.axis);
+    let nextConfig = buildCurveConfigFromSaved(curve, graphConfig, persistedAxis);
+
+    if (!hasValidAxisMapping(nextConfig)) {
+      const curveList = Array.isArray(allCurves) && allCurves.length > 0 ? allCurves : [curve];
+      const bounds = resolveAxisBoundsWithFallback(curveList);
+      if (bounds.source === 'computed' || bounds.source === 'stored') {
+        nextConfig = {
+          ...nextConfig,
+          xMin: bounds.xMin,
+          xMax: bounds.xMax,
+          yMin: bounds.yMin,
+          yMax: bounds.yMax,
+        };
+      }
+    }
 
     if (restoredArea) {
       setGraphArea(restoredArea);
@@ -3099,28 +3224,28 @@ const GraphCapture = () => {
       ...(keepCurveNameEmpty ? { curveName: '' } : {}),
     }));
 
-    const mappingArea = restoredArea || graphArea;
-    const hasValidArea = mappingArea.width > 0 && mappingArea.height > 0;
     const loadedPoints =
       Array.isArray(curve?.points) && curve.points.length > 0
-        ? hasValidArea && hasValidAxisMapping(nextConfig)
-          ? buildImportedPointsForCurve(curve, mappingArea, nextConfig)
-          : curve.points.map((point) => ({
-              x: Number(point.x_value ?? point.x),
-              y: Number(point.y_value ?? point.y),
-              imported: true,
-            }))
+        ? curve.points
+          .map((point) => ({
+            x: Number(point.x_value ?? point.x),
+            y: Number(point.y_value ?? point.y),
+            imported: true,
+          }))
+          .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y))
         : [];
 
     replaceDataPoints(loadedPoints);
 
-    const axisValid = hasValidAxisMapping(nextConfig);
-    setIsAxisMappingConfirmed(axisValid);
-    if (axisValid) {
-      setFrozenGraphConfig(nextConfig);
+    const mappingConfirmed = Boolean(persistedAxis && hasValidAxisMapping(persistedAxis));
+    setIsAxisMappingConfirmed(mappingConfirmed);
+    if (mappingConfirmed) {
+      setFrozenGraphConfig(buildCurveConfigFromSaved(curve, graphConfig, persistedAxis));
+    } else {
+      setFrozenGraphConfig(null);
     }
 
-    return { nextConfig, loadedPoints };
+    return { nextConfig, loadedPoints, mappingConfirmed };
   };
 
   const resolveGraphImageUrl = (graph = {}, details = [], graphId = '') => {
@@ -3208,12 +3333,17 @@ const GraphCapture = () => {
     // });
     setSelectedCurveId('');
     const graphId = String(curve.graphId || getGraphIdForCurve(curve) || urlParams.graph_id || '').trim();
+    const curvesForGraph = savedCurves.filter(
+      (savedCurve) => String(savedCurve.graphId || graphId) === graphId
+    );
 
     if (curve.graphImageUrl) {
       setUploadedImageFromExistingGraph(curve.graphImageUrl);
     }
 
-    const { nextConfig } = restoreGraphDisplayFromSavedCurve(curve, graphId);
+    const { nextConfig } = restoreGraphDisplayFromSavedCurve(curve, graphId, {
+      allCurves: curvesForGraph.length > 0 ? curvesForGraph : [curve],
+    });
     setIsReadOnly(false);
 
     setEditingCurveId(curve.id);
@@ -4029,69 +4159,19 @@ const GraphCapture = () => {
     }
   };
 
-  const normalizeCurveConfig = (curve) => ({
-    xMin: curve?.config?.xMin ?? curve?.x_min,
-    xMax: curve?.config?.xMax ?? curve?.x_max,
-    yMin: curve?.config?.yMin ?? curve?.y_min,
-    yMax: curve?.config?.yMax ?? curve?.y_max,
-    xScale: curve?.config?.xScale ?? curve?.x_scale,
-    yScale: curve?.config?.yScale ?? curve?.y_scale,
-    xUnit: curve?.config?.xUnitPrefix ?? curve?.x_unit,
-    yUnit: curve?.config?.yUnitPrefix ?? curve?.y_unit,
-    logDataModeX: curve?.config?.logDataModeX ?? curve?.logDataModeX,
-    logDataModeY: curve?.config?.logDataModeY ?? curve?.logDataModeY,
-    xLabel: curve?.config?.xLabel ?? curve?.x_label,
-    yLabel: curve?.config?.yLabel ?? curve?.y_label,
-    graphTitle: curve?.config?.graphTitle ?? curve?.graph_title ?? curve?.name,
-    curveName: curve?.config?.curveName ?? curve?.curve_name ?? curve?.name,
-  });
+  const normalizeCurveConfig = (curve) => normalizeCurveConfigFields(curve);
 
-  // Returns axis bounds with 3-tier priority:
-  // 1. Stored config value (from local backend or original save), if valid and non-zero
-  // 2. Computed from actual captured points
-  // 3. Raw stored value even if zero (last resort)
-  const resolveAxisBoundsWithFallback = (curves) => {
-    const curveList = Array.isArray(curves) ? curves : (curves ? [curves] : []);
-    if (curveList.length === 0) return { xMin: '', xMax: '', yMin: '', yMax: '', source: 'none' };
+  const applyDiscovereeGraphMetadataToConfig = (discovereeGraph = {}, resolvedGraphTitle = '') => {
+    if (!discovereeGraph || typeof discovereeGraph !== 'object') return;
 
-    const cfg = normalizeCurveConfig(curveList[0]);
-    const storedXMin = Number(cfg.xMin);
-    const storedXMax = Number(cfg.xMax);
-    const storedYMin = Number(cfg.yMin);
-    const storedYMax = Number(cfg.yMax);
-
-    const storedValid =
-      Number.isFinite(storedXMin) && Number.isFinite(storedXMax) &&
-      Number.isFinite(storedYMin) && Number.isFinite(storedYMax) &&
-      storedXMax > storedXMin && storedYMax > storedYMin;
-
-    if (storedValid) {
-      return { xMin: storedXMin, xMax: storedXMax, yMin: storedYMin, yMax: storedYMax, source: 'stored' };
-    }
-
-    // Collect all points across all curves
-    const allPoints = curveList.flatMap((curve) => {
-      const pts = curve?.points ?? curve?.data_points ?? [];
-      return pts.map((pt) => ({
-        x: Number(pt.x_value ?? pt.x),
-        y: Number(pt.y_value ?? pt.y),
-      })).filter((pt) => Number.isFinite(pt.x) && Number.isFinite(pt.y));
-    });
-
-    if (allPoints.length > 0) {
-      const xs = allPoints.map((pt) => pt.x);
-      const ys = allPoints.map((pt) => pt.y);
-      return {
-        xMin: Math.min(...xs),
-        xMax: Math.max(...xs),
-        yMin: Math.min(...ys),
-        yMax: Math.max(...ys),
-        source: 'computed',
-      };
-    }
-
-    // Last resort: return stored values even if they are zero
-    return { xMin: storedXMin, xMax: storedXMax, yMin: storedYMin, yMax: storedYMax, source: 'fallback' };
+    setGraphConfig((prev) => ({
+      ...prev,
+      graphTitle: resolvedGraphTitle || discovereeGraph.graph_title || prev.graphTitle || '',
+      partNumber: discovereeGraph.partno || prev.partNumber || '',
+      manufacturer: discovereeGraph.manf || prev.manufacturer || '',
+      xLabel: discovereeGraph.x_title || discovereeGraph.x_label || prev.xLabel || '',
+      yLabel: discovereeGraph.y_title || discovereeGraph.y_label || prev.yLabel || '',
+    }));
   };
 
   const formatDisplayValue = (value) => {
@@ -4425,15 +4505,8 @@ const GraphCapture = () => {
               if (graphImageUrl) {
                 setUploadedImageFromExistingGraph(graphImageUrl);
               }
-              
-              // Auto-populate graph title from fetched data if not already set
-              const firstCurve = dedupedFetched[0];
-              if (resolvedGraphTitle && !urlParams.graph_title) {
-                setGraphConfig((prev) => ({
-                  ...prev,
-                  graphTitle: resolvedGraphTitle,
-                }));
-              }
+
+              applyDiscovereeGraphMetadataToConfig(discovereeGraph, resolvedGraphTitle);
               return;
             }
           }
@@ -4602,7 +4675,10 @@ const GraphCapture = () => {
         }
       })();
 
-      restoreGraphDisplayFromSavedCurve(firstCurve, graphId, { keepCurveNameEmpty: true });
+      restoreGraphDisplayFromSavedCurve(firstCurve, graphId, {
+        keepCurveNameEmpty: true,
+        allCurves: savedCurves,
+      });
       setIsReadOnly(false);
 
       console.log('[DEBUG] Graph context and captured points restored after refresh.');
