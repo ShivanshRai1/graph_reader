@@ -495,7 +495,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       
       const isAnnotation = point.isAnnotation === true;
       const isActiveEditPoint = isEditingCurve && editDragPointIndex === index;
-      const pointRadius = isActiveEditPoint ? 5 : (inSavedView ? 5.5 : 2.5);
+      const pointRadius = isActiveEditPoint ? 5 : (inSavedView ? 3 : 2.5);
 
       // Different colors for different point types:
       // - Red for imported points
@@ -504,18 +504,8 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
         ? '#FFD700'
         : (isAnnotation ? '#FFD700' : (point.overlayColor || 'red'));
       
-      if (inSavedView) {
-        ctx.strokeStyle = '#111827';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.arc(drawX, drawY, pointRadius + 0.5, 0, 2 * Math.PI);
-        ctx.stroke();
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 2;
-      } else {
-        ctx.strokeStyle = isActiveEditPoint ? '#1976d2' : 'white';
-        ctx.lineWidth = isActiveEditPoint ? 2 : 1;
-      }
+      ctx.strokeStyle = isActiveEditPoint ? '#1976d2' : 'white';
+      ctx.lineWidth = isActiveEditPoint ? 2 : 1;
       ctx.beginPath();
       ctx.arc(drawX, drawY, pointRadius, 0, 2 * Math.PI);
       ctx.stroke();
@@ -565,8 +555,8 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       if (orderedPoints.length < 2) return;
 
       ctx.strokeStyle = orderedPoints[0].overlayColor || '#1976d2';
-      ctx.lineWidth = inSavedView ? 3 : 4;
-      ctx.globalAlpha = inSavedView ? 0.78 : 1;
+      ctx.lineWidth = inSavedView ? 2.5 : 4;
+      ctx.globalAlpha = inSavedView ? 0.85 : 1;
       ctx.beginPath();
       ctx.moveTo(orderedPoints[0].canvasX, orderedPoints[0].canvasY);
       for (let i = 1; i < orderedPoints.length; i++) {
