@@ -7,6 +7,8 @@
 
 const PRIMARY_URL = 'https://www.discoveree.io/vision_upload.php';
 const BACKUP_URL = 'https://www.discoveree.io/graph_capture_api.php';
+// Set false to test vision_upload.php only (no graph_capture_api.php fallback).
+const AI_EXTRACTION_USE_BACKUP_ENDPOINT = false;
 // Netlify functions cap around 26s — one upstream call only on primary.
 const UPSTREAM_TIMEOUT_MS = 24000;
 
@@ -216,7 +218,7 @@ exports.handler = async function (event) {
     attempts.push(await postAttempt({ body: formDataRaw, requestHeaders, mode: 'multipart_raw_base64' }));
 
     const primaryAttempt = attempts[0];
-    if (!primaryAttempt.valid_graph_id && shouldUseBackupEndpoint(primaryAttempt)) {
+    if (AI_EXTRACTION_USE_BACKUP_ENDPOINT && !primaryAttempt.valid_graph_id && shouldUseBackupEndpoint(primaryAttempt)) {
       const backupJsonPayload = { ...normalizedPayload, base64image };
       attempts.push(await postAttempt({
         body: JSON.stringify(backupJsonPayload),

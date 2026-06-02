@@ -160,6 +160,10 @@ def is_ai_provider_error(raw_text: str) -> bool:
     )
 
 
+# Set False to test vision_upload.php only (no graph_capture_api.php fallback).
+AI_EXTRACTION_USE_BACKUP_ENDPOINT = False
+
+
 def should_use_backup_after_primary(primary_result: dict) -> bool:
     if has_valid_graph_id_in_result(primary_result):
         return False
@@ -280,7 +284,7 @@ def relay_ai_extraction(payload: dict):
         attempts.append(primary_result)
 
         final_result = primary_result
-        if should_use_backup_after_primary(primary_result):
+        if AI_EXTRACTION_USE_BACKUP_ENDPOINT and should_use_backup_after_primary(primary_result):
             raw_text = str(primary_result.get("raw_text") or "")
             primary_content_type = str(primary_result.get("content_type") or "").lower()
             if "text/html" in primary_content_type:

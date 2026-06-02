@@ -1086,6 +1086,8 @@ const resolveIntegerGraphIdFromAiResponse = (responsePayload) => {
 // 'browser-only' — browser → DiscoverEE direct only
 // 'production' — Render first (long AI wait), Netlify fallback if Render unreachable
 const AI_EXTRACTION_ROUTE = 'production';
+// Set false to test vision_upload.php only (no graph_capture_api.php fallback).
+const AI_EXTRACTION_USE_BACKUP_ENDPOINT = false;
 const AI_RELAY_FETCH_TIMEOUT_MS = 130000;
 const AI_MANUAL_CAPTURE_MESSAGE = 'There is an issue with AI fetching the graph image. Please try capturing manually.';
 
@@ -1746,6 +1748,7 @@ const fetchAiExtractionDirectFromBrowser = async (requestPayload) => {
 
   let finalAttempt = primary;
   const shouldTryBackup =
+    AI_EXTRACTION_USE_BACKUP_ENDPOINT &&
     !primary.validGraphId &&
     (primary.networkError || primary.isHtml || primary.isImunify || primary.isInvalidBase64 || !primary.httpOk);
 
