@@ -185,9 +185,10 @@ export const inferTypicalCurveExportSource = (dataPoints = []) => {
 };
 
 export const buildTypicalCurveFilename = (graphConfig, source = 'manual') => {
-  const baseName = sanitizeFilenamePart(graphConfig.graphTitle || graphConfig.curveName || 'curve');
+  const graphName = sanitizeFilenamePart(graphConfig.graphTitle || 'graph');
+  const curveName = sanitizeFilenamePart(graphConfig.curveName || 'curve');
   const safeSource = sanitizeFilenamePart(source);
-  return `${baseName}_${safeSource}.tc`;
+  return `${graphName}-${curveName}-${safeSource}.tc`;
 };
 
 export const buildTypicalCurveExport = ({ template, graphConfig, dataPoints }) => {
