@@ -14,6 +14,15 @@ import {
   isSavedCurvesExportReady,
   resolveGraphConfigForSavedCurvesExport,
 } from '../utils/tcExport';
+import {
+  applyAiPointLimitToCurve,
+  buildGraphConfigAxisPatch,
+  getAiMaxPointsLimit,
+  limitPointsEvenlyOnX,
+  normalizeAiExtractedMetadata,
+  resolveDiscovereeAxisFields,
+  syncImportedOverlayCanvas,
+} from '../utils/aiCurveProcessing';
 import { useGraph, graphToCanvasWithBounds, getManualCapturePoints } from '../context/GraphContext';
 import { clearAnnotationsForCurve } from '../utils/annotationStorage';
 import { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
@@ -921,7 +930,7 @@ const buildRestoredSavedCurves = ({
   }));
 
   return {
-    curves: dedupeCurves(hydrated),
+    curves: dedupeCurves(hydrated.map((curve) => applyAiPointLimitToCurve(curve))),
     source:
       persisted?.source ||
       (companyCurves.length > 0 ? 'company' : localApiCurves.length > 0 ? 'local' : 'company'),
@@ -1171,7 +1180,8 @@ const COMBINED_OVERLAY_COLORS = ['#2563eb', '#16a34a', '#f97316', '#e11d48', '#0
 const buildCombinedOverlayPoints = (curves) => {
   const curveList = Array.isArray(curves) ? curves : [];
   return curveList.flatMap((curve, curveIndex) => {
-    const points = curve?.points ?? curve?.data_points ?? [];
+    const limitedCurve = applyAiPointLimitToCurve(curve);
+    const points = limitedCurve?.points ?? limitedCurve?.data_points ?? [];
     const overlayColor = COMBINED_OVERLAY_COLORS[curveIndex % COMBINED_OVERLAY_COLORS.length];
     const overlayCurveId = String(curve?.id ?? curveIndex);
     const overlayCurveName = String(
@@ -2419,57 +2429,25 @@ const GraphCapture = () => {
 
   // Restore and apply AI extracted metadata to form on component mount
   useEffect(() => {
-    const metadata = restoreAiExtractedMetadata();
-    if (!metadata) return;
+    const rawMetadata = restoreAiExtractedMetadata();
+    if (!rawMetadata) return;
 
+    const metadata = normalizeAiExtractedMetadata(rawMetadata);
     aiLogVerbose('[AI METADATA] Restoring extracted metadata to form:', metadata);
 
-    // Apply metadata to graphConfig state
-    setGraphConfig((prev) => {
-      const updated = { ...prev };
-
-      if (metadata.graphTitle) {
-        updated.graphTitle = metadata.graphTitle;
-      }
-      if (metadata.curveName) {
-        updated.curveName = metadata.curveName;
-      }
-      if (metadata.xTitle) {
-        updated.xTitle = metadata.xTitle;
-      }
-      if (metadata.yTitle) {
-        updated.yTitle = metadata.yTitle;
-      }
-      if (metadata.xScale) {
-        updated.xScale = metadata.xScale;
-      }
-      if (metadata.yScale) {
-        updated.yScale = metadata.yScale;
-      }
-      if (metadata.xUnit) {
-        updated.xUnit = metadata.xUnit;
-      }
-      if (metadata.yUnit) {
-        updated.yUnit = metadata.yUnit;
-      }
-      if (metadata.xMin !== '' && metadata.xMin !== null && metadata.xMin !== undefined) {
-        updated.xMin = metadata.xMin;
-      }
-      if (metadata.xMax !== '' && metadata.xMax !== null && metadata.xMax !== undefined) {
-        updated.xMax = metadata.xMax;
-      }
-      if (metadata.yMin !== '' && metadata.yMin !== null && metadata.yMin !== undefined) {
-        updated.yMin = metadata.yMin;
-      }
-      if (metadata.yMax !== '' && metadata.yMax !== null && metadata.yMax !== undefined) {
-        updated.yMax = metadata.yMax;
-      }
-      if (metadata.tctj) {
-        updated.tctj = metadata.tctj;
-      }
-
-      return updated;
-    });
+    setGraphConfig((prev) => ({
+      ...prev,
+      ...(metadata.graphTitle ? { graphTitle: metadata.graphTitle } : {}),
+      ...(metadata.curveName ? { curveName: metadata.curveName } : {}),
+      ...(metadata.xLabel ? { xLabel: metadata.xLabel } : {}),
+      ...(metadata.yLabel ? { yLabel: metadata.yLabel } : {}),
+      ...(metadata.xScale ? { xScale: metadata.xScale } : {}),
+      ...(metadata.yScale ? { yScale: metadata.yScale } : {}),
+      ...(metadata.xUnitPrefix ? { xUnitPrefix: metadata.xUnitPrefix } : {}),
+      ...(metadata.yUnitPrefix ? { yUnitPrefix: metadata.yUnitPrefix } : {}),
+      ...buildGraphConfigAxisPatch(metadata),
+      ...(metadata.tctj ? { temperature: metadata.tctj } : {}),
+    }));
 
     aiLogVerbose('[AI METADATA] Form values restored from extracted metadata');
     clearAiExtractedMetadata();
@@ -2994,21 +2972,21 @@ const GraphCapture = () => {
       const validGraphId = resolvedGraphId || resolveIntegerGraphIdFromAiResponse(aiResponsePayload);
       
       // Extract metadata from AI response for auto-population
-      const extractedMetadata = {
+      const extractedMetadata = normalizeAiExtractedMetadata({
         graphTitle: String(aiResponsePayload?.graph_title || aiResponsePayload?.title || '').trim(),
         curveName: String(aiResponsePayload?.curve_title || aiResponsePayload?.curve_name || aiResponsePayload?.line_name || '').trim(),
-        xTitle: String(aiResponsePayload?.x_title || aiResponsePayload?.x_label || '').trim(),
-        yTitle: String(aiResponsePayload?.y_title || aiResponsePayload?.y_label || '').trim(),
+        xLabel: String(aiResponsePayload?.x_title || aiResponsePayload?.x_label || '').trim(),
+        yLabel: String(aiResponsePayload?.y_title || aiResponsePayload?.y_label || '').trim(),
         xScale: String(aiResponsePayload?.x_scale || 'Linear').trim(),
         yScale: String(aiResponsePayload?.y_scale || 'Linear').trim(),
-        xUnit: String(aiResponsePayload?.x_unit || '').trim(),
-        yUnit: String(aiResponsePayload?.y_unit || '').trim(),
+        xUnitPrefix: String(aiResponsePayload?.x_unit || aiResponsePayload?.xunit || '').trim(),
+        yUnitPrefix: String(aiResponsePayload?.y_unit || aiResponsePayload?.yunit || '').trim(),
         xMin: aiResponsePayload?.x_min ?? '',
         xMax: aiResponsePayload?.x_max ?? '',
         yMin: aiResponsePayload?.y_min ?? '',
         yMax: aiResponsePayload?.y_max ?? '',
         tctj: String(aiResponsePayload?.tctj || aiResponsePayload?.temperature || '').trim(),
-      };
+      });
       
       if (!validGraphId) {
         aiLogVerbose('=== AI EXTRACTION DECISION ===', {
@@ -3619,9 +3597,15 @@ const GraphCapture = () => {
       persistedContext?.graphArea ||
       (graphArea.width > 0 && graphArea.height > 0 ? graphArea : null);
     let nextConfig = buildCurveConfigFromSaved(curve, graphConfig, persistedAxis);
+    const curveList = Array.isArray(allCurves) && allCurves.length > 0 ? allCurves : [curve];
+    const apiAxisPatch = buildGraphConfigAxisPatch(
+      resolveDiscovereeAxisFields({}, normalizeCurveConfigFields(curveList[0]))
+    );
+    if (Object.keys(apiAxisPatch).length > 0) {
+      nextConfig = { ...nextConfig, ...apiAxisPatch };
+    }
 
     if (!hasValidAxisMapping(nextConfig)) {
-      const curveList = Array.isArray(allCurves) && allCurves.length > 0 ? allCurves : [curve];
       const bounds = resolveAxisBoundsWithFallback(curveList);
       if (bounds.source === 'computed' || bounds.source === 'stored') {
         nextConfig = {
@@ -4689,16 +4673,23 @@ const GraphCapture = () => {
 
   const normalizeCurveConfig = (curve) => normalizeCurveConfigFields(curve);
 
-  const applyDiscovereeGraphMetadataToConfig = (discovereeGraph = {}, resolvedGraphTitle = '') => {
+  const applyDiscovereeGraphMetadataToConfig = (discovereeGraph = {}, resolvedGraphTitle = '', firstDetail = null) => {
     if (!discovereeGraph || typeof discovereeGraph !== 'object') return;
+
+    const axisFields = resolveDiscovereeAxisFields(discovereeGraph, firstDetail || {});
 
     setGraphConfig((prev) => ({
       ...prev,
       graphTitle: resolvedGraphTitle || discovereeGraph.graph_title || prev.graphTitle || '',
       partNumber: discovereeGraph.partno || prev.partNumber || '',
       manufacturer: discovereeGraph.manf || prev.manufacturer || '',
-      xLabel: discovereeGraph.x_title || discovereeGraph.x_label || prev.xLabel || '',
-      yLabel: discovereeGraph.y_title || discovereeGraph.y_label || prev.yLabel || '',
+      xLabel: axisFields.xLabel || discovereeGraph.x_title || discovereeGraph.x_label || prev.xLabel || '',
+      yLabel: axisFields.yLabel || discovereeGraph.y_title || discovereeGraph.y_label || prev.yLabel || '',
+      ...buildGraphConfigAxisPatch(axisFields),
+      ...(axisFields.xScale ? { xScale: axisFields.xScale } : {}),
+      ...(axisFields.yScale ? { yScale: axisFields.yScale } : {}),
+      ...(axisFields.xUnitPrefix ? { xUnitPrefix: axisFields.xUnitPrefix } : {}),
+      ...(axisFields.yUnitPrefix ? { yUnitPrefix: axisFields.yUnitPrefix } : {}),
     }));
   };
 
@@ -4968,13 +4959,14 @@ const GraphCapture = () => {
             }, {});
 
             const fetched = discovereeDetails.map((detail, i) => {
-              const points = parseXyString(detail.xy);
-              const resolvedXMin = resolveAxisValue(detail?.x_min ?? detail?.xmin, discovereeGraph?.x_min ?? discovereeGraph?.xmin, '');
-              const resolvedXMax = resolveAxisValue(detail?.x_max ?? detail?.xmax, discovereeGraph?.x_max ?? discovereeGraph?.xmax, '');
-              const resolvedYMin = resolveAxisValue(detail?.y_min ?? detail?.ymin, discovereeGraph?.y_min ?? discovereeGraph?.ymin, '');
-              const resolvedYMax = resolveAxisValue(detail?.y_max ?? detail?.ymax, discovereeGraph?.y_max ?? discovereeGraph?.ymax, '');
-              const resolvedXScale = detail.xscale === '1' ? 'Linear' : detail.xscale || 'Linear';
-              const resolvedYScale = detail.yscale === '1' ? 'Linear' : detail.yscale || 'Linear';
+              const axisFields = resolveDiscovereeAxisFields(discovereeGraph, detail);
+              const points = limitPointsEvenlyOnX(parseXyString(detail.xy), getAiMaxPointsLimit());
+              const resolvedXMin = axisFields.xMin;
+              const resolvedXMax = axisFields.xMax;
+              const resolvedYMin = axisFields.yMin;
+              const resolvedYMax = axisFields.yMax;
+              const resolvedXScale = axisFields.xScale;
+              const resolvedYScale = axisFields.yScale;
               const detailSymbolValues =
                 detail.tctj && typeof detail.tctj === 'object' && !Array.isArray(detail.tctj)
                   ? detail.tctj
@@ -5009,12 +5001,14 @@ const GraphCapture = () => {
                   curveName: resolvedCurveTitle,
                   xScale: resolvedXScale,
                   yScale: resolvedYScale,
-                  xUnitPrefix: detail.xunit || '1',
-                  yUnitPrefix: detail.yunit || '1',
+                  xUnitPrefix: axisFields.xUnitPrefix || detail.xunit || '1',
+                  yUnitPrefix: axisFields.yUnitPrefix || detail.yunit || '1',
                   xMin: resolvedXMin,
                   xMax: resolvedXMax,
                   yMin: resolvedYMin,
                   yMax: resolvedYMax,
+                  xLabel: axisFields.xLabel || '',
+                  yLabel: axisFields.yLabel || '',
                   logDataModeX: resolvedXScale === 'Logarithmic' ? 'actual' : 'linear',
                   logDataModeY: resolvedYScale === 'Logarithmic' ? 'actual' : 'linear',
                   temperature: detail.tctj || '',
@@ -5050,7 +5044,7 @@ const GraphCapture = () => {
                 setUploadedImageFromExistingGraph(graphImageUrl);
               }
 
-              applyDiscovereeGraphMetadataToConfig(discovereeGraph, resolvedGraphTitle);
+              applyDiscovereeGraphMetadataToConfig(discovereeGraph, resolvedGraphTitle, discovereeDetails[0]);
               return;
             }
           }
@@ -5303,6 +5297,33 @@ const GraphCapture = () => {
     graphConfig.yUnitPrefix,
     graphConfig.xLabel,
     graphConfig.yLabel,
+  ]);
+
+  // Keep imported AI overlay dots aligned with the current graph box + axis setup.
+  useEffect(() => {
+    if (Boolean(editingCurveId)) return;
+    if (graphArea.width <= 0 || graphArea.height <= 0) return;
+    if (!hasValidAxisMapping(graphConfig)) return;
+    if (!dataPoints.some((point) => point.imported)) return;
+
+    const syncedPoints = syncImportedOverlayCanvas(dataPoints, graphArea, graphConfig);
+    if (syncedPoints !== dataPoints) {
+      replaceDataPoints(syncedPoints);
+    }
+  }, [
+    editingCurveId,
+    graphArea.x,
+    graphArea.y,
+    graphArea.width,
+    graphArea.height,
+    graphConfig.xMin,
+    graphConfig.xMax,
+    graphConfig.yMin,
+    graphConfig.yMax,
+    graphConfig.xScale,
+    graphConfig.yScale,
+    dataPoints,
+    replaceDataPoints,
   ]);
 
   // Auto-scroll to Saved Graphs when opening with graph_id so edit/remove actions are visible immediately.
@@ -6399,6 +6420,10 @@ const GraphCapture = () => {
                 showManufacturerField={!Boolean(urlParams.manufacturer)}
                 showUsernameField={!Boolean(urlParams.username)}
                 onConfirmAxisMapping={() => {
+                  const syncedPoints = syncImportedOverlayCanvas(dataPoints, graphArea, graphConfig);
+                  if (syncedPoints !== dataPoints) {
+                    replaceDataPoints(syncedPoints);
+                  }
                   setIsAxisMappingConfirmed(true);
                   setFrozenGraphConfig({ ...graphConfig });
                   setPartNumberLocked(true);

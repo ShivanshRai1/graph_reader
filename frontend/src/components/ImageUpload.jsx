@@ -1,10 +1,23 @@
 import { useEffect, useRef, useState } from 'react';
 import { useGraph } from '../context/GraphContext';
+import {
+  clampAiMaxPoints,
+  DEFAULT_AI_MAX_POINTS,
+  getAiMaxPointsLimit,
+  MAX_AI_MAX_POINTS,
+  MIN_AI_MAX_POINTS,
+  setAiMaxPointsLimit,
+} from '../utils/aiCurveProcessing';
 
 const ImageUpload = ({ onImageLoaded, onAiExtensionCapture, isAiExtractionLoading = false, skipCaptureChoice = false, initialPendingCapture = null, onPendingCaptureChange = () => {} }) => {
   const { setUploadedImage, clearDataPoints, setGraphConfig, setGraphArea } = useGraph();
   const fileInputRef = useRef(null);
   const [pendingCapture, setPendingCapture] = useState(null);
+  const [aiMaxPoints, setAiMaxPointsState] = useState(() => getAiMaxPointsLimit());
+
+  useEffect(() => {
+    setAiMaxPointsState(getAiMaxPointsLimit());
+  }, []);
 
   useEffect(() => {
     if (!initialPendingCapture?.imageBase64) return;
@@ -67,8 +80,15 @@ const ImageUpload = ({ onImageLoaded, onAiExtensionCapture, isAiExtractionLoadin
     onPendingCaptureChange(false);
   };
 
+  const handleAiMaxPointsChange = (event) => {
+    const next = clampAiMaxPoints(event.target.value);
+    setAiMaxPointsState(next);
+    setAiMaxPointsLimit(next);
+  };
+
   const handleCaptureWithAiExtension = async () => {
     if (!pendingCapture?.imageBase64 || isAiExtractionLoading) return;
+    setAiMaxPointsLimit(aiMaxPoints);
     const succeeded = await onAiExtensionCapture?.(pendingCapture.imageBase64, pendingCapture.source);
     if (succeeded) {
       setPendingCapture(null);
@@ -131,6 +151,25 @@ const ImageUpload = ({ onImageLoaded, onAiExtensionCapture, isAiExtractionLoadin
             <span className="text-sm font-medium text-green-700">
               ✓ Image ready — choose how to proceed
             </span>
+          </div>
+          <div className="mb-3 p-3 border border-emerald-200 rounded bg-white">
+            <label htmlFor="ai-max-points" className="block text-sm font-medium text-gray-800 mb-1">
+              Max AI points per curve
+            </label>
+            <div className="flex items-center gap-3">
+              <input
+                id="ai-max-points"
+                type="number"
+                min={MIN_AI_MAX_POINTS}
+                max={MAX_AI_MAX_POINTS}
+                value={aiMaxPoints}
+                onChange={handleAiMaxPointsChange}
+                className="w-24 px-3 py-2 border border-gray-300 rounded text-sm text-gray-900"
+              />
+              <span className="text-xs text-gray-600">
+                Applies to Capture with AI only. Default {DEFAULT_AI_MAX_POINTS}; manual capture is unchanged.
+              </span>
+            </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <button
