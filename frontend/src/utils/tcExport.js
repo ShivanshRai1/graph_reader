@@ -73,7 +73,21 @@ const groupPointsForExport = (dataPoints) => {
     groups.get(key).push([point.x, point.y]);
   });
 
-  return Array.from(groups.values());
+  return Array.from(groups.values()).map((points) =>
+    [...points].sort((a, b) => a[0] - b[0])
+  );
+};
+
+const computeLinearAxisGain = (min, max, fullScale) => {
+  const span = max - min;
+  if (!Number.isFinite(span) || span <= 0) return 1;
+  return fullScale / span;
+};
+
+const computeLinearGridCount = (min, max) => {
+  const span = Math.abs(max - min);
+  if (!Number.isFinite(span) || span <= 0) return 5;
+  return Math.min(10, Math.max(4, Math.round(span / 5)));
 };
 
 const buildSeriesEntry = (templateSeries, points, { name, colorIndex, showLegend }) => {
@@ -89,11 +103,13 @@ const buildSeriesEntry = (templateSeries, points, { name, colorIndex, showLegend
   series.addToLegend = showLegend;
   series.group = 0;
   series.isY2 = false;
+  series.showLines = false;
+  series.showPoints = true;
 
   return series;
 };
 
-const applyAxisScale = (axisBlock, { min, max, isLog }) => {
+const applyAxisScale = (axisBlock, { min, max, isLog }, { gainFullScale } = {}) => {
   if (!axisBlock?.scale) return;
 
   axisBlock.scale.auto = false;
@@ -103,6 +119,18 @@ const applyAxisScale = (axisBlock, { min, max, isLog }) => {
 
   if (axisBlock.grid) {
     axisBlock.grid.log = !!isLog;
+    if (!isLog) {
+      axisBlock.grid.count = computeLinearGridCount(min, max);
+    }
+  }
+
+  if (!isLog && Number.isFinite(gainFullScale)) {
+    axisBlock.gain = computeLinearAxisGain(min, max, gainFullScale);
+  }
+
+  if (axisBlock.labels && !isLog) {
+    const span = Math.abs(max - min);
+    axisBlock.labels.decimalCount = span >= 10 ? '0' : axisBlock.labels.decimalCount || '1';
   }
 
   if (isLog) {
@@ -132,6 +160,10 @@ const applyGraphConfigToTypicalCurve = (tc, graphConfig) => {
   if (tc.xAxis?.title) {
     tc.xAxis.title.text = [xAxisTitle, tc.xAxis.title.text?.[1] || ''];
     tc.xAxis.title.visible = true;
+    const xUnit = getUnitSymbol(graphConfig.xUnitPrefix);
+    if (xUnit) {
+      tc.xAxis.title.units = xUnit;
+    }
   }
 
   if (tc.yAxis?.title) {
@@ -139,8 +171,8 @@ const applyGraphConfigToTypicalCurve = (tc, graphConfig) => {
     tc.yAxis.title.visible = true;
   }
 
-  applyAxisScale(tc.xAxis, { min: xMin, max: xMax, isLog: xIsLog });
-  applyAxisScale(tc.yAxis, { min: yMin, max: yMax, isLog: yIsLog });
+  applyAxisScale(tc.xAxis, { min: xMin, max: xMax, isLog: xIsLog }, { gainFullScale: 180 });
+  applyAxisScale(tc.yAxis, { min: yMin, max: yMax, isLog: yIsLog }, { gainFullScale: 144 });
 };
 
 export const inferTypicalCurveExportSource = (dataPoints = []) => {
@@ -193,6 +225,8 @@ export const buildTypicalCurveExport = ({ template, graphConfig, dataPoints }) =
   tc.dataSet.type = 'line';
   tc.dataSet.groupCount = 1;
   tc.dataSet.isCustomOrder = groupedPoints.length > 1;
+  tc.dataSet.isRed = !showLegend;
+  tc.dataSet.decimationCount = '0';
   tc.dataSet.fitPointCount = String(Math.max(...groupedPoints.map((points) => points.length), 1));
 
   const datasetStats = seriesList.reduce(
