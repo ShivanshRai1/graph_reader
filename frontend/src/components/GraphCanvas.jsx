@@ -578,6 +578,66 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     ctx.restore();
   };
 
+  const getCanvasCoordinatesFromEvent = (e) => {
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    return {
+      canvasX: (e.clientX - rect.left) * scaleX,
+      canvasY: (e.clientY - rect.top) * scaleY,
+    };
+  };
+
+  const isCanvasPointInsideGraphArea = (canvasX, canvasY) => {
+    if (graphArea.width === 0 || graphArea.height === 0) return false;
+    const area = normalizeArea(graphArea);
+    const borderWidth = 4;
+    return (
+      canvasX >= area.x - borderWidth &&
+      canvasX <= area.x + area.width + borderWidth &&
+      canvasY >= area.y - borderWidth &&
+      canvasY <= area.y + area.height + borderWidth
+    );
+  };
+
+  const tryAddCapturedPoint = (canvasX, canvasY, { requireAxisConfirmed = true, applyDoubleClickGuard = true } = {}) => {
+    if (graphArea.width === 0 || graphArea.height === 0) {
+      setShowRedrawMsg(true);
+      return false;
+    }
+
+    if (!isCanvasPointInsideGraphArea(canvasX, canvasY)) {
+      return false;
+    }
+
+    if (requireAxisConfirmed && !isAxisMappingConfirmed) {
+      alert('⚠️ Please confirm the axis mapping first before capturing data points.');
+      return false;
+    }
+
+    if (applyDoubleClickGuard) {
+      const now = Date.now();
+      const last = lastCaptureClickRef.current;
+      const hasLastPoint = Number.isFinite(last.x) && Number.isFinite(last.y);
+      if (hasLastPoint) {
+        const dx = canvasX - last.x;
+        const dy = canvasY - last.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        const deltaMs = now - Number(last.ts || 0);
+        if (distance <= DOUBLE_CLICK_GUARD_PX && deltaMs <= DOUBLE_CLICK_GUARD_MS) {
+          console.warn('[CAPTURE_GUARD] Ignored near-identical rapid click:', { distance, deltaMs });
+          return false;
+        }
+      }
+      lastCaptureClickRef.current = { x: canvasX, y: canvasY, ts: now };
+    }
+
+    addDataPoint({ canvasX, canvasY });
+    setBoxTransparent(true);
+    return true;
+  };
+
   const handleMouseDown = (e) => {
     if (e.button !== 0) return;
 
@@ -782,17 +842,27 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       return;
     }
 
+    const { canvasX, canvasY } = getCanvasCoordinatesFromEvent(e);
+
     if (isEditingCurve) {
       if (editDragMovedRef.current) {
         editDragMovedRef.current = false;
+        return;
       }
+      if (findPointIndexAtCanvasPosition(canvasX, canvasY) >= 0) {
+        return;
+      }
+      tryAddCapturedPoint(canvasX, canvasY, {
+        requireAxisConfirmed: false,
+        applyDoubleClickGuard: false,
+      });
       return;
     }
-    
+
     // Track if this click came from a handle
     const isHandleClick = clickedOnHandleRef.current;
     clickedOnHandleRef.current = false; // Reset flag
-    
+
     // Only skip point capture if we were actually resizing or drawing a box (but allow handle clicks)
     if (!isHandleClick && (isResizing || justFinishedResizingRef.current || (isSelecting && dragDistance > DRAG_THRESHOLD))) {
       setDragDistance(0);
@@ -801,55 +871,8 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       }
       return;
     }
-    
-    // Prevent adding points if box is not drawn
-    if (graphArea.width === 0 || graphArea.height === 0) {
-      setShowRedrawMsg(true);
-      return;
-    }
-    
-    // Get exact canvas position relative to viewport, accounting for scaling
-    const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    const canvasX = (e.clientX - rect.left) * scaleX;
-    const canvasY = (e.clientY - rect.top) * scaleY;
 
-    // Check if click is within or on the blue box (including border and handles)
-    const area = normalizeArea(graphArea);
-    const borderWidth = 4; // Account for the blue line thickness
-    
-    // Check if within bounds (inside or on border)
-    const withinXBounds = canvasX >= area.x - borderWidth && canvasX <= area.x + area.width + borderWidth;
-    const withinYBounds = canvasY >= area.y - borderWidth && canvasY <= area.y + area.height + borderWidth;
-    
-    if (withinXBounds && withinYBounds) {
-      // Gate point capture until axis mapping is confirmed (Issue 5 & 7)
-      if (!isAxisMappingConfirmed) {
-        alert('⚠️ Please confirm the axis mapping first before capturing data points.');
-        return;
-      }
-
-      const now = Date.now();
-      const last = lastCaptureClickRef.current;
-      const hasLastPoint = Number.isFinite(last.x) && Number.isFinite(last.y);
-      if (hasLastPoint) {
-        const dx = canvasX - last.x;
-        const dy = canvasY - last.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        const deltaMs = now - Number(last.ts || 0);
-        if (distance <= DOUBLE_CLICK_GUARD_PX && deltaMs <= DOUBLE_CLICK_GUARD_MS) {
-          console.warn('[CAPTURE_GUARD] Ignored near-identical rapid click:', { distance, deltaMs });
-          return;
-        }
-      }
-
-      addDataPoint({ canvasX, canvasY });
-      lastCaptureClickRef.current = { x: canvasX, y: canvasY, ts: now };
-      // Make box transparent after first point is captured (entering capture mode)
-      setBoxTransparent(true);
-    }
+    tryAddCapturedPoint(canvasX, canvasY);
   };
 
   const handleClearPoints = () => {

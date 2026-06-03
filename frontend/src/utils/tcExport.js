@@ -19,13 +19,32 @@ const parseAxisNumber = (value, fallback) => {
 
 const getUnitSymbol = (prefix) => UNIT_SYMBOLS[prefix] ?? '';
 
+const normalizeParentheticalUnit = (label) =>
+  String(label || '').trim().replace(/(\S)\(/g, '$1 (');
+
+const extractUnitFromLabel = (label) => {
+  const match = String(label || '').trim().match(/\(([^)]+)\)\s*$/);
+  return match ? match[1].trim() : '';
+};
+
+const resolveAxisTitleUnit = (label, unitPrefix) => {
+  const embeddedUnit = extractUnitFromLabel(label);
+  if (embeddedUnit) return embeddedUnit;
+  return getUnitSymbol(unitPrefix);
+};
+
 const formatAxisTitleText = (label, unitPrefix) => {
-  const trimmed = String(label || '').trim();
+  const trimmed = normalizeParentheticalUnit(String(label || '').trim());
+  const embeddedUnit = extractUnitFromLabel(trimmed);
   const unitSymbol = getUnitSymbol(unitPrefix);
-  if (!trimmed && !unitSymbol) return '';
+
+  if (!trimmed && !unitSymbol && !embeddedUnit) return '';
+  if (embeddedUnit) return trimmed;
   if (!unitSymbol) return trimmed;
   if (!trimmed) return unitSymbol;
-  if (trimmed.includes(`(${unitSymbol})`)) return trimmed;
+  if (trimmed.includes(`(${unitSymbol})`) || trimmed.includes(`(${unitSymbol.toUpperCase()})`)) {
+    return trimmed;
+  }
   return `${trimmed} (${unitSymbol})`;
 };
 
@@ -109,7 +128,7 @@ const buildSeriesEntry = (templateSeries, points, { name, colorIndex, showLegend
   return series;
 };
 
-const applyAxisScale = (axisBlock, { min, max, isLog }, { gainFullScale } = {}) => {
+const applyAxisScale = (axisBlock, { min, max, isLog }, { gainFullScale, labelDecimals, showMinorGrid } = {}) => {
   if (!axisBlock?.scale) return;
 
   axisBlock.scale.auto = false;
@@ -121,6 +140,9 @@ const applyAxisScale = (axisBlock, { min, max, isLog }, { gainFullScale } = {}) 
     axisBlock.grid.log = !!isLog;
     if (!isLog) {
       axisBlock.grid.count = computeLinearGridCount(min, max);
+      if (showMinorGrid) {
+        axisBlock.grid.showMinorLogGrid = true;
+      }
     }
   }
 
@@ -129,8 +151,12 @@ const applyAxisScale = (axisBlock, { min, max, isLog }, { gainFullScale } = {}) 
   }
 
   if (axisBlock.labels && !isLog) {
-    const span = Math.abs(max - min);
-    axisBlock.labels.decimalCount = span >= 10 ? '0' : axisBlock.labels.decimalCount || '1';
+    if (labelDecimals !== undefined) {
+      axisBlock.labels.decimalCount = String(labelDecimals);
+    } else {
+      const span = Math.abs(max - min);
+      axisBlock.labels.decimalCount = span >= 10 ? '0' : axisBlock.labels.decimalCount || '1';
+    }
   }
 
   if (isLog) {
@@ -160,7 +186,7 @@ const applyGraphConfigToTypicalCurve = (tc, graphConfig) => {
   if (tc.xAxis?.title) {
     tc.xAxis.title.text = [xAxisTitle, tc.xAxis.title.text?.[1] || ''];
     tc.xAxis.title.visible = true;
-    const xUnit = getUnitSymbol(graphConfig.xUnitPrefix);
+    const xUnit = resolveAxisTitleUnit(graphConfig.xLabel, graphConfig.xUnitPrefix);
     if (xUnit) {
       tc.xAxis.title.units = xUnit;
     }
@@ -169,10 +195,23 @@ const applyGraphConfigToTypicalCurve = (tc, graphConfig) => {
   if (tc.yAxis?.title) {
     tc.yAxis.title.text = [tc.yAxis.title.text?.[0] || '', yAxisTitle];
     tc.yAxis.title.visible = true;
+    const yUnit = resolveAxisTitleUnit(graphConfig.yLabel, graphConfig.yUnitPrefix);
+    if (yUnit) {
+      tc.yAxis.title.units = yUnit;
+    }
   }
 
-  applyAxisScale(tc.xAxis, { min: xMin, max: xMax, isLog: xIsLog }, { gainFullScale: 180 });
-  applyAxisScale(tc.yAxis, { min: yMin, max: yMax, isLog: yIsLog }, { gainFullScale: 144 });
+  const xSpan = xMax - xMin;
+  const ySpan = yMax - yMin;
+  applyAxisScale(tc.xAxis, { min: xMin, max: xMax, isLog: xIsLog }, {
+    gainFullScale: 180,
+    labelDecimals: xSpan > 0 && xSpan <= 30 ? 1 : 0,
+  });
+  applyAxisScale(tc.yAxis, { min: yMin, max: yMax, isLog: yIsLog }, {
+    gainFullScale: 144,
+    labelDecimals: ySpan >= 10 ? 0 : 1,
+    showMinorGrid: !yIsLog,
+  });
 };
 
 export const inferTypicalCurveExportSource = (dataPoints = []) => {
