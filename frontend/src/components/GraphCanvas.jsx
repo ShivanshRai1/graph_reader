@@ -490,7 +490,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       
       const isAnnotation = point.isAnnotation === true;
       const isActiveEditPoint = isEditingCurve && editDragPointIndex === index;
-      const pointRadius = isActiveEditPoint ? 5 : (inSavedView ? 3 : 2.5);
+      const pointRadius = isActiveEditPoint ? 6 : (inSavedView ? 4 : 4);
 
       // Different colors for different point types:
       // - Red for imported points
