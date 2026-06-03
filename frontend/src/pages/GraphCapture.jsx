@@ -4,6 +4,7 @@ import GraphConfig from '../components/GraphConfig';
 import CapturedPointsList from '../components/CapturedPointsList';
 import SavedGraphPreview from '../components/SavedGraphPreview';
 import SavedGraphCombinedPreview from '../components/SavedGraphCombinedPreview';
+import ViewModalPanel from '../components/ViewModalPanel';
 import { useGraph, graphToCanvasWithBounds } from '../context/GraphContext';
 import { clearAnnotationsForCurve } from '../utils/annotationStorage';
 import { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
@@ -101,6 +102,14 @@ const ViewModalBackdropDimControl = ({ value, onChange }) => (
     <span style={{ fontSize: 11, color: '#6b7280' }}>Drag modal aside to compare overlay on graph.</span>
   </div>
 );
+
+const shouldSuppressViewModalBackdropClose = (interactionRef) => {
+  const interaction = interactionRef?.current;
+  if (!interaction?.wasDragged && !interaction?.wasResized) return false;
+  interaction.wasDragged = false;
+  interaction.wasResized = false;
+  return true;
+};
 
 const buildGraphGroupId = (imageUrl) => {
   if (!imageUrl) return 'graph_unknown';
@@ -3031,14 +3040,14 @@ const GraphCapture = () => {
   const previousUploadedImageRef = useRef(uploadedImage || '');
   const suppressNextImageSessionResetRef = useRef(false);
     const activeSessionIdentifierRef = useRef('');
-  const [singleModalPos, setSingleModalPos] = useState(null);
-  const [combinedModalPos, setCombinedModalPos] = useState(null);
+  const [singleModalLayout, setSingleModalLayout] = useState(null);
+  const [combinedModalLayout, setCombinedModalLayout] = useState(null);
+  const [allCombinedModalLayout, setAllCombinedModalLayout] = useState(null);
   const [showAllCombinedModal, setShowAllCombinedModal] = useState(false);
   const [viewModalBackdropOpacity, setViewModalBackdropOpacity] = useState(0.15);
-  const singleModalRef = useRef(null);
-  const combinedModalRef = useRef(null);
-  const singleDragRef = useRef({ wasDragged: false });
-  const combinedDragRef = useRef({ wasDragged: false });
+  const singleDragRef = useRef({ wasDragged: false, wasResized: false });
+  const combinedDragRef = useRef({ wasDragged: false, wasResized: false });
+  const allCombinedDragRef = useRef({ wasDragged: false, wasResized: false });
 
   const selectedCurve = savedCurves.find((curve) => curve.id === selectedCurveId);
 
@@ -3331,6 +3340,9 @@ const GraphCapture = () => {
   const handleViewCurve = (curve) => {
     setCombinedGroupId('');
     setShowAllCombinedModal(false);
+    setSingleModalLayout(null);
+    setCombinedModalLayout(null);
+    setAllCombinedModalLayout(null);
     setSelectedCurveId(curve.id);
 
     const graphId = String(curve.graphId || getGraphIdForCurve(curve) || urlParams.graph_id || '').trim();
@@ -3382,6 +3394,9 @@ const GraphCapture = () => {
   const handleViewCombinedGroup = (group) => {
     setSelectedCurveId('');
     setShowAllCombinedModal(false);
+    setSingleModalLayout(null);
+    setCombinedModalLayout(null);
+    setAllCombinedModalLayout(null);
     setCombinedGroupId(group.id);
     applyCombinedGraphOverlay(group.curves);
   };
@@ -3389,6 +3404,9 @@ const GraphCapture = () => {
   const handleViewAllCombinedGraphs = () => {
     setSelectedCurveId('');
     setCombinedGroupId('');
+    setSingleModalLayout(null);
+    setCombinedModalLayout(null);
+    setAllCombinedModalLayout(null);
     setShowAllCombinedModal(true);
     applyCombinedGraphOverlay(uniqueSavedCurves);
   };
@@ -6301,77 +6319,31 @@ const GraphCapture = () => {
             zIndex: 1000,
           }}
           onClick={() => {
-            if (singleDragRef.current.wasDragged) { singleDragRef.current.wasDragged = false; return; }
-            setSingleModalPos(null);
+            if (shouldSuppressViewModalBackdropClose(singleDragRef)) return;
+            setSingleModalLayout(null);
             setSelectedCurveId('');
             clearSavedViewOverlay();
             setIsReadOnly(false);
           }}
-                    ref={singleModalRef}
         >
-          <div
-            style={{
-              background: '#fff',
-              color: '#213547',
-              borderRadius: 8,
-              minWidth: 520,
-              maxWidth: 720,
-              maxHeight: '85vh',
-              overflowY: 'auto',
-              boxShadow: '0 4px 32px rgba(0,0,0,0.18)',
-              padding: 24,
-              position: 'fixed',
-              ...(singleModalPos
-                ? { top: singleModalPos.y, left: singleModalPos.x, transform: 'none' }
-                : { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }),
+          <ViewModalPanel
+            title={selectedCurve.name || `Curve #${selectedCurve.id}`}
+            layout={singleModalLayout}
+            onLayoutChange={setSingleModalLayout}
+            interactionRef={singleDragRef}
+            onClose={() => {
+              setSingleModalLayout(null);
+              setSelectedCurveId('');
+              clearSavedViewOverlay();
             }}
-            onClick={(e) => e.stopPropagation()}
+            defaultWidth={640}
+            minWidth={520}
+            maxWidth={720}
           >
-            <button
-              style={{
-                position: 'absolute',
-                top: 8,
-                right: 12,
-                background: 'none',
-                border: 'none',
-                fontSize: 30,
-                width: 36,
-                height: 36,
-                lineHeight: 1,
-                color: '#888',
-                cursor: 'pointer',
-              }}
-              onClick={() => { setSingleModalPos(null); setSelectedCurveId(''); clearSavedViewOverlay(); }}
-              aria-label="Close"
-            >
-              ×
-            </button>
             <ViewModalBackdropDimControl
               value={viewModalBackdropOpacity}
               onChange={setViewModalBackdropOpacity}
             />
-            <div
-              className="font-semibold mb-2"
-              style={{ color: '#213547', fontSize: 18, cursor: 'move', userSelect: 'none' }}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                const rect = singleModalRef.current.getBoundingClientRect();
-                const startX = e.clientX, startY = e.clientY;
-                const startLeft = rect.left, startTop = rect.top;
-                const onMove = (me) => {
-                  singleDragRef.current.wasDragged = true;
-                  setSingleModalPos({ x: startLeft + (me.clientX - startX), y: startTop + (me.clientY - startY) });
-                };
-                const onUp = () => {
-                  window.removeEventListener('mousemove', onMove);
-                  window.removeEventListener('mouseup', onUp);
-                };
-                window.addEventListener('mousemove', onMove);
-                window.addEventListener('mouseup', onUp);
-              }}
-            >
-              {selectedCurve.name || `Curve #${selectedCurve.id}`}
-            </div>
             {(() => {
               const cfg = normalizeCurveConfig(selectedCurve);
               const bounds = resolveAxisBoundsWithFallback([selectedCurve]);
@@ -6548,7 +6520,7 @@ const GraphCapture = () => {
                 ))}
               </tbody>
             </table>
-          </div>
+          </ViewModalPanel>
         </div>
       )}
       {selectedGroup && (
@@ -6563,76 +6535,30 @@ const GraphCapture = () => {
             zIndex: 1000,
           }}
           onClick={() => {
-            if (combinedDragRef.current.wasDragged) { combinedDragRef.current.wasDragged = false; return; }
-            setCombinedModalPos(null);
+            if (shouldSuppressViewModalBackdropClose(combinedDragRef)) return;
+            setCombinedModalLayout(null);
             setCombinedGroupId('');
             clearSavedViewOverlay();
           }}
-                    ref={combinedModalRef}
         >
-          <div
-            style={{
-              background: '#fff',
-              color: '#213547',
-              borderRadius: 8,
-              minWidth: 560,
-              maxWidth: 820,
-              maxHeight: '85vh',
-              overflowY: 'auto',
-              boxShadow: '0 4px 32px rgba(0,0,0,0.18)',
-              padding: 24,
-              position: 'fixed',
-              ...(combinedModalPos
-                ? { top: combinedModalPos.y, left: combinedModalPos.x, transform: 'none' }
-                : { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }),
+          <ViewModalPanel
+            title={`Combined curves (${selectedGroup.curves.length})`}
+            layout={combinedModalLayout}
+            onLayoutChange={setCombinedModalLayout}
+            interactionRef={combinedDragRef}
+            onClose={() => {
+              setCombinedModalLayout(null);
+              setCombinedGroupId('');
+              clearSavedViewOverlay();
             }}
-            onClick={(e) => e.stopPropagation()}
+            defaultWidth={700}
+            minWidth={560}
+            maxWidth={820}
           >
-            <button
-              style={{
-                position: 'absolute',
-                top: 8,
-                right: 12,
-                background: 'none',
-                border: 'none',
-                fontSize: 30,
-                width: 36,
-                height: 36,
-                lineHeight: 1,
-                color: '#888',
-                cursor: 'pointer',
-              }}
-              onClick={() => { setCombinedModalPos(null); setCombinedGroupId(''); clearSavedViewOverlay(); }}
-              aria-label="Close"
-            >
-              ×
-            </button>
             <ViewModalBackdropDimControl
               value={viewModalBackdropOpacity}
               onChange={setViewModalBackdropOpacity}
             />
-            <div
-              className="font-semibold mb-2"
-              style={{ color: '#213547', fontSize: 18, cursor: 'move', userSelect: 'none' }}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                const rect = combinedModalRef.current.getBoundingClientRect();
-                const startX = e.clientX, startY = e.clientY;
-                const startLeft = rect.left, startTop = rect.top;
-                const onMove = (me) => {
-                  combinedDragRef.current.wasDragged = true;
-                  setCombinedModalPos({ x: startLeft + (me.clientX - startX), y: startTop + (me.clientY - startY) });
-                };
-                const onUp = () => {
-                  window.removeEventListener('mousemove', onMove);
-                  window.removeEventListener('mouseup', onUp);
-                };
-                window.addEventListener('mousemove', onMove);
-                window.addEventListener('mouseup', onUp);
-              }}
-            >
-              Combined curves ({selectedGroup.curves.length})
-            </div>
             {(() => {
               const cfg = normalizeCurveConfig(selectedGroup.curves[0]);
               const bounds = resolveAxisBoundsWithFallback(selectedGroup.curves);
@@ -6757,7 +6683,7 @@ const GraphCapture = () => {
                 />
               )}
             </div>
-          </div>
+          </ViewModalPanel>
         </div>
       )}
       {showAllCombinedModal && (
@@ -6771,52 +6697,32 @@ const GraphCapture = () => {
             background: `rgba(0,0,0,${viewModalBackdropOpacity})`,
             zIndex: 1000,
           }}
-          onClick={() => { setShowAllCombinedModal(false); clearSavedViewOverlay(); }}
+          onClick={() => {
+            if (shouldSuppressViewModalBackdropClose(allCombinedDragRef)) return;
+            setAllCombinedModalLayout(null);
+            setShowAllCombinedModal(false);
+            clearSavedViewOverlay();
+          }}
         >
-          <div
-            style={{
-              background: '#fff',
-              color: '#213547',
-              borderRadius: 8,
-              minWidth: 560,
-              maxWidth: 860,
-              maxHeight: '88vh',
-              overflowY: 'auto',
-              boxShadow: '0 4px 32px rgba(0,0,0,0.18)',
-              padding: 24,
-              position: 'fixed',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
+          <ViewModalPanel
+            title={`View all graphs combined (${uniqueSavedCurves.length} curves)`}
+            layout={allCombinedModalLayout}
+            onLayoutChange={setAllCombinedModalLayout}
+            interactionRef={allCombinedDragRef}
+            onClose={() => {
+              setAllCombinedModalLayout(null);
+              setShowAllCombinedModal(false);
+              clearSavedViewOverlay();
             }}
-            onClick={(e) => e.stopPropagation()}
+            defaultWidth={760}
+            minWidth={560}
+            maxWidth={860}
+            maxHeightFactor={0.88}
           >
-            <button
-              style={{
-                position: 'absolute',
-                top: 8,
-                right: 12,
-                background: 'none',
-                border: 'none',
-                fontSize: 30,
-                width: 36,
-                height: 36,
-                lineHeight: 1,
-                color: '#888',
-                cursor: 'pointer',
-              }}
-              onClick={() => { setShowAllCombinedModal(false); clearSavedViewOverlay(); }}
-              aria-label="Close"
-            >
-              ×
-            </button>
             <ViewModalBackdropDimControl
               value={viewModalBackdropOpacity}
               onChange={setViewModalBackdropOpacity}
             />
-            <div className="font-semibold mb-3" style={{ color: '#213547', fontSize: 18 }}>
-              View all graphs combined ({uniqueSavedCurves.length} curves)
-            </div>
             <div className="text-xs mb-3" style={{ color: '#4b5563' }}>
               Curves are grouped automatically by axis scale.
             </div>
@@ -6881,7 +6787,7 @@ const GraphCapture = () => {
                 />
               </div>
             ))}
-          </div>
+          </ViewModalPanel>
         </div>
       )}
     </div>
