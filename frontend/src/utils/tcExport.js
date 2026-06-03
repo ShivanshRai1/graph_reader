@@ -143,7 +143,7 @@ const buildSeriesEntry = (templateSeries, points, { name, colorIndex, showLegend
   series.addToLegend = showLegend;
   series.group = 0;
   series.isY2 = Boolean(isY2);
-  series.showLines = false;
+  series.showLines = true;
   series.showPoints = true;
   series.temperature = parseTemperatureForExport(temperature);
 
