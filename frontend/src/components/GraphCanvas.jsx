@@ -579,6 +579,8 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   };
 
   const handleMouseDown = (e) => {
+    if (e.button !== 0) return;
+
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
     
@@ -861,24 +863,31 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       return;
     }
 
-    if (isEditingCurve) {
-      return;
-    }
-    
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
-    
+
     const canvasX = (e.clientX - rect.left) * scaleX;
     const canvasY = (e.clientY - rect.top) * scaleY;
-    
+
+    if (isEditingCurve) {
+      const hitIndex = findPointIndexAtCanvasPosition(canvasX, canvasY);
+      if (hitIndex >= 0) {
+        editDragPointIndexRef.current = null;
+        editDragMovedRef.current = false;
+        setEditDragPointIndex(null);
+        deleteDataPoint(hitIndex);
+      }
+      return;
+    }
+
     // Check if right-click is on any data point (manual points only)
     const clickRadius = 8; // Detection radius for point click
-    
+
     for (let i = 0; i < dataPoints.length; i++) {
       const point = dataPoints[i];
-      
+
       // Skip imported points - can't delete them by right-click
       if (point.imported) continue;
       
