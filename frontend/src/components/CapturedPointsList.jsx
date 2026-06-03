@@ -1,4 +1,4 @@
-import { useGraph } from '../context/GraphContext';
+import { useGraph, getManualCapturePoints } from '../context/GraphContext';
 import { parseFile } from '../utils/fileParser';
 import {
   buildTypicalCurveExport,
@@ -11,6 +11,7 @@ import { useEffect, useState } from 'react';
 
 const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false, isEditingCurve = false }) => {
   const { dataPoints, clearDataPoints, importDataPoints, uploadedImage, updateDataPoint, deleteDataPoint, graphConfig, graphArea, convertCanvasToGraphCoordinates } = useGraph();
+  const manualCapturePoints = getManualCapturePoints(dataPoints);
   const [editingIndex, setEditingIndex] = useState(null);
   const [editX, setEditX] = useState('');
   const [editY, setEditY] = useState('');
@@ -120,7 +121,7 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false, isEditin
   };
 
   const exportToTC = () => {
-    if (dataPoints.length === 0) {
+    if (manualCapturePoints.length === 0) {
       alert('No data points to export');
       return;
     }
@@ -130,11 +131,11 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false, isEditin
     }
 
     try {
-      const source = inferTypicalCurveExportSource(dataPoints);
+      const source = inferTypicalCurveExportSource(manualCapturePoints);
       const tcObject = buildTypicalCurveExport({
         template: lineSingleTemplate,
         graphConfig,
-        dataPoints,
+        dataPoints: manualCapturePoints,
       });
       const filename = buildTypicalCurveFilename(graphConfig, source);
       downloadTypicalCurveFile(filename, tcObject);
@@ -145,7 +146,7 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false, isEditin
   };
 
   const exportToCSV = () => {
-    if (dataPoints.length === 0) {
+    if (manualCapturePoints.length === 0) {
       alert('No data points to export');
       return;
     }
@@ -166,7 +167,7 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false, isEditin
       [''],
     ];
     const header = ['#', 'X', 'Y'];
-    const rows = dataPoints.map((point, idx) => {
+    const rows = manualCapturePoints.map((point, idx) => {
       const recalculated = getRecalculatedPoint(point);
       return [
         (idx + 1).toString(),
@@ -189,13 +190,13 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false, isEditin
   };
 
   const exportToJSON = () => {
-    if (dataPoints.length === 0) {
+    if (manualCapturePoints.length === 0) {
       alert('No data points to export');
       return;
     }
     const jsonData = {
       metadata: getExportMeta(),
-      points: dataPoints.map((point, index) => {
+      points: manualCapturePoints.map((point, index) => {
         const recalculated = getRecalculatedPoint(point);
         return {
           index: index + 1,
@@ -292,14 +293,14 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false, isEditin
   };
 
   const copyToClipboard = () => {
-    if (dataPoints.length === 0) {
+    if (manualCapturePoints.length === 0) {
       alert('No data points to copy');
       return;
     }
     const xHeader = xHeaderLabel ? `X${xHeaderLabel}` : 'X';
     const yHeader = yHeaderLabel ? `Y${yHeaderLabel}` : 'Y';
     const header = ['#', xHeader, yHeader];
-    const rows = dataPoints.map((point, idx) => {
+    const rows = manualCapturePoints.map((point, idx) => {
       const recalculated = getRecalculatedPoint(point);
       return [
         (idx + 1).toString(),
@@ -319,8 +320,8 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false, isEditin
     <div className="bg-white border border-gray-200 rounded-lg p-5 mt-5">
       <div className="flex justify-between items-center mb-4 pb-4 border-b-2 border-gray-100">
         <div>
-          <h3 className="text-gray-800 text-lg font-semibold m-0">Captured Points: {dataPoints.length}</h3>
-          {dataPoints.length === 0 && (
+          <h3 className="text-gray-800 text-lg font-semibold m-0">Captured Points: {manualCapturePoints.length}</h3>
+          {manualCapturePoints.length === 0 && (
             <p className="text-xs text-gray-500 mt-1">No points captured yet. Confirm axis mapping first, then click on the graph.</p>
           )}
 
@@ -349,14 +350,14 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false, isEditin
         <button 
           onClick={exportToCSV} 
           className="px-4 py-2 rounded bg-gray-700 text-white font-medium disabled:opacity-50"
-          disabled={dataPoints.length === 0}
+          disabled={manualCapturePoints.length === 0}
         >
           📄 Export CSV
         </button>
         <button
           onClick={exportToTC}
           className="px-4 py-2 rounded bg-gray-700 text-white font-medium disabled:opacity-50"
-          disabled={dataPoints.length === 0 || !isConfigValid()}
+          disabled={manualCapturePoints.length === 0 || !isConfigValid()}
           title={!isConfigValid() ? 'Setup required: draw the graph area, set axis min/max, scale, and unit' : 'Download captured points as HPPeval Typical Curve (.tc) file'}
         >
           Export .tc
@@ -364,7 +365,7 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false, isEditin
         <button 
           onClick={exportToJSON} 
           className="hidden px-4 py-2 rounded bg-gray-700 text-white font-medium disabled:opacity-50"
-          disabled={dataPoints.length === 0}
+          disabled={manualCapturePoints.length === 0}
           aria-hidden="true"
         >
           📋 Export JSON
@@ -372,14 +373,14 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false, isEditin
         <button
           onClick={copyToClipboard}
           className="px-4 py-2 rounded bg-gray-700 text-white font-medium disabled:opacity-50"
-          disabled={dataPoints.length === 0}
+          disabled={manualCapturePoints.length === 0}
           title="Copy all points as table for pasting into Notepad, Word, etc."
         >
           📋 Copy Table
         </button>
       </div>
 
-      {dataPoints.length === 0 ? (
+      {manualCapturePoints.length === 0 ? (
         <div className="text-center p-10 text-gray-500 italic bg-gray-50 border-2 border-dashed border-gray-200 rounded-lg">
           <p>No points yet. Click the graph to add points.</p>
         </div>
@@ -400,12 +401,13 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false, isEditin
               </tr>
             </thead>
             <tbody>
-              {dataPoints.map((point, index) => {
+              {manualCapturePoints.map((point, index) => {
+                const pointIndex = dataPoints.indexOf(point);
                 const recalculated = getRecalculatedPoint(point);
                 return (
-                <tr key={index} className="border-b border-gray-200 hover:bg-gray-50">
+                <tr key={pointIndex >= 0 ? pointIndex : index} className="border-b border-gray-200 hover:bg-gray-50">
                   <td className="text-right px-3 py-2 text-sm text-gray-900 bg-white border-r border-gray-300">{index + 1}</td>
-                  {editingIndex === index ? (
+                  {editingIndex === pointIndex ? (
                     <>
                       <td className="text-right px-3 py-2 border-r border-gray-300">
                         <input
@@ -427,7 +429,7 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false, isEditin
                       </td>
                       <td className="text-center px-3 py-2">
                         <button
-                          onClick={() => handleSaveEdit(index)}
+                          onClick={() => handleSaveEdit(pointIndex)}
                           className="px-3 py-1 rounded bg-blue-600 text-white text-xs font-medium mr-1"
                         >
                           Save
@@ -452,13 +454,13 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false, isEditin
                         {!isReadOnly && (
                           <>
                             <button
-                              onClick={() => handleEditClick(index)}
+                              onClick={() => handleEditClick(pointIndex)}
                               className="px-3 py-1 rounded bg-blue-600 text-white text-xs font-medium mr-1"
                             >
                               Edit
                             </button>
                             <button
-                              onClick={() => handleDeletePoint(index)}
+                              onClick={() => handleDeletePoint(pointIndex)}
                               className="px-3 py-1 rounded bg-red-600 text-white text-xs font-medium"
                             >
                               Delete

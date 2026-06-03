@@ -8,6 +8,18 @@ import {
 
 const GraphContext = createContext();
 
+export const MANUAL_CAPTURE_OVERLAY_ID = '__manual_capture__';
+
+export const isManualCapturePoint = (point) => {
+  if (!point) return false;
+  if (point.overlayCurveId === MANUAL_CAPTURE_OVERLAY_ID) return true;
+  if (point.imported === true) return false;
+  return true;
+};
+
+export const getManualCapturePoints = (points = []) =>
+  (Array.isArray(points) ? points : []).filter(isManualCapturePoint);
+
 const getSafeLogBoundsStatic = (minValue, maxValue) => {
   const safeMin = Number.isFinite(minValue) && minValue > 0 ? minValue : 1e-12;
   const candidateMax = Number.isFinite(maxValue) && maxValue > 0 ? maxValue : safeMin * 10;
@@ -244,6 +256,7 @@ export const GraphProvider = ({ children }) => {
       canvasY: point.canvasY,
       x: graphCoords.x,
       y: graphCoords.y,
+      overlayCurveId: MANUAL_CAPTURE_OVERLAY_ID,
       // Mark this as an annotation if we know which curve we're working on
       isAnnotation: !!targetCurveId,
     };
@@ -309,7 +322,7 @@ export const GraphProvider = ({ children }) => {
         y: point.y,
         canvasX: canvasCoords.canvasX,
         canvasY: canvasCoords.canvasY,
-        imported: true, // mark imported so we can choose whether to render
+        overlayCurveId: MANUAL_CAPTURE_OVERLAY_ID,
       };
     });
 

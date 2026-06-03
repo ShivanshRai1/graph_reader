@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from 'react';
-import { useGraph } from '../context/GraphContext';
+import { useGraph, isManualCapturePoint } from '../context/GraphContext';
 
 const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', isAxisMappingConfirmed = false, hasReturnUrl = false, isEditingCurve = false, savedCurveViewActive = false }) => {
   const { uploadedImage, graphArea, setGraphArea, dataPoints, addDataPoint, clearDataPoints, graphConfig, deleteDataPoint, convertGraphToCanvasCoordinates, convertCanvasToGraphCoordinates, replaceDataPoints, updateDataPointFromCanvas } = useGraph();
@@ -560,9 +560,16 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       ctx.stroke();
     });
 
-    // Draw dashed preview line from last point to current mouse position (manual capture only)
-    if (!isEditingCurve && !savedCurveViewActive && validPoints.length > 0 && previewMousePos.x !== null && previewMousePos.y !== null) {
-      const lastPoint = validPoints[validPoints.length - 1];
+    // Draw dashed preview line from last manual-capture point to current mouse position
+    const manualCapturePoints = validPoints.filter(isManualCapturePoint);
+    if (
+      !isEditingCurve &&
+      !savedCurveViewActive &&
+      manualCapturePoints.length > 0 &&
+      previewMousePos.x !== null &&
+      previewMousePos.y !== null
+    ) {
+      const lastPoint = manualCapturePoints[manualCapturePoints.length - 1];
       ctx.strokeStyle = '#FFD700';
       ctx.lineWidth = 4;
       ctx.setLineDash([5, 5]);

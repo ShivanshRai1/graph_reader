@@ -5,7 +5,16 @@ import CapturedPointsList from '../components/CapturedPointsList';
 import SavedGraphPreview from '../components/SavedGraphPreview';
 import SavedGraphCombinedPreview from '../components/SavedGraphCombinedPreview';
 import ViewModalPanel from '../components/ViewModalPanel';
-import { useGraph, graphToCanvasWithBounds } from '../context/GraphContext';
+import lineSingleTemplate from '../assets/tc-templates/line-single.json';
+import {
+  buildTypicalCurveExportFromSavedCurves,
+  buildTypicalCurveFilenameForGraph,
+  downloadTypicalCurveFile,
+  inferTypicalCurveExportSourceFromCurves,
+  isSavedCurvesExportReady,
+  resolveGraphConfigForSavedCurvesExport,
+} from '../utils/tcExport';
+import { useGraph, graphToCanvasWithBounds, getManualCapturePoints } from '../context/GraphContext';
 import { clearAnnotationsForCurve } from '../utils/annotationStorage';
 import { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 
@@ -1057,6 +1066,12 @@ const buildCombinedOverlayPoints = (curves) => {
     const points = curve?.points ?? curve?.data_points ?? [];
     const overlayColor = COMBINED_OVERLAY_COLORS[curveIndex % COMBINED_OVERLAY_COLORS.length];
     const overlayCurveId = String(curve?.id ?? curveIndex);
+    const overlayCurveName = String(
+      curve?.config?.curveName || curve?.curve_name || curve?.name || ''
+    ).trim();
+    const overlayCurveIsY2 = Boolean(curve?.config?.isY2 || curve?.isY2);
+    const overlayCurveTemperature =
+      curve?.config?.temperature ?? curve?.temperature ?? '';
     return points
       .map((point) => ({
         x: Number(point.x_value ?? point.x),
@@ -1064,6 +1079,9 @@ const buildCombinedOverlayPoints = (curves) => {
         imported: true,
         overlayColor,
         overlayCurveId,
+        overlayCurveName,
+        overlayCurveIsY2,
+        overlayCurveTemperature,
       }))
       .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
   });
@@ -3525,6 +3543,7 @@ const GraphCapture = () => {
             x: Number(point.x_value ?? point.x),
             y: Number(point.y_value ?? point.y),
             imported: true,
+            overlayCurveId: String(curve?.id ?? curve?.detailId ?? 'saved'),
           }))
           .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y))
         : [];
@@ -3637,6 +3656,52 @@ const GraphCapture = () => {
     setAllCombinedModalLayout(null);
     setCombinedGroupId(group.id);
     applyCombinedGraphOverlay(group.curves);
+  };
+
+  const handleExportGroupToTC = (group) => {
+    const curves = Array.isArray(group?.curves) ? group.curves.filter(Boolean) : [];
+    if (curves.length === 0) {
+      alert('No saved curves to export.');
+      return;
+    }
+    if (!isSavedCurvesExportReady(curves)) {
+      alert('Setup required before exporting .tc: each saved graph needs axis min/max, scale, and unit.');
+      return;
+    }
+
+    try {
+      const exportConfig = resolveGraphConfigForSavedCurvesExport(curves, graphConfig);
+      const source = inferTypicalCurveExportSourceFromCurves(curves, savedCurvesSource);
+      const tcObject = buildTypicalCurveExportFromSavedCurves({
+        template: lineSingleTemplate,
+        graphConfig: exportConfig,
+        curves,
+      });
+      const filename = buildTypicalCurveFilenameForGraph(exportConfig, source, curves.length);
+      downloadTypicalCurveFile(filename, tcObject);
+    } catch (error) {
+      console.error('Failed to export saved curves to .tc:', error);
+      alert(`Failed to export .tc file: ${error.message}`);
+    }
+  };
+
+  const handleExportAllSavedCurvesToTC = () => {
+    if (uniqueSavedCurves.length === 0) {
+      alert('No saved curves to export.');
+      return;
+    }
+    if (groupedCurves.length === 1) {
+      handleExportGroupToTC(groupedCurves[0]);
+      return;
+    }
+
+    const readyGroups = groupedCurves.filter((group) => isSavedCurvesExportReady(group.curves));
+    if (readyGroups.length === 0) {
+      alert('Setup required before exporting .tc: saved graphs need axis min/max, scale, and unit.');
+      return;
+    }
+
+    readyGroups.forEach((group) => handleExportGroupToTC(group));
   };
 
   const handleViewAllCombinedGraphs = () => {
@@ -5086,7 +5151,15 @@ const GraphCapture = () => {
       restoreGraphDisplayFromSavedCurve(firstCurve, graphId, {
         keepCurveNameEmpty: true,
         allCurves: savedCurves,
+        loadPoints: false,
       });
+      const curvesForGraph = savedCurves.filter(
+        (curve) => (curve.graphId || getGraphIdForCurve(curve)) === String(graphId)
+      );
+      const overlayCurves = curvesForGraph.length > 0 ? curvesForGraph : savedCurves;
+      if (overlayCurves.length > 0) {
+        replaceDataPoints(buildCombinedOverlayPoints(overlayCurves));
+      }
       setIsAxisMappingConfirmed(false);
       setFrozenGraphConfig(null);
       setIsReadOnly(false);
@@ -5156,6 +5229,8 @@ const GraphCapture = () => {
     console.log('DataPoints count:', dataPoints.length);
     console.log('DataPoints:', dataPoints);
 
+    const manualCapturePoints = getManualCapturePoints(dataPoints);
+
     const graphTitle = String(graphConfig.graphTitle || '').trim();
     const curveName = String(graphConfig.curveName || '').trim();
     const xTitle = String(graphConfig.xLabel || '').trim();
@@ -5170,7 +5245,7 @@ const GraphCapture = () => {
       alert(`Please enter required fields: ${missingFields.join(', ')}`);
       return null;
     }
-    if (dataPoints.length === 0) {
+    if (manualCapturePoints.length === 0) {
       console.error('Validation failed: No data points captured');
       alert('Please capture at least one data point');
       return null;
@@ -5202,7 +5277,7 @@ const GraphCapture = () => {
     setIsSaving(true);
     try {
       const startTime = Date.now();
-      const { unique: uniquePoints, removed: removedDuplicatePoints } = dedupePointsByXY(dataPoints, 6);
+      const { unique: uniquePoints, removed: removedDuplicatePoints } = dedupePointsByXY(manualCapturePoints, 6);
       if (removedDuplicatePoints > 0) {
         console.warn(`[POINT_DEDUP] Removed ${removedDuplicatePoints} duplicate XY point(s) before saving.`);
       }
@@ -5588,7 +5663,10 @@ const GraphCapture = () => {
     try {
       console.log('Before filtering - dataPoints length:', dataPoints ? dataPoints.length : 'dataPoints is null/undefined');
 
-      const { unique: uniquePointsForCompanyApi, removed: removedDuplicatesForCompanyApi } = dedupePointsByXY(dataPoints, 6);
+      const { unique: uniquePointsForCompanyApi, removed: removedDuplicatesForCompanyApi } = dedupePointsByXY(
+        getManualCapturePoints(dataPoints),
+        6
+      );
       if (removedDuplicatesForCompanyApi > 0) {
         console.warn(`[POINT_DEDUP] Removed ${removedDuplicatesForCompanyApi} duplicate XY point(s) before company API send.`);
       }
@@ -6081,6 +6159,7 @@ const GraphCapture = () => {
             x: point.x_value,
             y: point.y_value,
             imported: true,
+            overlayCurveId: String(curve.id ?? 'saved'),
           }))
         : [];
 
@@ -6094,14 +6173,15 @@ const GraphCapture = () => {
   };
 
   const handleExportCSV = () => {
-    if (dataPoints.length === 0) {
+    const manualCapturePoints = getManualCapturePoints(dataPoints);
+    if (manualCapturePoints.length === 0) {
       alert('No data points to export');
       return;
     }
 
     // Generate CSV content
     let csv = 'X Value,Y Value\n';
-    dataPoints.forEach((point) => {
+    manualCapturePoints.forEach((point) => {
       const x = typeof point.x === 'number' && !isNaN(point.x) ? point.x.toFixed(6) : 'Invalid';
       const y = typeof point.y === 'number' && !isNaN(point.y) ? point.y.toFixed(6) : 'Invalid';
       csv += `${x},${y}\n`;
@@ -6318,13 +6398,20 @@ const GraphCapture = () => {
                   <h2 className="text-lg font-bold mb-4" style={{ color: '#213547' }}>
                     Saved Graphs
                   </h2>
-                  <div className="mb-3">
+                  <div className="mb-3 flex flex-wrap gap-2">
                     <button
                       className="px-3 py-1 rounded bg-yellow-400 text-black text-xs"
                       style={{ backgroundColor: '#facc15', color: '#111827', borderColor: '#facc15' }}
                       onClick={handleViewAllCombinedGraphs}
                     >
                       View all graphs combined
+                    </button>
+                    <button
+                      className="px-3 py-1 rounded bg-gray-700 text-white text-xs"
+                      onClick={handleExportAllSavedCurvesToTC}
+                      title="Export all saved curves on this graph into HPPeval .tc file(s)"
+                    >
+                      Export all .tc
                     </button>
                   </div>
                   <div className="flex flex-col gap-4 max-h-80 overflow-y-auto pr-2">
@@ -6334,12 +6421,21 @@ const GraphCapture = () => {
                           <div className="font-semibold" style={{ color: '#213547' }}>
                             {group.curves[0]?.config?.graphTitle || group.curves[0]?.graph_title || `Graph ${groupIndex + 1}`} ({group.curves.length} curves)
                           </div>
-                          <button
-                            className="px-3 py-1 rounded bg-gray-900 text-white text-xs"
-                            onClick={() => handleViewCombinedGroup(group)}
-                          >
-                            View combined graph
-                          </button>
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              className="px-3 py-1 rounded bg-gray-900 text-white text-xs"
+                              onClick={() => handleViewCombinedGroup(group)}
+                            >
+                              View combined graph
+                            </button>
+                            <button
+                              className="px-3 py-1 rounded bg-gray-700 text-white text-xs"
+                              onClick={() => handleExportGroupToTC(group)}
+                              title="Export all curves in this graph to one HPPeval .tc file"
+                            >
+                              Export .tc
+                            </button>
+                          </div>
                         </div>
                         <div className="flex flex-col gap-2">
                           {group.curves.map((curve) => (
