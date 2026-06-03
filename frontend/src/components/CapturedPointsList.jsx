@@ -1,5 +1,12 @@
 import { useGraph } from '../context/GraphContext';
 import { parseFile } from '../utils/fileParser';
+import {
+  buildTypicalCurveExport,
+  buildTypicalCurveFilename,
+  downloadTypicalCurveFile,
+  inferTypicalCurveExportSource,
+} from '../utils/tcExport';
+import lineSingleTemplate from '../assets/tc-templates/line-single.json';
 import { useEffect, useState } from 'react';
 
 const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false, isEditingCurve = false }) => {
@@ -110,6 +117,31 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false, isEditin
       graphConfig.xUnitPrefix && graphConfig.xUnitPrefix !== '' &&
       graphConfig.yUnitPrefix && graphConfig.yUnitPrefix !== ''
     );
+  };
+
+  const exportToTC = () => {
+    if (dataPoints.length === 0) {
+      alert('No data points to export');
+      return;
+    }
+    if (!isConfigValid()) {
+      alert('Setup required before exporting .tc: draw the graph area, set axis min/max, scale, and unit.');
+      return;
+    }
+
+    try {
+      const source = inferTypicalCurveExportSource(dataPoints);
+      const tcObject = buildTypicalCurveExport({
+        template: lineSingleTemplate,
+        graphConfig,
+        dataPoints,
+      });
+      const filename = buildTypicalCurveFilename(graphConfig, source);
+      downloadTypicalCurveFile(filename, tcObject);
+    } catch (error) {
+      console.error('Failed to export .tc file:', error);
+      alert('Failed to export .tc file. Check the console for details.');
+    }
   };
 
   const exportToCSV = () => {
@@ -320,6 +352,14 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false, isEditin
           disabled={dataPoints.length === 0}
         >
           📄 Export CSV
+        </button>
+        <button
+          onClick={exportToTC}
+          className="px-4 py-2 rounded bg-gray-700 text-white font-medium disabled:opacity-50"
+          disabled={dataPoints.length === 0 || !isConfigValid()}
+          title={!isConfigValid() ? 'Setup required: draw the graph area, set axis min/max, scale, and unit' : 'Download captured points as HPPeval Typical Curve (.tc) file'}
+        >
+          Export .tc
         </button>
         <button 
           onClick={exportToJSON} 
