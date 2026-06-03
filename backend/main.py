@@ -428,6 +428,25 @@ def get_curve_by_graph_id(graph_id: str, db: Session = Depends(get_db)):
             detail=f"Error fetching curve: {str(e)}"
         )
 
+@app.get("/api/curves/all-by-graph/{graph_id}", response_model=List[CurveResponse])
+def get_all_curves_by_graph_id(graph_id: str, db: Session = Depends(get_db)):
+    """Get all curves for a discoveree_graph_id (supports multi-curve manual graphs)"""
+    try:
+        curves = (
+            db.query(Curve)
+            .filter(Curve.discoveree_graph_id == str(graph_id))
+            .order_by(Curve.id.asc())
+            .all()
+        )
+        return curves
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching curves: {str(e)}"
+        )
+
 @app.put("/api/curves/{curve_id}", response_model=CurveResponse)
 def update_curve(curve_id: int, curve_update: CurveUpdate, db: Session = Depends(get_db)):
     """Update a curve"""

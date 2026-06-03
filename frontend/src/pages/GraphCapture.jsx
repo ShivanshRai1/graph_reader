@@ -681,6 +681,244 @@ const persistGraphContext = (graphId, area, axisConfig = {}, options = {}) => {
   }
 };
 
+const readPersistedGraphImageKey = (graphId) => {
+  const normalizedGraphId = String(graphId || '').trim();
+  if (!normalizedGraphId) return '';
+
+  try {
+    return String(localStorage.getItem(`graph_image_${normalizedGraphId}`) || '');
+  } catch (error) {
+    console.warn('[DEBUG] Failed to read persisted graph image key:', error);
+    return '';
+  }
+};
+
+const resolveAxisValueForPersist = (...values) => {
+  for (const candidate of values) {
+    if (isValidSymbolValue(candidate)) {
+      return String(candidate).trim();
+    }
+  }
+  return '';
+};
+
+const getCurveMergeKey = (curve) => {
+  const detailId = String(curve?.detailId || curve?.detail_id || '').trim();
+  if (detailId) return `d:${detailId}`;
+
+  const graphId = String(curve?.graphId || '').trim();
+  const id = String(curve?.id || '').trim();
+  if (id) return `i:${graphId}:${id}`;
+
+  const name = String(curve?.name || curve?.config?.curveName || curve?.curve_name || '').trim();
+  return `n:${graphId}:${name}`;
+};
+
+const shouldReplaceMergedCurve = (existing, candidate) => {
+  if (!existing) return true;
+  if (candidate?.locallyModified && !existing?.locallyModified) return true;
+  if (existing?.locallyModified && !candidate?.locallyModified) return false;
+
+  const existingTs = Number(existing?.updatedAt || 0);
+  const candidateTs = Number(candidate?.updatedAt || 0);
+  if (candidateTs > existingTs) return true;
+  if (candidateTs < existingTs) return false;
+
+  if (candidate?.locallyModified) return true;
+
+  const existingPointCount = Array.isArray(existing?.points) ? existing.points.length : 0;
+  const candidatePointCount = Array.isArray(candidate?.points) ? candidate.points.length : 0;
+  return candidatePointCount > existingPointCount;
+};
+
+const mergeCurvesForRestore = (...sources) => {
+  const merged = new Map();
+
+  sources.flat().forEach((curve) => {
+    if (!curve) return;
+    const key = getCurveMergeKey(curve);
+    const existing = merged.get(key);
+    if (shouldReplaceMergedCurve(existing, curve)) {
+      merged.set(key, curve);
+    }
+  });
+
+  return dedupeCurvesByGraphAndName(Array.from(merged.values()));
+};
+
+const dedupeCurvesByGraphAndName = (curves = []) => {
+  const byName = new Map();
+
+  curves.forEach((curve) => {
+    const graphId = String(curve?.graphId || '').trim();
+    const name = String(curve?.name || curve?.config?.curveName || curve?.curve_name || '').trim();
+    const key = `${graphId}::${name}`;
+    const existing = byName.get(key);
+    if (shouldReplaceMergedCurve(existing, curve)) {
+      byName.set(key, curve);
+    }
+  });
+
+  return dedupeCurves(Array.from(byName.values()));
+};
+
+const normalizeCurveForStorage = (curve) => {
+  if (!curve || typeof curve !== 'object') return null;
+  const graphImageUrl = String(curve.graphImageUrl || curve.graph_img || '');
+  return {
+    ...curve,
+    graphImageUrl: graphImageUrl.startsWith('data:') ? '' : graphImageUrl,
+  };
+};
+
+const getPersistedSavedCurves = (graphId) => {
+  const normalizedGraphId = String(graphId || '').trim();
+  if (!normalizedGraphId) return null;
+
+  try {
+    const raw = localStorage.getItem(`saved_curves_${normalizedGraphId}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !Array.isArray(parsed.curves)) return null;
+    return {
+      savedAt: Number(parsed.savedAt || 0),
+      source: parsed.source || 'company',
+      curves: parsed.curves.filter(Boolean),
+    };
+  } catch (error) {
+    console.warn('[DEBUG] Failed to read persisted saved curves:', error);
+    return null;
+  }
+};
+
+const persistSavedCurves = (graphId, curves, source = 'company') => {
+  const normalizedGraphId = String(graphId || '').trim();
+  if (!normalizedGraphId) return;
+
+  const list = Array.isArray(curves) ? curves.filter(Boolean) : [];
+  if (list.length === 0) return;
+
+  try {
+    localStorage.setItem(
+      `saved_curves_${normalizedGraphId}`,
+      JSON.stringify({
+        savedAt: Date.now(),
+        source,
+        curves: list.map((curve) => normalizeCurveForStorage(curve)).filter(Boolean),
+      })
+    );
+  } catch (error) {
+    console.warn('[DEBUG] Failed to persist saved curves:', error);
+  }
+};
+
+const clearPersistedSavedCurves = (graphId) => {
+  const normalizedGraphId = String(graphId || '').trim();
+  if (!normalizedGraphId) return;
+
+  try {
+    localStorage.removeItem(`saved_curves_${normalizedGraphId}`);
+  } catch (error) {
+    console.warn('[DEBUG] Failed to clear persisted saved curves:', error);
+  }
+};
+
+const hydrateStoredCurves = (curves, graphId) => {
+  const fallbackImage = readPersistedGraphImageKey(graphId);
+  return (Array.isArray(curves) ? curves : []).map((curve) => {
+    const graphImageUrl =
+      curve?.graphImageUrl ||
+      curve?.graph_img ||
+      fallbackImage ||
+      '';
+    return {
+      ...curve,
+      graphImageUrl,
+      graphGroupId: curve?.graphGroupId || buildGraphGroupId(graphImageUrl),
+    };
+  });
+};
+
+const mapLocalApiCurveToSavedCurve = (curve, graphId, graphImageUrl = '') => {
+  const resolvedImage = graphImageUrl || curve?.graph_image || '';
+  const graphGroupId = buildGraphGroupId(resolvedImage || '');
+  return {
+    id: curve.id,
+    detailId: '',
+    graphId: String(graphId || curve.discoveree_graph_id || ''),
+    discoveree_cat_id: curve.discoveree_cat_id || null,
+    name: curve.curve_name || `Curve ${curve.id}`,
+    points: Array.isArray(curve.data_points)
+      ? curve.data_points.map((pt) => ({ x_value: pt.x_value, y_value: pt.y_value }))
+      : [],
+    symbolValues: {},
+    config: {
+      graphTitle: curve.graph_title || '',
+      curveName: curve.curve_name || '',
+      xScale: curve.x_scale || 'Linear',
+      yScale: curve.y_scale || 'Linear',
+      xUnitPrefix: curve.x_unit || '1',
+      yUnitPrefix: curve.y_unit || '1',
+      xMin: resolveAxisValueForPersist(curve.x_min),
+      xMax: resolveAxisValueForPersist(curve.x_max),
+      yMin: resolveAxisValueForPersist(curve.y_min),
+      yMax: resolveAxisValueForPersist(curve.y_max),
+      logDataModeX: (curve.x_scale || 'Linear') === 'Logarithmic' ? 'actual' : 'linear',
+      logDataModeY: (curve.y_scale || 'Linear') === 'Logarithmic' ? 'actual' : 'linear',
+      temperature: curve.temperature || '',
+    },
+    graphGroupId,
+    graphImageUrl: resolvedImage,
+    updatedAt: curve.created_at ? Date.parse(curve.created_at) || 0 : 0,
+  };
+};
+
+const fetchAllLocalCurvesByGraphId = async (apiUrl, graphId) => {
+  const normalizedGraphId = String(graphId || '').trim();
+  if (!normalizedGraphId || !apiUrl) return [];
+
+  try {
+    const response = await fetch(
+      `${apiUrl}/api/curves/all-by-graph/${encodeURIComponent(normalizedGraphId)}`
+    );
+    if (!response.ok) return [];
+    const data = await response.json();
+    return Array.isArray(data) ? data : [];
+  } catch (error) {
+    console.warn('[DEBUG] Failed to fetch all local curves by graph:', error);
+    return [];
+  }
+};
+
+const buildRestoredSavedCurves = ({
+  graphId,
+  companyCurves = [],
+  localApiCurvesRaw = [],
+  graphImageUrl = '',
+}) => {
+  const persisted = getPersistedSavedCurves(graphId);
+  const localApiCurves = localApiCurvesRaw.map((curve) =>
+    mapLocalApiCurveToSavedCurve(curve, graphId, graphImageUrl)
+  );
+  const merged = mergeCurvesForRestore(
+    companyCurves,
+    localApiCurves,
+    persisted?.curves || []
+  );
+  const hydrated = hydrateStoredCurves(merged, graphId).map((curve) => ({
+    ...curve,
+    graphImageUrl: curve.graphImageUrl || graphImageUrl,
+    graphGroupId: curve.graphGroupId || buildGraphGroupId(graphImageUrl || curve.graphImageUrl || ''),
+  }));
+
+  return {
+    curves: dedupeCurves(hydrated),
+    source:
+      persisted?.source ||
+      (companyCurves.length > 0 ? 'company' : localApiCurves.length > 0 ? 'local' : 'company'),
+  };
+};
+
 const buildImportedPointsForCurve = (curve, area, config) => {
   const pointList = Array.isArray(curve?.points) ? curve.points : [];
   return pointList
@@ -4040,8 +4278,8 @@ const GraphCapture = () => {
       await pushEditedCurveToApi(targetCurve, editCurveMeta, editCurveSymbolValues, editCurveName);
       syncGraphIdContext(targetCurve.graphId || getGraphIdForCurve(targetCurve));
 
-      setSavedCurves((prev) =>
-        prev.map((curve) => {
+      setSavedCurves((prev) => {
+        const next = prev.map((curve) => {
           if (curve.id !== curveId) return curve;
           const updatedName = editCurveName || curve.name;
           return {
@@ -4064,9 +4302,21 @@ const GraphCapture = () => {
             y_scale: editCurveMeta.yScale,
             x_unit: editCurveMeta.xUnitPrefix,
             y_unit: editCurveMeta.yUnitPrefix,
+            updatedAt: Date.now(),
+            locallyModified: true,
           };
-        })
-      );
+        });
+        const updatedGraphId = String(
+          targetCurve.graphId || getGraphIdForCurve(targetCurve) || urlParams.graph_id || ''
+        ).trim();
+        if (updatedGraphId) {
+          const curvesForGraph = next.filter(
+            (curve) => (curve.graphId || getGraphIdForCurve(curve)) === updatedGraphId
+          );
+          persistSavedCurves(updatedGraphId, curvesForGraph, savedCurvesSource);
+        }
+        return next;
+      });
       const updatedGraphId = String(targetCurve.graphId || getGraphIdForCurve(targetCurve) || urlParams.graph_id || '').trim();
       if (updatedGraphId && graphArea.width > 0 && graphArea.height > 0) {
         persistGraphContext(updatedGraphId, graphArea, graphConfig);
@@ -4204,6 +4454,19 @@ const GraphCapture = () => {
       await removeCurveViaApi(curve);
       const remainingCurves = savedCurves.filter((item) => item.id !== curve.id);
       setSavedCurves(remainingCurves);
+      const activeGraphId = String(
+        curve.graphId || getGraphIdForCurve(curve) || urlParams.graph_id || ''
+      ).trim();
+      if (activeGraphId) {
+        const curvesForGraph = remainingCurves.filter(
+          (item) => (item.graphId || getGraphIdForCurve(item)) === activeGraphId
+        );
+        if (curvesForGraph.length > 0) {
+          persistSavedCurves(activeGraphId, curvesForGraph, savedCurvesSource);
+        } else {
+          clearPersistedSavedCurves(activeGraphId);
+        }
+      }
       if (remainingCurves.length === 0) {
         clearGraphIdContext();
       }
@@ -4239,6 +4502,9 @@ const GraphCapture = () => {
 
       const removedIds = new Set(curvesToRemove.map((curve) => curve.id));
       setSavedCurves((prev) => prev.filter((curve) => !removedIds.has(curve.id)));
+      if (activeGraphId) {
+        clearPersistedSavedCurves(String(activeGraphId));
+      }
       clearGraphIdContext();
     } catch (error) {
       console.error('Remove all API error:', error);
@@ -4587,8 +4853,24 @@ const GraphCapture = () => {
             const dedupedFetched = dedupeCurves(fetched);
             console.log('[DEBUG] Total fetched curves:', fetched.length, 'after dedupe:', dedupedFetched.length);
             if (dedupedFetched.length > 0) {
-              console.log('[DEBUG] Setting savedCurves...');
-              setSavedCurves(dedupedFetched);
+              const localApiCurvesRaw = await fetchAllLocalCurvesByGraphId(
+                apiUrl,
+                discovereeGraph.graph_id || graphId
+              );
+              const restored = buildRestoredSavedCurves({
+                graphId: discovereeGraph.graph_id || graphId,
+                companyCurves: dedupedFetched,
+                localApiCurvesRaw,
+                graphImageUrl,
+              });
+              console.log('[DEBUG] Setting savedCurves after restore merge:', restored.curves.length);
+              setSavedCurves(restored.curves);
+              setSavedCurvesSource(restored.source);
+              persistSavedCurves(
+                discovereeGraph.graph_id || graphId,
+                restored.curves,
+                restored.source
+              );
               activateAppendSession(discovereeGraph.graph_id, graphImageUrl, 'fetchGraphById');
 
               if (graphImageUrl) {
@@ -4627,10 +4909,41 @@ const GraphCapture = () => {
               persistGraphImage(discovereeGraph.graph_id || graphId, graphImageUrl);
             }
 
-            setSavedCurves([]);
-            setSavedCurvesSource('company');
+            const localApiCurvesRaw = await fetchAllLocalCurvesByGraphId(
+              apiUrl,
+              discovereeGraph.graph_id || graphId
+            );
+            const restored = buildRestoredSavedCurves({
+              graphId: discovereeGraph.graph_id || graphId,
+              companyCurves: [],
+              localApiCurvesRaw,
+              graphImageUrl,
+            });
+
+            if (restored.curves.length > 0) {
+              console.log('[DEBUG] Restored saved curves from local persistence:', restored.curves.length);
+              setSavedCurves(restored.curves);
+              setSavedCurvesSource(restored.source);
+              persistSavedCurves(
+                discovereeGraph.graph_id || graphId,
+                restored.curves,
+                restored.source
+              );
+              activateAppendSession(
+                discovereeGraph.graph_id,
+                graphImageUrl || restored.curves[0]?.graphImageUrl || '',
+                'fetchGraphById-emptyDetails-restored'
+              );
+
+              if (graphImageUrl || restored.curves[0]?.graphImageUrl) {
+                setUploadedImageFromExistingGraph(graphImageUrl || restored.curves[0]?.graphImageUrl);
+              }
+            } else {
+              setSavedCurves([]);
+              setSavedCurvesSource('company');
+              activateAppendSession(discovereeGraph.graph_id, '', 'fetchGraphById-emptyDetails');
+            }
             setShouldSkipCaptureChoiceAfterAi(false);
-            activateAppendSession(discovereeGraph.graph_id, '', 'fetchGraphById-emptyDetails');
 
             if (resolvedGraphTitle && !urlParams.graph_title) {
               setGraphConfig((prev) => ({
@@ -4644,70 +4957,61 @@ const GraphCapture = () => {
 
         // Fallback: Try Netlify deployed backend (same domain)
         console.log('[DEBUG] DiscoverEE failed or returned no data, trying Netlify fallback...');
-        let curve = await fetchLocalCurveByDiscovereeId({
-          graphId,
-          discovereeCatId: discovereeCatIdFromUrl,
-        });
+        const localApiCurvesRaw = await fetchAllLocalCurvesByGraphId(apiUrl, graphId);
+        let curve = localApiCurvesRaw[0] || null;
+        if (!curve) {
+          curve = await fetchLocalCurveByDiscovereeId({
+            graphId,
+            discovereeCatId: discovereeCatIdFromUrl,
+          });
+          if (curve) {
+            localApiCurvesRaw.push(curve);
+          }
+        }
 
-        if (curve) {
-          console.log('[DEBUG] Netlify response:', curve);
+        const persistedOnly = getPersistedSavedCurves(graphId);
+        const hasLocalOrPersisted =
+          localApiCurvesRaw.length > 0 || (persistedOnly?.curves?.length || 0) > 0;
+
+        if (hasLocalOrPersisted) {
           const resolvedLocalImage = await resolveReachableGraphImageUrl(
             {},
             [],
             graphId,
             {
               restoredPending: normalizeImageCandidate(restoredPendingImageRef.current),
-              localGraphImage: curve.graph_image || '',
+              localGraphImage: curve?.graph_image || localApiCurvesRaw[0]?.graph_image || '',
               persistedGraphImage: getPersistedGraphImage(graphId),
             }
           );
           logGraphImageAvailability(graphId, resolvedLocalImage, 'local-backend-fallback', {
-            localCurveId: curve.id || '',
-            localGraphImagePresent: Boolean(String(curve.graph_image || '').trim()),
+            localCurveId: curve?.id || localApiCurvesRaw[0]?.id || '',
+            localGraphImagePresent: Boolean(
+              String(curve?.graph_image || localApiCurvesRaw[0]?.graph_image || '').trim()
+            ),
             restoredPendingImagePresent: Boolean(String(restoredPendingImageRef.current || '').trim()),
           });
-          const graphGroupId = buildGraphGroupId(resolvedLocalImage || '');
-          const savedCurve = {
-            id: curve.id,
-            detailId: '',
-            graphId: String(graphId || ''),
-            discoveree_cat_id: curve.discoveree_cat_id || null,
-            name: curve.curve_name || `Curve ${curve.id}`,
-            points: Array.isArray(curve.data_points)
-              ? curve.data_points.map((pt) => ({ x_value: pt.x_value, y_value: pt.y_value }))
-              : [],
-            symbolValues: {},
-            config: {
-              graphTitle: curve.graph_title || '',
-              curveName: curve.curve_name || '',
-              xScale: curve.x_scale || 'Linear',
-              yScale: curve.y_scale || 'Linear',
-              xUnitPrefix: curve.x_unit || '1',
-              yUnitPrefix: curve.y_unit || '1',
-              xMin: resolveAxisValue(curve.x_min),
-              xMax: resolveAxisValue(curve.x_max),
-              yMin: resolveAxisValue(curve.y_min),
-              yMax: resolveAxisValue(curve.y_max),
-              logDataModeX: (curve.x_scale || 'Linear') === 'Logarithmic' ? 'actual' : 'linear',
-              logDataModeY: (curve.y_scale || 'Linear') === 'Logarithmic' ? 'actual' : 'linear',
-              temperature: curve.temperature || '',
-            },
-            graphGroupId,
+          const restored = buildRestoredSavedCurves({
+            graphId,
+            companyCurves: [],
+            localApiCurvesRaw,
             graphImageUrl: resolvedLocalImage,
-          };
-          console.log('[DEBUG] Setting savedCurves from Netlify...');
-          setSavedCurves([savedCurve]);
+          });
+          console.log('[DEBUG] Setting savedCurves from local restore merge:', restored.curves.length);
+          setSavedCurves(restored.curves);
+          setSavedCurvesSource(restored.source);
+          persistSavedCurves(graphId, restored.curves, restored.source);
 
           if (graphId && resolvedLocalImage) {
             persistGraphImage(graphId, resolvedLocalImage);
             setUploadedImageFromExistingGraph(resolvedLocalImage);
           }
-          
-          // Auto-populate graph title from fetched data if not already set
-          if (savedCurve?.config?.graphTitle && !urlParams.graph_title) {
+
+          const firstSavedCurve = restored.curves[0];
+          if (firstSavedCurve?.config?.graphTitle && !urlParams.graph_title) {
             setGraphConfig((prev) => ({
               ...prev,
-              graphTitle: savedCurve.config.graphTitle,
+              graphTitle: firstSavedCurve.config.graphTitle,
             }));
           }
         } else {
@@ -4723,6 +5027,21 @@ const GraphCapture = () => {
     };
     fetchGraphById().finally(() => setIsInitialGraphFetchPending(false));
   }, []); // graphId is parsed from URL directly
+
+  // Keep saved curves in localStorage after initial fetch completes (backup for any state updates).
+  useEffect(() => {
+    if (isInitialGraphFetchPending) return;
+
+    const graphId = String(urlParams.graph_id || activeSessionGraphIdRef.current || '').trim();
+    if (!graphId || savedCurves.length === 0) return;
+
+    const curvesForGraph = savedCurves.filter(
+      (curve) => (curve.graphId || getGraphIdForCurve(curve)) === graphId
+    );
+    if (curvesForGraph.length === 0) return;
+
+    persistSavedCurves(graphId, curvesForGraph, savedCurvesSource);
+  }, [savedCurves, urlParams.graph_id, savedCurvesSource, isInitialGraphFetchPending]);
 
   // Auto-load graph context (image + axis settings) and restore saved curve points after refresh.
   useEffect(() => {
@@ -5108,6 +5427,8 @@ const GraphCapture = () => {
         },
         graphGroupId,
         graphImageUrl,
+        updatedAt: Date.now(),
+        locallyModified: true,
       };
       console.log('Saving curve with config:', savedCurve.config);
       console.log('xUnitPrefix:', savedCurve.config.xUnitPrefix);
@@ -5132,10 +5453,17 @@ const GraphCapture = () => {
         });
       }
       
-      setSavedCurves((prev) => [
-        ...prev,
-        savedCurve,
-      ]);
+      setSavedCurves((prev) => {
+        const next = [...prev, savedCurve];
+        const persistGraphId = String(urlParams.graph_id || companyGraphId || '').trim();
+        if (persistGraphId) {
+          const curvesForGraph = next.filter(
+            (curve) => (curve.graphId || getGraphIdForCurve(curve)) === persistGraphId
+          );
+          persistSavedCurves(persistGraphId, curvesForGraph, savedCurvesSource);
+        }
+        return next;
+      });
 
       const persistGraphId = String(urlParams.graph_id || companyGraphId || '').trim();
       if (persistGraphId && graphArea.width > 0 && graphArea.height > 0) {
