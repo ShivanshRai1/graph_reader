@@ -1058,6 +1058,114 @@ const resolveAxisBoundsWithFallback = (curves) => {
   return { xMin: storedXMin, xMax: storedXMax, yMin: storedYMin, yMax: storedYMax, source: 'fallback' };
 };
 
+const hasValidStoredAxisBounds = (bounds = {}) => {
+  const xMin = parseFloat(bounds.xMin);
+  const xMax = parseFloat(bounds.xMax);
+  const yMin = parseFloat(bounds.yMin);
+  const yMax = parseFloat(bounds.yMax);
+  return (
+    Number.isFinite(xMin) &&
+    Number.isFinite(xMax) &&
+    Number.isFinite(yMin) &&
+    Number.isFinite(yMax) &&
+    xMax > xMin &&
+    yMax > yMin
+  );
+};
+
+const pickStoredAxisBounds = (source = {}) => {
+  if (!source || typeof source !== 'object') return null;
+  const xMin = parseFloat(source.xMin);
+  const xMax = parseFloat(source.xMax);
+  const yMin = parseFloat(source.yMin);
+  const yMax = parseFloat(source.yMax);
+  if (!hasValidStoredAxisBounds({ xMin, xMax, yMin, yMax })) return null;
+  return { xMin, xMax, yMin, yMax };
+};
+
+const resolveDataBoundsFromCurves = (curves = []) => {
+  const curveList = Array.isArray(curves) ? curves : (curves ? [curves] : []);
+  const allPoints = curveList.flatMap((curve) => {
+    const pts = curve?.points ?? curve?.data_points ?? [];
+    return pts
+      .map((pt) => ({
+        x: Number(pt.x_value ?? pt.x),
+        y: Number(pt.y_value ?? pt.y),
+      }))
+      .filter((pt) => Number.isFinite(pt.x) && Number.isFinite(pt.y));
+  });
+
+  if (allPoints.length === 0) {
+    return { xMin: '', xMax: '', yMin: '', yMax: '' };
+  }
+
+  const xs = allPoints.map((pt) => pt.x);
+  const ys = allPoints.map((pt) => pt.y);
+  return {
+    xMin: Math.min(...xs),
+    xMax: Math.max(...xs),
+    yMin: Math.min(...ys),
+    yMax: Math.max(...ys),
+  };
+};
+
+// Prefer confirmed graph axis bounds for view previews (matches main canvas), not point auto-zoom.
+const resolveAxisBoundsForGraphPreview = (curves, { graphId = '', liveGraphConfig = {} } = {}) => {
+  const curveList = Array.isArray(curves) ? curves : (curves ? [curves] : []);
+
+  if (curveList.length > 0) {
+    const fromCurve = pickStoredAxisBounds(normalizeCurveConfigFields(curveList[0]));
+    if (fromCurve) return { ...fromCurve, source: 'curve' };
+  }
+
+  const normalizedGraphId = String(graphId || '').trim();
+  if (normalizedGraphId) {
+    const persistedAxis = getPersistedGraphContext(normalizedGraphId)?.axis;
+    const fromPersisted = pickStoredAxisBounds(persistedAxis);
+    if (fromPersisted) return { ...fromPersisted, source: 'persisted' };
+  }
+
+  const fromLive = pickStoredAxisBounds(liveGraphConfig);
+  if (fromLive) return { ...fromLive, source: 'live' };
+
+  return resolveAxisBoundsWithFallback(curveList);
+};
+
+const buildSavedGraphPreviewConfig = (
+  curve,
+  { graphId = '', liveGraphConfig = {}, urlParams = {} } = {}
+) => {
+  const cfg = normalizeCurveConfigFields(curve);
+  const bounds = resolveAxisBoundsForGraphPreview([curve], { graphId, liveGraphConfig });
+  return {
+    ...cfg,
+    xMin: bounds.xMin,
+    xMax: bounds.xMax,
+    yMin: bounds.yMin,
+    yMax: bounds.yMax,
+    xLabel: cfg.xLabel || liveGraphConfig.xLabel || urlParams.x_label || '',
+    yLabel: cfg.yLabel || liveGraphConfig.yLabel || urlParams.y_label || '',
+  };
+};
+
+const buildSavedGraphCombinedPreviewConfig = (
+  curves = [],
+  { graphId = '', liveGraphConfig = {}, urlParams = {} } = {}
+) => {
+  const first = curves[0];
+  const cfg = first ? normalizeCurveConfigFields(first) : {};
+  const bounds = resolveAxisBoundsForGraphPreview(curves, { graphId, liveGraphConfig });
+  return {
+    ...cfg,
+    xMin: bounds.xMin,
+    xMax: bounds.xMax,
+    yMin: bounds.yMin,
+    yMax: bounds.yMax,
+    xLabel: cfg.xLabel || liveGraphConfig.xLabel || urlParams.x_label || '',
+    yLabel: cfg.yLabel || liveGraphConfig.yLabel || urlParams.y_label || '',
+  };
+};
+
 const COMBINED_OVERLAY_COLORS = ['#2563eb', '#16a34a', '#f97316', '#e11d48', '#0ea5e9', '#8b5cf6', '#14b8a6'];
 
 const buildCombinedOverlayPoints = (curves) => {
@@ -3017,7 +3125,7 @@ const GraphCapture = () => {
   );
   const [savedCurvesSource, setSavedCurvesSource] = useState('company');
   const [showSavedPanel, setShowSavedPanel] = useState(false);
-  const [previewSortByX, setPreviewSortByX] = useState(false);
+  const [previewSortByX, setPreviewSortByX] = useState(true);
   const [isUpdatingCurveId, setIsUpdatingCurveId] = useState('');
   const [isRemovingCurveId, setIsRemovingCurveId] = useState('');
   const [isRemovingAllGraphs, setIsRemovingAllGraphs] = useState(false);
@@ -6770,10 +6878,24 @@ const GraphCapture = () => {
             />
             {(() => {
               const cfg = normalizeCurveConfig(selectedCurve);
-              const bounds = resolveAxisBoundsWithFallback([selectedCurve]);
+              const previewGraphId = String(
+                selectedCurve?.graphId || urlParams.graph_id || activeSessionGraphIdRef.current || ''
+              ).trim();
+              const bounds = resolveAxisBoundsForGraphPreview([selectedCurve], {
+                graphId: previewGraphId,
+                liveGraphConfig: graphConfig,
+              });
+              const dataBounds = resolveDataBoundsFromCurves([selectedCurve]);
               const xTitle = cfg.xLabel || urlParams.x_label || '';
               const yTitle = cfg.yLabel || urlParams.y_label || '';
               const partNo = selectedCurve?.part_number || selectedCurve?.config?.partNumber || urlParams.partno || '';
+              const showDataRange =
+                bounds.source !== 'computed' &&
+                Number.isFinite(dataBounds.yMin) &&
+                Number.isFinite(dataBounds.yMax) &&
+                Number.isFinite(bounds.yMin) &&
+                Number.isFinite(bounds.yMax) &&
+                Math.abs(dataBounds.yMax - dataBounds.yMin) < Math.abs(bounds.yMax - bounds.yMin) * 0.25;
               return (
                 <div style={{ fontSize: 12, color: '#444', background: '#f5f5f5', borderRadius: 5, padding: '8px 12px', marginBottom: 8, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px 24px' }}>
                   {partNo && (
@@ -6791,10 +6913,16 @@ const GraphCapture = () => {
                       <span style={{ fontWeight: 600 }}>Curve Name:</span> {cfg.curveName}
                     </div>
                   )}
-                  <div><span style={{ fontWeight: 600 }}>X Min:</span> {formatDisplayValue(bounds.xMin)}</div>
-                  <div><span style={{ fontWeight: 600 }}>Y Min:</span> {formatDisplayValue(bounds.yMin)}</div>
-                  <div><span style={{ fontWeight: 600 }}>X Max:</span> {formatDisplayValue(bounds.xMax)}</div>
-                  <div><span style={{ fontWeight: 600 }}>Y Max:</span> {formatDisplayValue(bounds.yMax)}</div>
+                  <div><span style={{ fontWeight: 600 }}>Axis X Min:</span> {formatDisplayValue(bounds.xMin)}</div>
+                  <div><span style={{ fontWeight: 600 }}>Axis Y Min:</span> {formatDisplayValue(bounds.yMin)}</div>
+                  <div><span style={{ fontWeight: 600 }}>Axis X Max:</span> {formatDisplayValue(bounds.xMax)}</div>
+                  <div><span style={{ fontWeight: 600 }}>Axis Y Max:</span> {formatDisplayValue(bounds.yMax)}</div>
+                  {showDataRange && (
+                    <>
+                      <div><span style={{ fontWeight: 600 }}>Data Y Min:</span> {formatDisplayValue(dataBounds.yMin)}</div>
+                      <div><span style={{ fontWeight: 600 }}>Data Y Max:</span> {formatDisplayValue(dataBounds.yMax)}</div>
+                    </>
+                  )}
                   <div><span style={{ fontWeight: 600 }}>X Scale:</span> {cfg.xScale || '—'}</div>
                   <div><span style={{ fontWeight: 600 }}>Y Scale:</span> {cfg.yScale || '—'}</div>
                   {xTitle && <div><span style={{ fontWeight: 600 }}>X Title:</span> {xTitle}</div>}
@@ -6879,11 +7007,13 @@ const GraphCapture = () => {
             <div style={{ marginTop: 12 }}>
               <SavedGraphPreview
                 points={selectedCurvePoints}
-                config={{
-                  ...normalizeCurveConfig(selectedCurve),
-                  xLabel: normalizeCurveConfig(selectedCurve).xLabel || urlParams.x_label,
-                  yLabel: normalizeCurveConfig(selectedCurve).yLabel || urlParams.y_label,
-                }}
+                config={buildSavedGraphPreviewConfig(selectedCurve, {
+                  graphId: String(
+                    selectedCurve?.graphId || urlParams.graph_id || activeSessionGraphIdRef.current || ''
+                  ).trim(),
+                  liveGraphConfig: graphConfig,
+                  urlParams,
+                })}
                 width={600}
                 height={240}
                 animate
@@ -6985,7 +7115,24 @@ const GraphCapture = () => {
             />
             {(() => {
               const cfg = normalizeCurveConfig(selectedGroup.curves[0]);
-              const bounds = resolveAxisBoundsWithFallback(selectedGroup.curves);
+              const previewGraphId = String(
+                selectedGroup.curves[0]?.graphId ||
+                urlParams.graph_id ||
+                activeSessionGraphIdRef.current ||
+                ''
+              ).trim();
+              const bounds = resolveAxisBoundsForGraphPreview(selectedGroup.curves, {
+                graphId: previewGraphId,
+                liveGraphConfig: graphConfig,
+              });
+              const dataBounds = resolveDataBoundsFromCurves(selectedGroup.curves);
+              const showDataRange =
+                bounds.source !== 'computed' &&
+                Number.isFinite(dataBounds.yMin) &&
+                Number.isFinite(dataBounds.yMax) &&
+                Number.isFinite(bounds.yMin) &&
+                Number.isFinite(bounds.yMax) &&
+                Math.abs(dataBounds.yMax - dataBounds.yMin) < Math.abs(bounds.yMax - bounds.yMin) * 0.25;
               return (
                 <div style={{ fontSize: 12, color: '#444', background: '#f5f5f5', borderRadius: 5, padding: '8px 12px', marginBottom: 8, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px 24px' }}>
                   {cfg.graphTitle && (
@@ -6999,10 +7146,16 @@ const GraphCapture = () => {
                       <span key={i}>{i > 0 ? ', ' : ''}{c.config?.curveName || c.curve_name || c.name || `Curve ${i + 1}`}</span>
                     ))}
                   </div>
-                  <div><span style={{ fontWeight: 600 }}>X Min:</span> {formatDisplayValue(bounds.xMin)}</div>
-                  <div><span style={{ fontWeight: 600 }}>Y Min:</span> {formatDisplayValue(bounds.yMin)}</div>
-                  <div><span style={{ fontWeight: 600 }}>X Max:</span> {formatDisplayValue(bounds.xMax)}</div>
-                  <div><span style={{ fontWeight: 600 }}>Y Max:</span> {formatDisplayValue(bounds.yMax)}</div>
+                  <div><span style={{ fontWeight: 600 }}>Axis X Min:</span> {formatDisplayValue(bounds.xMin)}</div>
+                  <div><span style={{ fontWeight: 600 }}>Axis Y Min:</span> {formatDisplayValue(bounds.yMin)}</div>
+                  <div><span style={{ fontWeight: 600 }}>Axis X Max:</span> {formatDisplayValue(bounds.xMax)}</div>
+                  <div><span style={{ fontWeight: 600 }}>Axis Y Max:</span> {formatDisplayValue(bounds.yMax)}</div>
+                  {showDataRange && (
+                    <>
+                      <div><span style={{ fontWeight: 600 }}>Data Y Min:</span> {formatDisplayValue(dataBounds.yMin)}</div>
+                      <div><span style={{ fontWeight: 600 }}>Data Y Max:</span> {formatDisplayValue(dataBounds.yMax)}</div>
+                    </>
+                  )}
                   <div><span style={{ fontWeight: 600 }}>X Scale:</span> {cfg.xScale || '—'}</div>
                   <div><span style={{ fontWeight: 600 }}>Y Scale:</span> {cfg.yScale || '—'}</div>
                   {cfg.xLabel && <div><span style={{ fontWeight: 600 }}>X Title:</span> {cfg.xLabel}</div>}
@@ -7083,11 +7236,16 @@ const GraphCapture = () => {
               {selectedGroup.curves.length === 1 ? (
                 <SavedGraphPreview
                   points={selectedGroup.curves[0]?.points ?? selectedGroup.curves[0]?.data_points ?? []}
-                  config={{
-                    ...normalizeCurveConfig(selectedGroup.curves[0]),
-                    xLabel: normalizeCurveConfig(selectedGroup.curves[0]).xLabel || urlParams.x_label,
-                    yLabel: normalizeCurveConfig(selectedGroup.curves[0]).yLabel || urlParams.y_label,
-                  }}
+                  config={buildSavedGraphPreviewConfig(selectedGroup.curves[0], {
+                    graphId: String(
+                      selectedGroup.curves[0]?.graphId ||
+                      urlParams.graph_id ||
+                      activeSessionGraphIdRef.current ||
+                      ''
+                    ).trim(),
+                    liveGraphConfig: graphConfig,
+                    urlParams,
+                  })}
                   width={700}
                   height={280}
                   animate
@@ -7096,11 +7254,16 @@ const GraphCapture = () => {
               ) : (
                 <SavedGraphCombinedPreview
                   curves={selectedGroup.curves}
-                  config={{
-                    ...normalizeCurveConfig(selectedGroup.curves[0]),
-                    xLabel: normalizeCurveConfig(selectedGroup.curves[0]).xLabel || urlParams.x_label,
-                    yLabel: normalizeCurveConfig(selectedGroup.curves[0]).yLabel || urlParams.y_label,
-                  }}
+                  config={buildSavedGraphCombinedPreviewConfig(selectedGroup.curves, {
+                    graphId: String(
+                      selectedGroup.curves[0]?.graphId ||
+                      urlParams.graph_id ||
+                      activeSessionGraphIdRef.current ||
+                      ''
+                    ).trim(),
+                    liveGraphConfig: graphConfig,
+                    urlParams,
+                  })}
                   width={700}
                   height={280}
                   sortByX={previewSortByX}
@@ -7199,11 +7362,18 @@ const GraphCapture = () => {
                 <SavedGraphCombinedPreview
                   curves={scaleGroup.curves}
                   config={{
-                    ...normalizeCurveConfig(scaleGroup.curves[0]),
+                    ...buildSavedGraphCombinedPreviewConfig(scaleGroup.curves, {
+                      graphId: String(
+                        scaleGroup.curves[0]?.graphId ||
+                        urlParams.graph_id ||
+                        activeSessionGraphIdRef.current ||
+                        ''
+                      ).trim(),
+                      liveGraphConfig: graphConfig,
+                      urlParams,
+                    }),
                     xScale: scaleGroup.xScale,
                     yScale: scaleGroup.yScale,
-                    xLabel: normalizeCurveConfig(scaleGroup.curves[0]).xLabel || urlParams.x_label,
-                    yLabel: normalizeCurveConfig(scaleGroup.curves[0]).yLabel || urlParams.y_label,
                   }}
                   width={760}
                   height={300}
