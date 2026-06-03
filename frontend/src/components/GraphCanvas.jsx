@@ -470,13 +470,8 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   };
 
   const drawCurveOverlayLayers = (ctx) => {
-    if (savedCurveViewActive) {
-      if (showFixPoints) drawFixPoints(ctx);
-      drawDataPoints(ctx);
-      return;
-    }
-    drawDataPoints(ctx);
     if (showFixPoints) drawFixPoints(ctx);
+    drawDataPoints(ctx);
   };
 
   const drawDataPoints = (ctx) => {
