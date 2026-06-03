@@ -63,6 +63,125 @@ const sanitizeFilenamePart = (value) => {
   return cleaned || 'curve';
 };
 
+const pickFirstFiniteAxisValue = (...candidates) => {
+  for (const candidate of candidates) {
+    if (candidate === undefined || candidate === null) continue;
+    const str = String(candidate).trim();
+    if (!str) continue;
+    const parsed = parseFloat(str);
+    if (Number.isFinite(parsed)) return str;
+  }
+  return '';
+};
+
+const snapAxisMinBound = (min, max) => {
+  const lo = Number(min);
+  const hi = Number(max);
+  if (!Number.isFinite(lo) || !Number.isFinite(hi)) return min;
+  const span = Math.max(hi - lo, 1e-9);
+  if (lo >= 0 && lo <= span * 0.05) return 0;
+  return lo;
+};
+
+const snapAxisMaxBound = (max) => {
+  const value = Number(max);
+  if (!Number.isFinite(value)) return max;
+  if (value <= 0) return value;
+
+  const abs = Math.abs(value);
+  const exponent = Math.floor(Math.log10(abs));
+  const fraction = abs / (10 ** exponent);
+  const niceFractions = [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10];
+  const niceFraction = niceFractions.find((candidate) => candidate >= fraction) || 10;
+  return niceFraction * (10 ** exponent);
+};
+
+const snapAxisBounds = ({ xMin, xMax, yMin, yMax }) => {
+  const rawXMin = Number(xMin);
+  const rawXMax = Number(xMax);
+  const rawYMin = Number(yMin);
+  const rawYMax = Number(yMax);
+  if (
+    !Number.isFinite(rawXMin) || !Number.isFinite(rawXMax) ||
+    !Number.isFinite(rawYMin) || !Number.isFinite(rawYMax) ||
+    rawXMax <= rawXMin || rawYMax <= rawYMin
+  ) {
+    return { xMin, xMax, yMin, yMax };
+  }
+
+  return {
+    xMin: snapAxisMinBound(rawXMin, rawXMax),
+    xMax: snapAxisMaxBound(rawXMax),
+    yMin: snapAxisMinBound(rawYMin, rawYMax),
+    yMax: snapAxisMaxBound(rawYMax),
+  };
+};
+
+const collectCurvePointsForExport = (curves = []) =>
+  (Array.isArray(curves) ? curves : []).flatMap((curve) => {
+    const pointList = curve?.points ?? curve?.data_points ?? [];
+    return pointList
+      .map((point) => ({
+        x: Number(point?.x_value ?? point?.x),
+        y: Number(point?.y_value ?? point?.y),
+      }))
+      .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
+  });
+
+const computeAxisBoundsFromCurves = (curves = []) => {
+  const points = collectCurvePointsForExport(curves);
+  if (points.length === 0) return null;
+
+  const xs = points.map((point) => point.x);
+  const ys = points.map((point) => point.y);
+  const snapped = snapAxisBounds({
+    xMin: Math.min(...xs),
+    xMax: Math.max(...xs),
+    yMin: Math.min(...ys),
+    yMax: Math.max(...ys),
+  });
+
+  return {
+    xMin: String(snapped.xMin),
+    xMax: String(snapped.xMax),
+    yMin: String(snapped.yMin),
+    yMax: String(snapped.yMax),
+  };
+};
+
+const hasCompleteExportAxis = (config = {}) => {
+  const xMin = parseFloat(config.xMin);
+  const xMax = parseFloat(config.xMax);
+  const yMin = parseFloat(config.yMin);
+  const yMax = parseFloat(config.yMax);
+  return (
+    Number.isFinite(xMin) &&
+    Number.isFinite(xMax) &&
+    Number.isFinite(yMin) &&
+    Number.isFinite(yMax) &&
+    xMax > xMin &&
+    yMax > yMin &&
+    Boolean(config.xScale) &&
+    Boolean(config.yScale) &&
+    Boolean(config.xUnitPrefix) &&
+    Boolean(config.yUnitPrefix)
+  );
+};
+
+const roundSeriesSum = (sum) => {
+  if (!Number.isFinite(sum)) return 0;
+  return Math.round(sum * 1e4) / 1e4;
+};
+
+const computeLabelDecimals = (span, axis = 'y') => {
+  const safeSpan = Math.abs(span);
+  if (!Number.isFinite(safeSpan) || safeSpan <= 0) return axis === 'y' ? 2 : 0;
+  if (safeSpan <= 0.2) return 3;
+  if (safeSpan < 1) return 2;
+  if (safeSpan >= 10) return 0;
+  return 1;
+};
+
 const computePointStats = (points) => {
   if (!points.length) {
     return { min: 0, max: 0, sum: 0, minX: 0, maxX: 0, minY: 0, maxY: 0 };
@@ -139,8 +258,8 @@ const buildSeriesEntry = (templateSeries, points, { name, colorIndex, showLegend
   series.points = points;
   series.min = stats.min;
   series.max = stats.max;
-  series.sum = stats.sum;
-  series.addToLegend = showLegend;
+  series.sum = roundSeriesSum(stats.sum);
+  series.addToLegend = true;
   series.group = 0;
   series.isY2 = Boolean(isY2);
   series.showLines = true;
@@ -250,8 +369,9 @@ const applyGraphConfigToTypicalCurve = (tc, graphConfig, { multipleSeries = fals
   tc.title.visible = true;
 
   if (tc.xAxis?.title) {
-    tc.xAxis.title.text = [xAxisTitle, tc.xAxis.title.text?.[1] || ''];
+    tc.xAxis.title.text = [xAxisTitle, ''];
     tc.xAxis.title.visible = true;
+    tc.xAxis.title.showUnits = false;
     if (xUnit) {
       tc.xAxis.title.units = xUnit;
     }
@@ -261,8 +381,10 @@ const applyGraphConfigToTypicalCurve = (tc, graphConfig, { multipleSeries = fals
   }
 
   if (tc.yAxis?.title) {
-    tc.yAxis.title.text = [tc.yAxis.title.text?.[0] || '', yAxisTitle];
+    const yTitleLine = yAxisTitle || tc.yAxis.title.text?.[1] || tc.yAxis.title.text?.[0] || 'Y';
+    tc.yAxis.title.text = [yTitleLine, ''];
     tc.yAxis.title.visible = true;
+    tc.yAxis.title.showUnits = false;
     const yUnit = resolveAxisTitleUnit(graphConfig.yLabel, graphConfig.yUnitPrefix);
     if (yUnit) {
       tc.yAxis.title.units = yUnit;
@@ -273,11 +395,11 @@ const applyGraphConfigToTypicalCurve = (tc, graphConfig, { multipleSeries = fals
   const ySpan = yMax - yMin;
   applyAxisScale(tc.xAxis, { min: xMin, max: xMax, isLog: xIsLog }, {
     gainFullScale: 180,
-    labelDecimals: xSpan > 0 && xSpan <= 30 ? 1 : 0,
+    labelDecimals: computeLabelDecimals(xSpan, 'x'),
   });
   applyAxisScale(tc.yAxis, { min: yMin, max: yMax, isLog: yIsLog }, {
     gainFullScale: 144,
-    labelDecimals: ySpan >= 10 ? 0 : 1,
+    labelDecimals: computeLabelDecimals(ySpan, 'y'),
     showMinorGrid: !yIsLog,
   });
 
@@ -338,8 +460,8 @@ const buildTypicalCurveExportCore = ({ template, graphConfig, seriesGroups }) =>
   tc.dataSet.type = 'line';
   tc.dataSet.groupCount = 1;
   tc.dataSet.isCustomOrder = validGroups.length > 1;
-  tc.dataSet.isRed = !showLegend;
-  tc.dataSet.decimationCount = '0';
+  tc.dataSet.isRed = true;
+  tc.dataSet.decimationCount = '512';
   tc.dataSet.fitPointCount = String(Math.max(...validGroups.map((group) => group.points.length), 1));
 
   const datasetStats = seriesList.reduce(
@@ -393,23 +515,25 @@ export const inferTypicalCurveExportSourceFromCurves = (curves = [], savedSource
   return 'manual';
 };
 
-export const resolveGraphConfigForSavedCurvesExport = (curves = [], graphConfig = {}) => {
+export const resolveGraphConfigForSavedCurvesExport = (curves = [], graphConfig = {}, options = {}) => {
   const first = curves[0] || {};
   const cfg = first.config || {};
+  const persistedAxis = options?.persistedAxis || null;
+  const computedAxis = computeAxisBoundsFromCurves(curves);
 
-  return {
+  const resolved = {
     graphTitle: cfg.graphTitle || first.graph_title || graphConfig.graphTitle || '',
     curveName: cfg.curveName || first.curve_name || first.name || graphConfig.curveName || '',
-    xLabel: cfg.xLabel || first.x_label || graphConfig.xLabel || '',
-    yLabel: cfg.yLabel || first.y_label || graphConfig.yLabel || '',
-    xScale: cfg.xScale || first.x_scale || graphConfig.xScale || 'Linear',
-    yScale: cfg.yScale || first.y_scale || graphConfig.yScale || 'Linear',
-    xUnitPrefix: cfg.xUnitPrefix || first.x_unit || graphConfig.xUnitPrefix || '1',
-    yUnitPrefix: cfg.yUnitPrefix || first.y_unit || graphConfig.yUnitPrefix || '1',
-    xMin: cfg.xMin ?? first.x_min ?? graphConfig.xMin ?? '',
-    xMax: cfg.xMax ?? first.x_max ?? graphConfig.xMax ?? '',
-    yMin: cfg.yMin ?? first.y_min ?? graphConfig.yMin ?? '',
-    yMax: cfg.yMax ?? first.y_max ?? graphConfig.yMax ?? '',
+    xLabel: cfg.xLabel || first.x_label || persistedAxis?.xLabel || graphConfig.xLabel || '',
+    yLabel: cfg.yLabel || first.y_label || persistedAxis?.yLabel || graphConfig.yLabel || '',
+    xScale: cfg.xScale || first.x_scale || persistedAxis?.xScale || graphConfig.xScale || 'Linear',
+    yScale: cfg.yScale || first.y_scale || persistedAxis?.yScale || graphConfig.yScale || 'Linear',
+    xUnitPrefix: cfg.xUnitPrefix || first.x_unit || persistedAxis?.xUnitPrefix || graphConfig.xUnitPrefix || '1',
+    yUnitPrefix: cfg.yUnitPrefix || first.y_unit || persistedAxis?.yUnitPrefix || graphConfig.yUnitPrefix || '1',
+    xMin: pickFirstFiniteAxisValue(cfg.xMin, first.x_min, persistedAxis?.xMin, graphConfig.xMin, computedAxis?.xMin),
+    xMax: pickFirstFiniteAxisValue(cfg.xMax, first.x_max, persistedAxis?.xMax, graphConfig.xMax, computedAxis?.xMax),
+    yMin: pickFirstFiniteAxisValue(cfg.yMin, first.y_min, persistedAxis?.yMin, graphConfig.yMin, computedAxis?.yMin),
+    yMax: pickFirstFiniteAxisValue(cfg.yMax, first.y_max, persistedAxis?.yMax, graphConfig.yMax, computedAxis?.yMax),
     temperature: cfg.temperature || first.temperature || graphConfig.temperature || '',
     y2Label: graphConfig.y2Label || cfg.y2Label || '',
     y2Min: graphConfig.y2Min ?? cfg.y2Min ?? '',
@@ -417,29 +541,17 @@ export const resolveGraphConfigForSavedCurvesExport = (curves = [], graphConfig 
     y2Scale: graphConfig.y2Scale || cfg.y2Scale || 'Linear',
     y2UnitPrefix: graphConfig.y2UnitPrefix || cfg.y2UnitPrefix || '1',
   };
+
+  return resolved;
 };
 
-export const isSavedCurvesExportReady = (curves = []) => {
+export const resolveExportGraphConfig = (curves = [], graphConfig = {}, options = {}) =>
+  resolveGraphConfigForSavedCurvesExport(curves, graphConfig, options);
+
+export const isSavedCurvesExportReady = (curves = [], graphConfig = {}, options = {}) => {
   if (!Array.isArray(curves) || curves.length === 0) return false;
-
-  const exportConfig = resolveGraphConfigForSavedCurvesExport(curves);
-  const xMin = parseFloat(exportConfig.xMin);
-  const xMax = parseFloat(exportConfig.xMax);
-  const yMin = parseFloat(exportConfig.yMin);
-  const yMax = parseFloat(exportConfig.yMax);
-
-  return (
-    Number.isFinite(xMin) &&
-    Number.isFinite(xMax) &&
-    Number.isFinite(yMin) &&
-    Number.isFinite(yMax) &&
-    xMin !== xMax &&
-    yMin !== yMax &&
-    Boolean(exportConfig.xScale) &&
-    Boolean(exportConfig.yScale) &&
-    Boolean(exportConfig.xUnitPrefix) &&
-    Boolean(exportConfig.yUnitPrefix)
-  );
+  const exportConfig = resolveExportGraphConfig(curves, graphConfig, options);
+  return hasCompleteExportAxis(exportConfig);
 };
 
 export const savedCurvesToExportSeries = (curves = []) =>

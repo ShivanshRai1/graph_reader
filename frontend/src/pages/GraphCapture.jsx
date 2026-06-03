@@ -13,6 +13,7 @@ import {
   inferTypicalCurveExportSourceFromCurves,
   isSavedCurvesExportReady,
   resolveGraphConfigForSavedCurvesExport,
+  resolveExportGraphConfig,
 } from '../utils/tcExport';
 import {
   applyAiPointLimitToCurve,
@@ -673,6 +674,46 @@ const buildPersistedAxisPayload = (axisConfig = {}) => ({
   xLabel: axisConfig.xLabel || '',
   yLabel: axisConfig.yLabel || '',
 });
+
+const patchSavedCurvesWithAxisConfig = (curves, axisConfig, graphId) => {
+  const normalizedGraphId = String(graphId || '').trim();
+  if (!normalizedGraphId || !hasValidAxisMapping(axisConfig)) {
+    return curves;
+  }
+
+  const axisPatch = buildPersistedAxisPayload(axisConfig);
+  return (Array.isArray(curves) ? curves : []).map((curve) => {
+    const curveGraphId = String(curve?.graphId || '').trim();
+    if (curveGraphId && curveGraphId !== normalizedGraphId) return curve;
+
+    return {
+      ...curve,
+      x_min: axisPatch.xMin,
+      x_max: axisPatch.xMax,
+      y_min: axisPatch.yMin,
+      y_max: axisPatch.yMax,
+      x_scale: axisPatch.xScale,
+      y_scale: axisPatch.yScale,
+      x_unit: axisPatch.xUnitPrefix,
+      y_unit: axisPatch.yUnitPrefix,
+      x_label: axisPatch.xLabel,
+      y_label: axisPatch.yLabel,
+      config: {
+        ...(curve.config || {}),
+        xMin: axisPatch.xMin,
+        xMax: axisPatch.xMax,
+        yMin: axisPatch.yMin,
+        yMax: axisPatch.yMax,
+        xScale: axisPatch.xScale,
+        yScale: axisPatch.yScale,
+        xUnitPrefix: axisPatch.xUnitPrefix,
+        yUnitPrefix: axisPatch.yUnitPrefix,
+        xLabel: axisPatch.xLabel,
+        yLabel: axisPatch.yLabel,
+      },
+    };
+  });
+};
 
 const persistGraphContext = (graphId, area, axisConfig = {}, options = {}) => {
   const normalizedGraphId = String(graphId || '').trim();
@@ -3756,13 +3797,16 @@ const GraphCapture = () => {
       alert('No saved curves to export.');
       return;
     }
-    if (!isSavedCurvesExportReady(curves)) {
-      alert('Setup required before exporting .tc: each saved graph needs axis min/max, scale, and unit.');
+
+    const graphId = String(urlParams.graph_id || activeSessionGraphIdRef.current || '').trim();
+    const exportOptions = { persistedAxis: getPersistedGraphContext(graphId)?.axis || null };
+    if (!isSavedCurvesExportReady(curves, graphConfig, exportOptions)) {
+      alert('Setup required before exporting .tc: confirm axis mapping with X/Y min, max, scale, and unit in Graph Setup.');
       return;
     }
 
     try {
-      const exportConfig = resolveGraphConfigForSavedCurvesExport(curves, graphConfig);
+      const exportConfig = resolveExportGraphConfig(curves, graphConfig, exportOptions);
       const source = inferTypicalCurveExportSourceFromCurves(curves, savedCurvesSource);
       const tcObject = buildTypicalCurveExportFromSavedCurves({
         template: lineSingleTemplate,
@@ -3787,9 +3831,11 @@ const GraphCapture = () => {
       return;
     }
 
-    const readyGroups = groupedCurves.filter((group) => isSavedCurvesExportReady(group.curves));
+    const graphId = String(urlParams.graph_id || activeSessionGraphIdRef.current || '').trim();
+    const exportOptions = { persistedAxis: getPersistedGraphContext(graphId)?.axis || null };
+    const readyGroups = groupedCurves.filter((group) => isSavedCurvesExportReady(group.curves, graphConfig, exportOptions));
     if (readyGroups.length === 0) {
-      alert('Setup required before exporting .tc: saved graphs need axis min/max, scale, and unit.');
+      alert('Setup required before exporting .tc: confirm axis mapping with X/Y min, max, scale, and unit in Graph Setup.');
       return;
     }
 
@@ -6427,9 +6473,19 @@ const GraphCapture = () => {
                   setIsAxisMappingConfirmed(true);
                   setFrozenGraphConfig({ ...graphConfig });
                   setPartNumberLocked(true);
-                  const graphId = String(urlParams.graph_id || '').trim();
+                  const graphId = String(urlParams.graph_id || activeSessionGraphIdRef.current || '').trim();
                   if (graphId && graphArea.width > 0 && graphArea.height > 0) {
                     persistGraphContext(graphId, graphArea, graphConfig);
+                    setSavedCurves((prev) => {
+                      const patched = patchSavedCurvesWithAxisConfig(prev, graphConfig, graphId);
+                      const curvesForGraph = patched.filter(
+                        (curve) => (curve.graphId || getGraphIdForCurve(curve)) === graphId
+                      );
+                      if (curvesForGraph.length > 0) {
+                        persistSavedCurves(graphId, curvesForGraph, savedCurvesSource);
+                      }
+                      return patched;
+                    });
                   }
                 }}
                 onRetakeAxis={() => {
