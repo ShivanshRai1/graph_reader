@@ -55,8 +55,11 @@ const TcPlotChecker = () => {
   const [originalImage, setOriginalImage] = useState(null);
   const [error, setError] = useState('');
   const [sortByX, setSortByX] = useState(true);
-  const [layoutMode, setLayoutMode] = useState(LAYOUT_OVERLAY);
+  const [layoutMode, setLayoutMode] = useState(LAYOUT_TRIPLE);
+  const [pasteZoneFocused, setPasteZoneFocused] = useState(false);
+  const [pasteZoneHovered, setPasteZoneHovered] = useState(false);
   const imageUrlRef = useRef(null);
+  const pasteZoneRef = useRef(null);
 
   const revokeImageUrl = useCallback(() => {
     if (imageUrlRef.current) {
@@ -76,11 +79,12 @@ const TcPlotChecker = () => {
     imageUrlRef.current = url;
     setOriginalImage({ name: name || 'Pasted image', url });
     setLayoutMode((prev) => {
+      if (reference?.parsed && candidate?.parsed) return LAYOUT_TRIPLE;
       if (prev === LAYOUT_OVERLAY) return LAYOUT_IMAGE_OVERLAY;
       if (prev === LAYOUT_TC_SPLIT) return LAYOUT_IMAGE_TC_SPLIT;
       return prev;
     });
-  }, [revokeImageUrl]);
+  }, [revokeImageUrl, reference, candidate]);
 
   useEffect(() => () => revokeImageUrl(), [revokeImageUrl]);
 
@@ -178,13 +182,15 @@ const TcPlotChecker = () => {
   const layoutOptions = useMemo(() => {
     const options = [];
     if (hasImage && hasPlot) {
+      if (canComparePlots) {
+        options.push({ id: LAYOUT_TRIPLE, label: 'All three side by side' });
+      }
       options.push({
         id: LAYOUT_IMAGE_OVERLAY,
         label: canComparePlots ? 'Original + overlaid .tc' : 'Original + .tc chart',
       });
       if (canComparePlots) {
         options.push({ id: LAYOUT_IMAGE_TC_SPLIT, label: 'Original + .tc side by side' });
-        options.push({ id: LAYOUT_TRIPLE, label: 'All three side by side' });
       }
     } else if (canComparePlots) {
       options.push({ id: LAYOUT_OVERLAY, label: 'Overlaid .tc only' });
@@ -481,22 +487,58 @@ const TcPlotChecker = () => {
         </div>
 
         <div
+          ref={pasteZoneRef}
           tabIndex={0}
+          aria-label="Paste original graph image"
+          aria-describedby="tc-paste-zone-hint"
           onPaste={handleImagePaste}
+          onFocus={() => setPasteZoneFocused(true)}
+          onBlur={() => setPasteZoneFocused(false)}
+          onMouseEnter={() => setPasteZoneHovered(true)}
+          onMouseLeave={() => setPasteZoneHovered(false)}
+          onClick={() => pasteZoneRef.current?.focus()}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              pasteZoneRef.current?.focus();
+            }
+          }}
           style={{
             marginBottom: 16,
-            padding: '10px 12px',
-            background: '#fff',
+            padding: '14px 16px',
             borderRadius: 8,
-            border: '1px dashed #cbd5e1',
             fontSize: 13,
-            color: '#64748b',
             outline: 'none',
+            cursor: 'pointer',
+            transition: 'border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease',
+            background: pasteZoneFocused ? '#eff6ff' : (pasteZoneHovered ? '#f1f5f9' : '#f8fafc'),
+            border: pasteZoneFocused
+              ? '2px solid #2563eb'
+              : `2px dashed ${pasteZoneHovered ? '#64748b' : '#94a3b8'}`,
+            boxShadow: pasteZoneFocused ? '0 0 0 3px rgba(37, 99, 235, 0.2)' : 'none',
+            color: pasteZoneFocused ? '#1e40af' : '#475569',
           }}
         >
-          <strong style={{ color: '#334155' }}>Paste image:</strong>
-          {' '}
-          click this box, then press Ctrl+V (Cmd+V on Mac) to paste a screenshot of the original plot.
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <strong style={{ color: pasteZoneFocused ? '#1d4ed8' : '#334155' }}>Paste image</strong>
+            <span
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                padding: '2px 8px',
+                borderRadius: 999,
+                background: pasteZoneFocused ? '#2563eb' : '#e2e8f0',
+                color: pasteZoneFocused ? '#fff' : '#64748b',
+              }}
+            >
+              {pasteZoneFocused ? 'Ready — paste now (Ctrl+V / Cmd+V)' : 'Click to activate'}
+            </span>
+          </div>
+          <p id="tc-paste-zone-hint" style={{ margin: '8px 0 0', lineHeight: 1.5 }}>
+            {pasteZoneFocused
+              ? 'This area is active. Paste a screenshot of the original datasheet plot.'
+              : 'Click this box, then press Ctrl+V (Cmd+V on Mac) to paste a screenshot of the original plot.'}
+          </p>
         </div>
 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center', marginBottom: 16 }}>
