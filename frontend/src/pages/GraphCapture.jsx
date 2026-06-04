@@ -2429,6 +2429,13 @@ const hasCurveLineInAiResponse = (responsePayload) => {
   });
 };
 
+const buildTcCheckerUrl = () => {
+  const params = new URLSearchParams(window.location.search);
+  params.set('view', 'tc-checker');
+  const query = params.toString();
+  return `${window.location.pathname}?${query}`;
+};
+
 const GraphCapture = () => {
   const {
     uploadedImage,
@@ -6410,10 +6417,20 @@ const GraphCapture = () => {
           </div>
         </div>
       )}
-      <header className="mb-8 flex items-start justify-between gap-4">
-        <h1 className="text-2xl font-bold mb-2" style={{ color: '#213547' }}>
-          Graph Capture Tool
-        </h1>
+      <header className="mb-8 flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold mb-2" style={{ color: '#213547' }}>
+            Graph Capture Tool
+          </h1>
+          <a
+            href={buildTcCheckerUrl()}
+            className="text-sm font-medium"
+            style={{ color: '#2563eb' }}
+            title="Plot and compare HPPeval .tc files (reference vs your export)"
+          >
+            Check .tc
+          </a>
+        </div>
         {!!urlParams.return_url && (
           <button
             onClick={handleCancelAndReturn}

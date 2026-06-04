@@ -1,6 +1,7 @@
 import { GraphProvider } from './context/GraphContext'
 import GraphCapture from './pages/GraphCapture'
 import SavedGraphView from './pages/SavedGraphView'
+import TcPlotChecker from './pages/TcPlotChecker'
 import './App.css'
 
 function App() {
@@ -10,7 +11,13 @@ function App() {
 
   return (
     <GraphProvider>
-      {viewMode === 'curve' ? <SavedGraphView curveId={curveId} /> : <GraphCapture />}
+      {viewMode === 'curve' ? (
+        <SavedGraphView curveId={curveId} />
+      ) : viewMode === 'tc-checker' ? (
+        <TcPlotChecker />
+      ) : (
+        <GraphCapture />
+      )}
     </GraphProvider>
   )
 }
