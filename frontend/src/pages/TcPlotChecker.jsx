@@ -43,6 +43,13 @@ const LAYOUT_TRIPLE = 'triple';
 /** Set true to show the numeric accuracy table when reference + export are loaded */
 const SHOW_ACCURACY_TABLE = false;
 
+/** Set true to show layout radio buttons (default layout stays LAYOUT_TRIPLE) */
+const SHOW_LAYOUT_OPTIONS = false;
+
+const LABEL_GRAPH_IMAGE = 'graph image from datasheet';
+const LABEL_ANALOG_REFERENCE = 'Analog reference.tc';
+const LABEL_DISCOVEREE = 'DiscoverEE Approach.tc';
+
 const imagePanelStyle = {
   flex: '0 1 520px',
   minWidth: 300,
@@ -139,10 +146,10 @@ const TcPlotChecker = () => {
   const overlayCurves = useMemo(() => {
     const curves = [];
     if (reference?.parsed) {
-      curves.push(...prefixTypicalCurveCurves(reference.parsed, 'Reference'));
+      curves.push(...prefixTypicalCurveCurves(reference.parsed, 'Analog reference'));
     }
     if (candidate?.parsed) {
-      curves.push(...prefixTypicalCurveCurves(candidate.parsed, 'Yours'));
+      curves.push(...prefixTypicalCurveCurves(candidate.parsed, 'DiscoverEE Approach'));
     }
     return curves;
   }, [reference, candidate]);
@@ -163,7 +170,7 @@ const TcPlotChecker = () => {
     if (!reference?.parsed?.config) return null;
     return {
       ...reference.parsed.config,
-      graphTitle: reference.parsed.config.graphTitle || 'Reference',
+      graphTitle: reference.parsed.config.graphTitle || LABEL_ANALOG_REFERENCE,
     };
   }, [reference]);
 
@@ -171,7 +178,7 @@ const TcPlotChecker = () => {
     if (!candidate?.parsed?.config) return null;
     return {
       ...candidate.parsed.config,
-      graphTitle: candidate.parsed.config.graphTitle || 'Your export',
+      graphTitle: candidate.parsed.config.graphTitle || LABEL_DISCOVEREE,
     };
   }, [candidate]);
 
@@ -225,10 +232,10 @@ const TcPlotChecker = () => {
     if (!originalImage?.url) return null;
     return (
       <div style={showImageInComparison ? imagePanelStyle : undefined}>
-        <h3 style={{ fontSize: 14, margin: '0 0 8px', color: '#334155' }}>Original figure</h3>
+        <h3 style={{ fontSize: 14, margin: '0 0 8px', color: '#334155' }}>{LABEL_GRAPH_IMAGE}</h3>
         <img
           src={originalImage.url}
-          alt={originalImage.name || 'Original graph'}
+          alt={originalImage.name || LABEL_GRAPH_IMAGE}
           style={{
             display: 'block',
             width: '100%',
@@ -264,24 +271,24 @@ const TcPlotChecker = () => {
         minWidth: 0,
       }}
     >
-      {reference?.parsed && referencePlotConfig && (
+      {candidate?.parsed && candidatePlotConfig && (
         <div>
-          <h3 style={{ fontSize: 14, margin: '0 0 8px', color: '#334155' }}>Reference .tc</h3>
+          <h3 style={{ fontSize: 14, margin: '0 0 8px', color: '#334155' }}>{LABEL_DISCOVEREE}</h3>
           <SavedGraphCombinedPreview
-            curves={reference.parsed.curves}
-            config={referencePlotConfig}
+            curves={candidate.parsed.curves}
+            config={candidatePlotConfig}
             width={chartWidth}
             height={chartHeight}
             sortByX={sortByX}
           />
         </div>
       )}
-      {candidate?.parsed && candidatePlotConfig && (
+      {reference?.parsed && referencePlotConfig && (
         <div>
-          <h3 style={{ fontSize: 14, margin: '0 0 8px', color: '#334155' }}>Your .tc</h3>
+          <h3 style={{ fontSize: 14, margin: '0 0 8px', color: '#334155' }}>{LABEL_ANALOG_REFERENCE}</h3>
           <SavedGraphCombinedPreview
-            curves={candidate.parsed.curves}
-            config={candidatePlotConfig}
+            curves={reference.parsed.curves}
+            config={referencePlotConfig}
             width={chartWidth}
             height={chartHeight}
             sortByX={sortByX}
@@ -306,24 +313,24 @@ const TcPlotChecker = () => {
           }}
         >
           {renderOriginalImage()}
-          {reference?.parsed && referencePlotConfig && (
+          {candidate?.parsed && candidatePlotConfig && (
             <div>
-              <h3 style={{ fontSize: 14, margin: '0 0 8px', color: '#334155' }}>Reference .tc</h3>
+              <h3 style={{ fontSize: 14, margin: '0 0 8px', color: '#334155' }}>{LABEL_DISCOVEREE}</h3>
               <SavedGraphCombinedPreview
-                curves={reference.parsed.curves}
-                config={referencePlotConfig}
+                curves={candidate.parsed.curves}
+                config={candidatePlotConfig}
                 width={chartWidth}
                 height={chartHeight}
                 sortByX={sortByX}
               />
             </div>
           )}
-          {candidate?.parsed && candidatePlotConfig && (
+          {reference?.parsed && referencePlotConfig && (
             <div>
-              <h3 style={{ fontSize: 14, margin: '0 0 8px', color: '#334155' }}>Your .tc</h3>
+              <h3 style={{ fontSize: 14, margin: '0 0 8px', color: '#334155' }}>{LABEL_ANALOG_REFERENCE}</h3>
               <SavedGraphCombinedPreview
-                curves={candidate.parsed.curves}
-                config={candidatePlotConfig}
+                curves={reference.parsed.curves}
+                config={referencePlotConfig}
                 width={chartWidth}
                 height={chartHeight}
                 sortByX={sortByX}
@@ -415,7 +422,7 @@ const TcPlotChecker = () => {
           }}
         >
           <label style={cardStyle}>
-            <strong>Original graph image</strong> (optional)
+            <strong>{LABEL_GRAPH_IMAGE}</strong> (optional)
             <input
               type="file"
               accept="image/*"
@@ -448,7 +455,7 @@ const TcPlotChecker = () => {
           </label>
 
           <label style={cardStyle}>
-            <strong>Reference .tc</strong> (optional)
+            <strong>{LABEL_ANALOG_REFERENCE}</strong> (optional)
             <input
               type="file"
               accept=".tc,application/json"
@@ -467,7 +474,7 @@ const TcPlotChecker = () => {
           </label>
 
           <label style={cardStyle}>
-            <strong>Your .tc</strong>
+            <strong>{LABEL_DISCOVEREE}</strong>
             <input
               type="file"
               accept=".tc,application/json"
@@ -551,7 +558,7 @@ const TcPlotChecker = () => {
             Connect points left-to-right (sort by X)
           </label>
 
-          {layoutOptions.length > 0 && (
+          {SHOW_LAYOUT_OPTIONS && layoutOptions.length > 0 && (
             <fieldset
               style={{
                 border: 'none',
