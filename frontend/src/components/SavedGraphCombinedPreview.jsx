@@ -63,26 +63,99 @@ const buildTicks = (min, max, count) => {
 
 const palette = ['#2563eb', '#16a34a', '#f97316', '#e11d48', '#0ea5e9', '#8b5cf6', '#14b8a6'];
 
-const TOOLTIP_WIDTH = 250;
-const TOOLTIP_HEIGHT = 90;
 const TOOLTIP_GAP = 10;
+const TOOLTIP_HEIGHT = 92;
+const TOOLTIP_CHAR_WIDTH = 6.3;
+const TOOLTIP_PADDING_H = 20;
+const TOOLTIP_CURVE_SWATCH = 16;
 
-const resolveTooltipLayout = (point, chartWidth, chartHeight) => {
-  const flipLeft = point.svgX + TOOLTIP_GAP + TOOLTIP_WIDTH > chartWidth - 4;
+const truncateText = (text, maxChars) => {
+  const value = String(text ?? '').trim() || '-';
+  if (value.length <= maxChars) return value;
+  return `${value.slice(0, Math.max(1, maxChars - 1))}…`;
+};
+
+const shortCurveLabel = (name) => {
+  const value = String(name ?? '').trim();
+  if (!value) return '-';
+  const voutMatch = value.match(/VOUT\s*=\s*[\d.]+V?/i);
+  if (voutMatch) return voutMatch[0].replace(/\s+/g, '');
+  if (value.includes(':')) {
+    const tail = value.split(':').pop()?.trim();
+    if (tail) return tail;
+  }
+  return value;
+};
+
+const buildTooltipContent = (point, chartWidth) => {
+  const graphRaw = `Graph: ${point.graphTitle || '-'}`;
+  const curveRaw = point.curveName || point.curveLabel || '-';
+  const xRaw = `X${point.xLabel ? ` (${point.xLabel})` : ''}: ${Number.isFinite(point.x) ? point.x.toFixed(4) : ''}`;
+  const yRaw = `Y${point.yLabel ? ` (${point.yLabel})` : ''}: ${Number.isFinite(point.y) ? point.y.toFixed(4) : ''}`;
+
+  const contentWidth = Math.max(
+    graphRaw.length * TOOLTIP_CHAR_WIDTH,
+    curveRaw.length * TOOLTIP_CHAR_WIDTH + TOOLTIP_CURVE_SWATCH + 6,
+    xRaw.length * TOOLTIP_CHAR_WIDTH,
+    yRaw.length * TOOLTIP_CHAR_WIDTH
+  );
+  const width = Math.min(Math.max(248, Math.ceil(contentWidth + TOOLTIP_PADDING_H)), chartWidth - 12);
+  const maxChars = Math.max(12, Math.floor((width - TOOLTIP_PADDING_H) / TOOLTIP_CHAR_WIDTH));
+
+  return {
+    width,
+    height: TOOLTIP_HEIGHT,
+    graphText: truncateText(graphRaw, maxChars),
+    curveText: truncateText(curveRaw, maxChars),
+    xText: truncateText(xRaw, maxChars),
+    yText: truncateText(yRaw, maxChars),
+    curveColor: point.color || '#111827',
+  };
+};
+
+const resolveTooltipLayout = (point, chartWidth, chartHeight, tooltipWidth, tooltipHeight) => {
+  const flipLeft = point.svgX + TOOLTIP_GAP + tooltipWidth > chartWidth - 4;
   let boxX = flipLeft
-    ? point.svgX - TOOLTIP_GAP - TOOLTIP_WIDTH
+    ? point.svgX - TOOLTIP_GAP - tooltipWidth
     : point.svgX + TOOLTIP_GAP;
-  boxX = Math.max(4, Math.min(boxX, chartWidth - TOOLTIP_WIDTH - 4));
+  boxX = Math.max(4, Math.min(boxX, chartWidth - tooltipWidth - 4));
 
-  let boxY = point.svgY - TOOLTIP_HEIGHT / 2;
-  boxY = Math.max(8, Math.min(boxY, chartHeight - TOOLTIP_HEIGHT - 8));
+  let boxY = point.svgY - tooltipHeight / 2;
+  boxY = Math.max(8, Math.min(boxY, chartHeight - tooltipHeight - 8));
 
+  const textX = boxX + 10;
   return {
     boxX,
     boxY,
-    textX: boxX + 8,
-    lineYs: [boxY + 20, boxY + 36, boxY + 52, boxY + 68],
+    textX,
+    swatchX: textX,
+    swatchY: boxY + 33,
+    lineYs: [boxY + 20, boxY + 38, boxY + 54, boxY + 70],
+    curveTextX: textX + TOOLTIP_CURVE_SWATCH + 6,
   };
+};
+
+const LEGEND_ROW_HEIGHT = 17;
+const LEGEND_SWATCH_WIDTH = 22;
+const LEGEND_TEXT_OFFSET = 28;
+
+const buildLegendLayout = (curves, plotRight, plotBottom) => {
+  const entries = curves.map((curve) => ({
+    id: curve.id,
+    curveName: curve.curveName,
+    curveLabel: curve.label,
+    color: curve.color,
+    label: shortCurveLabel(curve.curveName || curve.label),
+  }));
+  const maxLabelWidth = Math.max(
+    ...entries.map((entry) => entry.label.length * 5.8),
+    48
+  );
+  const boxWidth = LEGEND_TEXT_OFFSET + maxLabelWidth + 10;
+  const boxHeight = entries.length * LEGEND_ROW_HEIGHT + 8;
+  const boxX = plotRight - boxWidth - 6;
+  const boxY = plotBottom - boxHeight - 6;
+  return { entries, boxX, boxY, boxWidth, boxHeight };
 };
 
 const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260, sortByX = false }) => {
@@ -312,9 +385,20 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260, 
     setHoveredPoint(nearest);
   };
 
+  const legendLayout = useMemo(() => {
+    if (curveSvgData.length < 2) return null;
+    const plotRight = padding.left + drawableWidth;
+    const plotBottom = padding.top + drawableHeight;
+    return buildLegendLayout(curveSvgData, plotRight, plotBottom);
+  }, [curveSvgData, padding, drawableWidth, drawableHeight]);
+
   const tooltipLayout = useMemo(() => {
     if (!hoveredPoint) return null;
-    return resolveTooltipLayout(hoveredPoint, width, height);
+    const content = buildTooltipContent(hoveredPoint, width);
+    return {
+      content,
+      ...resolveTooltipLayout(hoveredPoint, width, height, content.width, content.height),
+    };
   }, [hoveredPoint, width, height]);
 
   if (curveSvgData.length === 0 || curveSvgData.every((curve) => curve.points.length === 0)) {
@@ -478,13 +562,56 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260, 
         ))
       )}
 
+      {legendLayout ? (
+        <g pointerEvents="none">
+          <rect
+            x={legendLayout.boxX}
+            y={legendLayout.boxY}
+            width={legendLayout.boxWidth}
+            height={legendLayout.boxHeight}
+            rx={4}
+            fill="#ffffff"
+            fillOpacity="0.92"
+            stroke="#d1d5db"
+            strokeWidth="1"
+          />
+          {legendLayout.entries.map((entry, index) => {
+            const rowY = legendLayout.boxY + 6 + index * LEGEND_ROW_HEIGHT;
+            const isActive = hoveredPoint
+              && (hoveredPoint.curveName === entry.curveName || hoveredPoint.curveLabel === entry.curveLabel);
+            return (
+              <g key={`legend-${entry.id}-${index}`}>
+                <line
+                  x1={legendLayout.boxX + 6}
+                  y1={rowY + 7}
+                  x2={legendLayout.boxX + 6 + LEGEND_SWATCH_WIDTH}
+                  y2={rowY + 7}
+                  stroke={entry.color}
+                  strokeWidth={isActive ? 3 : 2}
+                  strokeLinecap="round"
+                />
+                <text
+                  x={legendLayout.boxX + LEGEND_TEXT_OFFSET}
+                  y={rowY + 10}
+                  fontSize="10"
+                  fontWeight={isActive ? '700' : '600'}
+                  fill="#111827"
+                >
+                  {entry.label}
+                </text>
+              </g>
+            );
+          })}
+        </g>
+      ) : null}
+
       {hoveredPoint && tooltipLayout ? (
         <g>
           <rect
             x={tooltipLayout.boxX}
             y={tooltipLayout.boxY}
-            width={TOOLTIP_WIDTH}
-            height={TOOLTIP_HEIGHT}
+            width={tooltipLayout.content.width}
+            height={tooltipLayout.content.height}
             rx={6}
             fill="#f8fafc"
             stroke="#111827"
@@ -492,16 +619,25 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260, 
             opacity="0.98"
           />
           <text x={tooltipLayout.textX} y={tooltipLayout.lineYs[0]} fontSize="11" fill="#111827" fontWeight="700">
-            Graph: {hoveredPoint.graphTitle || '-'}
+            {tooltipLayout.content.graphText}
           </text>
-          <text x={tooltipLayout.textX} y={tooltipLayout.lineYs[1]} fontSize="11" fill="#111827" fontWeight="700">
-            Curve: {hoveredPoint.curveName || hoveredPoint.curveLabel || '-'}
+          <line
+            x1={tooltipLayout.swatchX}
+            y1={tooltipLayout.swatchY}
+            x2={tooltipLayout.swatchX + TOOLTIP_CURVE_SWATCH}
+            y2={tooltipLayout.swatchY}
+            stroke={tooltipLayout.content.curveColor}
+            strokeWidth="2.5"
+            strokeLinecap="round"
+          />
+          <text x={tooltipLayout.curveTextX} y={tooltipLayout.lineYs[1]} fontSize="11" fill="#111827" fontWeight="700">
+            {tooltipLayout.content.curveText}
           </text>
           <text x={tooltipLayout.textX} y={tooltipLayout.lineYs[2]} fontSize="11" fill="#111827" fontWeight="700">
-            X{hoveredPoint.xLabel ? ` (${hoveredPoint.xLabel})` : ''}: {Number.isFinite(hoveredPoint.x) ? hoveredPoint.x.toFixed(4) : ''}
+            {tooltipLayout.content.xText}
           </text>
           <text x={tooltipLayout.textX} y={tooltipLayout.lineYs[3]} fontSize="11" fill="#111827" fontWeight="700">
-            Y{hoveredPoint.yLabel ? ` (${hoveredPoint.yLabel})` : ''}: {Number.isFinite(hoveredPoint.y) ? hoveredPoint.y.toFixed(4) : ''}
+            {tooltipLayout.content.yText}
           </text>
         </g>
       ) : null}
