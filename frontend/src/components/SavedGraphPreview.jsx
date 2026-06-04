@@ -68,6 +68,23 @@ const buildTicks = (min, max, count) => {
   return Array.from({ length: count }, (_, idx) => min + step * idx);
 };
 
+const PREVIEW_TOOLTIP_WIDTH = 132;
+const PREVIEW_TOOLTIP_HEIGHT = 36;
+const PREVIEW_TOOLTIP_GAP = 10;
+
+const resolvePreviewTooltipLayout = (point, chartWidth, chartHeight) => {
+  const flipLeft = point.svgX + PREVIEW_TOOLTIP_GAP + PREVIEW_TOOLTIP_WIDTH > chartWidth - 4;
+  let boxX = flipLeft
+    ? point.svgX - PREVIEW_TOOLTIP_GAP - PREVIEW_TOOLTIP_WIDTH
+    : point.svgX + PREVIEW_TOOLTIP_GAP;
+  boxX = Math.max(4, Math.min(boxX, chartWidth - PREVIEW_TOOLTIP_WIDTH - 4));
+
+  let boxY = point.svgY - PREVIEW_TOOLTIP_HEIGHT - 12;
+  boxY = Math.max(8, Math.min(boxY, chartHeight - PREVIEW_TOOLTIP_HEIGHT - 8));
+
+  return { boxX, boxY, textX: boxX + 8, lineYs: [boxY + 16, boxY + 30] };
+};
+
 const SavedGraphPreview = ({ points, config, width = 520, height = 220, animate = true, sortByX = false }) => {
   const polylineRef = useRef(null);
   const [pathLength, setPathLength] = useState(0);
@@ -288,6 +305,11 @@ const SavedGraphPreview = ({ points, config, width = 520, height = 220, animate 
     setHoveredPoint(nearest);
   };
 
+  const tooltipLayout = useMemo(() => {
+    if (!hoveredPoint) return null;
+    return resolvePreviewTooltipLayout(hoveredPoint, width, height);
+  }, [hoveredPoint, width, height]);
+
   return (
     <svg
       width={width}
@@ -297,6 +319,7 @@ const SavedGraphPreview = ({ points, config, width = 520, height = 220, animate 
         border: '1px solid var(--color-border)',
         borderRadius: 8,
         background: '#ffffff',
+        overflow: 'visible',
       }}
       onMouseMove={handleMouseMove}
       onMouseLeave={() => setHoveredPoint(null)}
@@ -442,13 +465,13 @@ const SavedGraphPreview = ({ points, config, width = 520, height = 220, animate 
         </g>
       ))}
 
-      {hoveredPoint ? (
+      {hoveredPoint && tooltipLayout ? (
         <g>
           <rect
-            x={Math.min(hoveredPoint.svgX + 8, width - 140)}
-            y={Math.max(hoveredPoint.svgY - 30, 8)}
-            width={132}
-            height={36}
+            x={tooltipLayout.boxX}
+            y={tooltipLayout.boxY}
+            width={PREVIEW_TOOLTIP_WIDTH}
+            height={PREVIEW_TOOLTIP_HEIGHT}
             rx={6}
             fill="#f8fafc"
             stroke="#111827"
@@ -456,8 +479,8 @@ const SavedGraphPreview = ({ points, config, width = 520, height = 220, animate 
             opacity="0.98"
           />
             <text
-              x={Math.min(hoveredPoint.svgX + 14, width - 134)}
-              y={Math.max(hoveredPoint.svgY - 12, 24)}
+              x={tooltipLayout.textX}
+              y={tooltipLayout.lineYs[0]}
               fontSize="10"
               fontWeight="600"
               fill="#111827"
@@ -465,8 +488,8 @@ const SavedGraphPreview = ({ points, config, width = 520, height = 220, animate 
                 X: {formatTooltipValue(hoveredPoint.x)}
             </text>
             <text
-              x={Math.min(hoveredPoint.svgX + 14, width - 134)}
-              y={Math.max(hoveredPoint.svgY + 2, 38)}
+              x={tooltipLayout.textX}
+              y={tooltipLayout.lineYs[1]}
               fontSize="10"
               fontWeight="600"
               fill="#111827"

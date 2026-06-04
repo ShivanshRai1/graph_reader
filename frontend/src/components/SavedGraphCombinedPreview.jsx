@@ -63,6 +63,28 @@ const buildTicks = (min, max, count) => {
 
 const palette = ['#2563eb', '#16a34a', '#f97316', '#e11d48', '#0ea5e9', '#8b5cf6', '#14b8a6'];
 
+const TOOLTIP_WIDTH = 250;
+const TOOLTIP_HEIGHT = 90;
+const TOOLTIP_GAP = 10;
+
+const resolveTooltipLayout = (point, chartWidth, chartHeight) => {
+  const flipLeft = point.svgX + TOOLTIP_GAP + TOOLTIP_WIDTH > chartWidth - 4;
+  let boxX = flipLeft
+    ? point.svgX - TOOLTIP_GAP - TOOLTIP_WIDTH
+    : point.svgX + TOOLTIP_GAP;
+  boxX = Math.max(4, Math.min(boxX, chartWidth - TOOLTIP_WIDTH - 4));
+
+  let boxY = point.svgY - TOOLTIP_HEIGHT / 2;
+  boxY = Math.max(8, Math.min(boxY, chartHeight - TOOLTIP_HEIGHT - 8));
+
+  return {
+    boxX,
+    boxY,
+    textX: boxX + 8,
+    lineYs: [boxY + 20, boxY + 36, boxY + 52, boxY + 68],
+  };
+};
+
 const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260, sortByX = false }) => {
   const [hoveredPoint, setHoveredPoint] = useState(null);
   const polylineRefs = useRef([]);
@@ -290,6 +312,11 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260, 
     setHoveredPoint(nearest);
   };
 
+  const tooltipLayout = useMemo(() => {
+    if (!hoveredPoint) return null;
+    return resolveTooltipLayout(hoveredPoint, width, height);
+  }, [hoveredPoint, width, height]);
+
   if (curveSvgData.length === 0 || curveSvgData.every((curve) => curve.points.length === 0)) {
     return (
       <div style={{ width }}>
@@ -314,12 +341,12 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260, 
   }
 
   return (
-    <div style={{ width }}>
+    <div style={{ width, overflow: 'visible' }}>
       <svg
         width={width}
         height={height}
         viewBox={`0 0 ${width} ${height}`}
-        style={{ border: '1px solid var(--color-border)', borderRadius: 8, background: '#ffffff' }}
+        style={{ border: '1px solid var(--color-border)', borderRadius: 8, background: '#ffffff', overflow: 'visible' }}
         onMouseMove={handleMouseMove}
         onMouseLeave={() => setHoveredPoint(null)}
       >
@@ -451,29 +478,29 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260, 
         ))
       )}
 
-      {hoveredPoint ? (
+      {hoveredPoint && tooltipLayout ? (
         <g>
           <rect
-            x={Math.min(hoveredPoint.svgX + 8, width - 180)}
-            y={Math.max(hoveredPoint.svgY - 46, 8)}
-            width={250}
-            height={90}
+            x={tooltipLayout.boxX}
+            y={tooltipLayout.boxY}
+            width={TOOLTIP_WIDTH}
+            height={TOOLTIP_HEIGHT}
             rx={6}
             fill="#f8fafc"
             stroke="#111827"
             strokeWidth="1"
             opacity="0.98"
           />
-          <text x={Math.min(hoveredPoint.svgX + 14, width - 244)} y={Math.max(hoveredPoint.svgY - 30, 22)} fontSize="11" fill="#111827" fontWeight="700">
+          <text x={tooltipLayout.textX} y={tooltipLayout.lineYs[0]} fontSize="11" fill="#111827" fontWeight="700">
             Graph: {hoveredPoint.graphTitle || '-'}
           </text>
-          <text x={Math.min(hoveredPoint.svgX + 14, width - 244)} y={Math.max(hoveredPoint.svgY - 14, 38)} fontSize="11" fill="#111827" fontWeight="700">
+          <text x={tooltipLayout.textX} y={tooltipLayout.lineYs[1]} fontSize="11" fill="#111827" fontWeight="700">
             Curve: {hoveredPoint.curveName || hoveredPoint.curveLabel || '-'}
           </text>
-          <text x={Math.min(hoveredPoint.svgX + 14, width - 244)} y={Math.max(hoveredPoint.svgY + 2, 54)} fontSize="11" fill="#111827" fontWeight="700">
+          <text x={tooltipLayout.textX} y={tooltipLayout.lineYs[2]} fontSize="11" fill="#111827" fontWeight="700">
             X{hoveredPoint.xLabel ? ` (${hoveredPoint.xLabel})` : ''}: {Number.isFinite(hoveredPoint.x) ? hoveredPoint.x.toFixed(4) : ''}
           </text>
-          <text x={Math.min(hoveredPoint.svgX + 14, width - 244)} y={Math.max(hoveredPoint.svgY + 18, 70)} fontSize="11" fill="#111827" fontWeight="700">
+          <text x={tooltipLayout.textX} y={tooltipLayout.lineYs[3]} fontSize="11" fill="#111827" fontWeight="700">
             Y{hoveredPoint.yLabel ? ` (${hoveredPoint.yLabel})` : ''}: {Number.isFinite(hoveredPoint.y) ? hoveredPoint.y.toFixed(4) : ''}
           </text>
         </g>
