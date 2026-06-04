@@ -1,3 +1,5 @@
+import { canonicalTcSeriesName } from './tcImport';
+
 const UNIT_SYMBOLS = {
   '1e-12': 'p',
   '1e-9': 'n',
@@ -437,8 +439,10 @@ const buildTypicalCurveExportCore = ({ template, graphConfig, seriesGroups }) =>
       ? (String(graphConfig.curveName || '').trim() || 'data0')
       : `data${index}`;
     const isY2 = Boolean(group.isY2);
+    const rawName = String(group.name || defaultName).trim() || defaultName;
+    const seriesName = canonicalTcSeriesName(rawName) || rawName;
     return buildSeriesEntry(templateSeries, group.points, {
-      name: String(group.name || defaultName).trim() || defaultName,
+      name: seriesName,
       colorIndex: index,
       showLegend,
       temperature: group.temperature ?? defaultTemperature,

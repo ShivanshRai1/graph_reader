@@ -11,6 +11,31 @@ const readAxisTitle = (axisBlock) => {
 
 const isLogAxis = (axisBlock) => Boolean(axisBlock?.grid?.log || axisBlock?.scale?.log);
 
+/**
+ * Match key for series names: case-insensitive, ignores all whitespace.
+ * "VOUT = 0.5V", "VOUT=0.5V", and "vout=0.5v" all map to "vout=0.5v".
+ */
+export const normalizeSeriesNameForMatch = (name) =>
+  String(name || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '');
+
+/**
+ * HPPeval-style legend name when the label is a VOUT rail (optional for export).
+ */
+export const canonicalTcSeriesName = (name) => {
+  const trimmed = String(name || '').trim();
+  if (!trimmed) return '';
+
+  const voutMatch = trimmed.match(/^vout\s*=\s*([\d.]+)\s*v?\s*$/i);
+  if (voutMatch) {
+    return `VOUT=${voutMatch[1]}V`;
+  }
+
+  return trimmed;
+};
+
 export const parseTypicalCurveFile = (raw) => {
   const tc = typeof raw === 'string' ? JSON.parse(raw) : raw;
   if (!tc || typeof tc !== 'object') {
@@ -89,9 +114,11 @@ export const readTypicalCurveFile = (file) =>
 const indexPointsByName = (parsed) => {
   const map = new Map();
   parsed.curves.forEach((curve) => {
-    const key = String(curve.name || '').trim().toLowerCase();
+    const key = normalizeSeriesNameForMatch(curve.name);
     if (!key) return;
-    map.set(key, curve.points);
+    if (!map.has(key)) {
+      map.set(key, { points: curve.points, label: curve.name });
+    }
   });
   return map;
 };
@@ -118,8 +145,9 @@ export const compareTypicalCurveFiles = (referenceParsed, candidateParsed) => {
   const rows = [];
 
   candidateParsed.curves.forEach((candidateCurve) => {
-    const key = String(candidateCurve.name || '').trim().toLowerCase();
-    const refPoints = refByName.get(key);
+    const key = normalizeSeriesNameForMatch(candidateCurve.name);
+    const refEntry = refByName.get(key);
+    const refPoints = refEntry?.points;
     if (!refPoints) {
       rows.push({
         series: candidateCurve.name,
@@ -153,13 +181,13 @@ export const compareTypicalCurveFiles = (referenceParsed, candidateParsed) => {
     });
   });
 
-  refByName.forEach((_, nameKey) => {
+  refByName.forEach((entry, nameKey) => {
     const hasCandidate = candidateParsed.curves.some(
-      (curve) => String(curve.name || '').trim().toLowerCase() === nameKey
+      (curve) => normalizeSeriesNameForMatch(curve.name) === nameKey
     );
     if (!hasCandidate) {
       rows.push({
-        series: nameKey,
+        series: entry.label || nameKey,
         status: 'missing_in_candidate',
         maxAbsError: null,
         meanAbsError: null,
