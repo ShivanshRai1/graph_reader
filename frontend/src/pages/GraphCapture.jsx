@@ -6620,7 +6620,7 @@ const GraphCapture = () => {
                         border: '1px solid #93c5fd',
                         textDecoration: 'none',
                       }}
-                      title="Open .tc plot checker in a new tab (compare reference vs your export)"
+                      title="DiscoverEE Approach and Analog Reference"
                     >
                       Check .tc
                     </a>
