@@ -13,10 +13,12 @@ const fileInputStyle = {
 };
 
 const panelStyle = {
-  maxWidth: 1500,
+  width: '100%',
+  maxWidth: 1800,
   margin: '0 auto',
   padding: 24,
   color: '#213547',
+  boxSizing: 'border-box',
 };
 
 const cardStyle = {
@@ -38,10 +40,13 @@ const LAYOUT_IMAGE_TC_SPLIT = 'imageTcSplit';
 /** Original | reference .tc | export .tc in one row */
 const LAYOUT_TRIPLE = 'triple';
 
+/** Set true to show the numeric accuracy table when reference + export are loaded */
+const SHOW_ACCURACY_TABLE = false;
+
 const imagePanelStyle = {
-  flex: '0 1 360px',
-  minWidth: 240,
-  maxWidth: 420,
+  flex: '0 1 520px',
+  minWidth: 300,
+  maxWidth: 580,
 };
 
 const TcPlotChecker = () => {
@@ -123,7 +128,7 @@ const TcPlotChecker = () => {
   };
 
   const comparison = useMemo(() => {
-    if (!reference?.parsed || !candidate?.parsed) return null;
+    if (!SHOW_ACCURACY_TABLE || !reference?.parsed || !candidate?.parsed) return null;
     return compareTypicalCurveFiles(reference.parsed, candidate.parsed);
   }, [reference, candidate]);
 
@@ -206,8 +211,9 @@ const TcPlotChecker = () => {
   const isOverlayLayout = layoutMode === LAYOUT_OVERLAY || layoutMode === LAYOUT_IMAGE_OVERLAY;
   const isTcSplitLayout = layoutMode === LAYOUT_TC_SPLIT || layoutMode === LAYOUT_IMAGE_TC_SPLIT;
 
-  const chartWidth = isTripleLayout ? 360 : (isTcSplitLayout ? 400 : 520);
-  const chartHeight = isTripleLayout ? 300 : (isTcSplitLayout ? 280 : 340);
+  const chartWidth = isTripleLayout ? 500 : (isTcSplitLayout ? 540 : 720);
+  const chartHeight = isTripleLayout ? 400 : (isTcSplitLayout ? 380 : 460);
+  const imageMaxHeight = isTripleLayout ? 400 : 500;
 
   const renderOriginalImage = () => {
     if (!originalImage?.url) return null;
@@ -220,7 +226,8 @@ const TcPlotChecker = () => {
           style={{
             display: 'block',
             width: '100%',
-            maxHeight: isTripleLayout ? 300 : 380,
+            maxHeight: imageMaxHeight,
+            minHeight: isTripleLayout ? 320 : 360,
             objectFit: 'contain',
             borderRadius: 4,
             border: '1px solid #e2e8f0',
@@ -245,7 +252,7 @@ const TcPlotChecker = () => {
     <div
       style={{
         display: 'grid',
-        gridTemplateColumns: compact ? '1fr' : 'repeat(auto-fit, minmax(280px, 1fr))',
+        gridTemplateColumns: compact ? '1fr' : 'repeat(auto-fit, minmax(360px, 1fr))',
         gap: 12,
         flex: 1,
         minWidth: 0,
@@ -286,8 +293,9 @@ const TcPlotChecker = () => {
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(3, minmax(240px, 1fr))',
-            gap: 16,
+            gridTemplateColumns: 'repeat(3, minmax(320px, 1fr))',
+            gap: 20,
+            width: '100%',
             alignItems: 'start',
           }}
         >
@@ -331,7 +339,7 @@ const TcPlotChecker = () => {
           }}
         >
           {renderOriginalImage()}
-          <div style={{ flex: '1 1 480px', minWidth: 280 }}>
+          <div style={{ flex: '1 1 640px', minWidth: 360 }}>
             {isOverlayLayout && (
               <>
                 <h3 style={{ fontSize: 14, margin: '0 0 8px', color: '#334155' }}>Reference + export (overlaid)</h3>
@@ -536,13 +544,13 @@ const TcPlotChecker = () => {
         )}
 
         {(hasPlot || hasImage) && (
-          <div style={{ ...cardStyle, marginBottom: 16 }}>
+          <div style={{ ...cardStyle, marginBottom: 16, width: '100%', overflowX: 'auto' }}>
             <h2 style={{ fontSize: 16, margin: '0 0 12px' }}>Comparison</h2>
             {renderComparisonWorkspace()}
           </div>
         )}
 
-        {comparison && (
+        {SHOW_ACCURACY_TABLE && comparison && (
           <div style={{ ...cardStyle }}>
             <h2 style={{ fontSize: 16, margin: '0 0 8px' }}>Accuracy vs reference</h2>
             {Number.isFinite(comparison.overallMax) && (
