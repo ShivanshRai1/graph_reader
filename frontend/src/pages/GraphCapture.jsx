@@ -6418,19 +6418,9 @@ const GraphCapture = () => {
         </div>
       )}
       <header className="mb-8 flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold mb-2" style={{ color: '#213547' }}>
-            Graph Capture Tool
-          </h1>
-          <a
-            href={buildTcCheckerUrl()}
-            className="text-sm font-medium"
-            style={{ color: '#2563eb' }}
-            title="Plot and compare HPPeval .tc files (reference vs your export)"
-          >
-            Check .tc
-          </a>
-        </div>
+        <h1 className="text-2xl font-bold mb-2" style={{ color: '#213547' }}>
+          Graph Capture Tool
+        </h1>
         {!!urlParams.return_url && (
           <button
             onClick={handleCancelAndReturn}
@@ -6619,6 +6609,21 @@ const GraphCapture = () => {
                     >
                       Export all .tc
                     </button>
+                    <a
+                      href={buildTcCheckerUrl()}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-1 rounded text-xs font-medium inline-flex items-center"
+                      style={{
+                        color: '#1d4ed8',
+                        backgroundColor: '#eff6ff',
+                        border: '1px solid #93c5fd',
+                        textDecoration: 'none',
+                      }}
+                      title="Open .tc plot checker in a new tab (compare reference vs your export)"
+                    >
+                      Check .tc
+                    </a>
                   </div>
                   <div className="flex flex-col gap-4 max-h-80 overflow-y-auto pr-2">
                     {groupedCurves.map((group, groupIndex) => (
