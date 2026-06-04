@@ -87,8 +87,6 @@ const TcPlotChecker = () => {
     setOriginalImage({ name: name || 'Pasted image', url });
     setLayoutMode((prev) => {
       if (reference?.parsed && candidate?.parsed) return LAYOUT_TRIPLE;
-      if (prev === LAYOUT_OVERLAY) return LAYOUT_IMAGE_OVERLAY;
-      if (prev === LAYOUT_TC_SPLIT) return LAYOUT_IMAGE_TC_SPLIT;
       return prev;
     });
   }, [revokeImageUrl, reference, candidate]);
@@ -214,6 +212,13 @@ const TcPlotChecker = () => {
     }
   }, [layoutOptions, layoutMode]);
 
+  // Always use three-panel view when image + both .tc files are loaded (layout radios hidden).
+  useEffect(() => {
+    if (hasImage && canComparePlots) {
+      setLayoutMode(LAYOUT_TRIPLE);
+    }
+  }, [hasImage, canComparePlots]);
+
   const showImageInComparison = hasImage && (
     layoutMode === LAYOUT_IMAGE_OVERLAY ||
     layoutMode === LAYOUT_IMAGE_TC_SPLIT ||
@@ -301,7 +306,7 @@ const TcPlotChecker = () => {
   const renderComparisonWorkspace = () => {
     if (!hasPlot && !hasImage) return null;
 
-    if (isTripleLayout && hasImage && canComparePlots) {
+    if (hasImage && canComparePlots) {
       return (
         <div
           style={{
@@ -455,25 +460,6 @@ const TcPlotChecker = () => {
           </label>
 
           <label style={cardStyle}>
-            <strong>{LABEL_ANALOG_REFERENCE}</strong> (optional)
-            <input
-              type="file"
-              accept=".tc,application/json"
-              style={fileInputStyle}
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                loadFile(file, 'reference');
-                event.target.value = '';
-              }}
-            />
-            {reference?.name && (
-              <span style={{ display: 'block', marginTop: 6, fontSize: 13, color: '#64748b' }}>
-                Loaded: {reference.name}
-              </span>
-            )}
-          </label>
-
-          <label style={cardStyle}>
             <strong>{LABEL_DISCOVEREE}</strong>
             <input
               type="file"
@@ -488,6 +474,25 @@ const TcPlotChecker = () => {
             {candidate?.name && (
               <span style={{ display: 'block', marginTop: 6, fontSize: 13, color: '#64748b' }}>
                 Loaded: {candidate.name}
+              </span>
+            )}
+          </label>
+
+          <label style={cardStyle}>
+            <strong>{LABEL_ANALOG_REFERENCE}</strong> (optional)
+            <input
+              type="file"
+              accept=".tc,application/json"
+              style={fileInputStyle}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                loadFile(file, 'reference');
+                event.target.value = '';
+              }}
+            />
+            {reference?.name && (
+              <span style={{ display: 'block', marginTop: 6, fontSize: 13, color: '#64748b' }}>
+                Loaded: {reference.name}
               </span>
             )}
           </label>
