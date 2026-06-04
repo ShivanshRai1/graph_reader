@@ -204,6 +204,85 @@ export const compareTypicalCurveFiles = (referenceParsed, candidateParsed) => {
   return { rows, overallMax };
 };
 
+/**
+ * RMS per supervisor spec: sqrt( sum(y²_discoveree - y²_analog) / (xmax - xmin) )
+ * at each reference X where DiscoverEE Y can be interpolated.
+ */
+export const computeDiscoverEeAnalogRms = (referenceParsed, candidateParsed) => {
+  const refByName = indexPointsByName(referenceParsed);
+  const rows = [];
+
+  candidateParsed.curves.forEach((candidateCurve) => {
+    const key = normalizeSeriesNameForMatch(candidateCurve.name);
+    const refEntry = refByName.get(key);
+    const refPoints = refEntry?.points;
+    if (!refPoints) {
+      rows.push({
+        series: candidateCurve.name,
+        status: 'missing_in_reference',
+        pointCount: 0,
+        xMin: null,
+        xMax: null,
+        xSpan: null,
+        rms: null,
+      });
+      return;
+    }
+
+    let sumSquaresDiff = 0;
+    let compared = 0;
+    let xMin = Infinity;
+    let xMax = -Infinity;
+
+    refPoints.forEach((refPoint) => {
+      const candidateY = findYAtX(candidateCurve.points, refPoint.x);
+      if (!Number.isFinite(candidateY) || !Number.isFinite(refPoint.y)) return;
+      sumSquaresDiff += candidateY * candidateY - refPoint.y * refPoint.y;
+      compared += 1;
+      xMin = Math.min(xMin, refPoint.x);
+      xMax = Math.max(xMax, refPoint.x);
+    });
+
+    const xSpan = compared > 0 && Number.isFinite(xMin) && Number.isFinite(xMax) ? xMax - xMin : null;
+    const rms =
+      compared > 0 && Number.isFinite(xSpan) && xSpan > 0
+        ? Math.sqrt(sumSquaresDiff / xSpan)
+        : null;
+
+    rows.push({
+      series: candidateCurve.name,
+      status: compared > 0 ? 'ok' : 'no_overlap',
+      pointCount: compared,
+      xMin: compared > 0 ? xMin : null,
+      xMax: compared > 0 ? xMax : null,
+      xSpan,
+      rms,
+    });
+  });
+
+  refByName.forEach((entry, nameKey) => {
+    const hasCandidate = candidateParsed.curves.some(
+      (curve) => normalizeSeriesNameForMatch(curve.name) === nameKey
+    );
+    if (!hasCandidate) {
+      rows.push({
+        series: entry.label || nameKey,
+        status: 'missing_in_candidate',
+        pointCount: 0,
+        xMin: null,
+        xMax: null,
+        xSpan: null,
+        rms: null,
+      });
+    }
+  });
+
+  const comparable = rows.filter((row) => row.status === 'ok' && Number.isFinite(row.rms));
+  const overallRms = comparable.length ? Math.max(...comparable.map((row) => row.rms)) : null;
+
+  return { rows, overallRms };
+};
+
 export const prefixTypicalCurveCurves = (parsed, prefix) =>
   parsed.curves.map((curve, index) => ({
     ...curve,

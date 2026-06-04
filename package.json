@@ -1,4 +1,7 @@
 {
+  "scripts": {
+    "build:datasheet-jsonld": "node scripts/build-datasheet-jsonld.mjs"
+  },
   "devDependencies": {
     "autoprefixer": "^10.4.24",
     "postcss": "^8.5.6",

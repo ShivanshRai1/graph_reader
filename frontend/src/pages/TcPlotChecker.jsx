@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import SavedGraphCombinedPreview from '../components/SavedGraphCombinedPreview';
 import {
   compareTypicalCurveFiles,
+  computeDiscoverEeAnalogRms,
   prefixTypicalCurveCurves,
   readTypicalCurveFile,
 } from '../utils/tcImport';
@@ -139,6 +140,11 @@ const TcPlotChecker = () => {
   const comparison = useMemo(() => {
     if (!SHOW_ACCURACY_TABLE || !reference?.parsed || !candidate?.parsed) return null;
     return compareTypicalCurveFiles(reference.parsed, candidate.parsed);
+  }, [reference, candidate]);
+
+  const rmsComparison = useMemo(() => {
+    if (!reference?.parsed || !candidate?.parsed) return null;
+    return computeDiscoverEeAnalogRms(reference.parsed, candidate.parsed);
   }, [reference, candidate]);
 
   const overlayCurves = useMemo(() => {
@@ -601,6 +607,56 @@ const TcPlotChecker = () => {
           <div style={{ ...cardStyle, marginBottom: 16, width: '100%', overflowX: 'auto' }}>
             <h2 style={{ fontSize: 16, margin: '0 0 12px' }}>Comparison</h2>
             {renderComparisonWorkspace()}
+          </div>
+        )}
+
+        {rmsComparison && canComparePlots && (
+          <div style={{ ...cardStyle, marginBottom: 16 }}>
+            <h2 style={{ fontSize: 16, margin: '0 0 8px' }}>
+              RMS — DiscoverEE Approach vs Analog reference
+            </h2>
+            <p style={{ margin: '0 0 12px', fontSize: 13, color: '#64748b' }}>
+              Per series at reference X: sqrt( sum(y² DiscoverEE − y² Analog) / (xmax − xmin) )
+            </p>
+            {Number.isFinite(rmsComparison.overallRms) && (
+              <p style={{ margin: '0 0 12px', fontSize: 14 }}>
+                Largest RMS (any series): <strong>{rmsComparison.overallRms.toFixed(6)}</strong>
+              </p>
+            )}
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+              <thead>
+                <tr style={{ textAlign: 'left', borderBottom: '1px solid #e2e8f0' }}>
+                  <th style={{ padding: '8px 4px' }}>Series</th>
+                  <th style={{ padding: '8px 4px' }}>Points</th>
+                  <th style={{ padding: '8px 4px' }}>x min</th>
+                  <th style={{ padding: '8px 4px' }}>x max</th>
+                  <th style={{ padding: '8px 4px' }}>x max − x min</th>
+                  <th style={{ padding: '8px 4px' }}>RMS</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rmsComparison.rows.map((row) => (
+                  <tr key={`rms-${row.series}-${row.status}`} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                    <td style={{ padding: '8px 4px' }}>{row.series}</td>
+                    <td style={{ padding: '8px 4px' }}>
+                      {row.status === 'ok' ? row.pointCount : row.status.replace(/_/g, ' ')}
+                    </td>
+                    <td style={{ padding: '8px 4px' }}>
+                      {Number.isFinite(row.xMin) ? row.xMin.toFixed(4) : '—'}
+                    </td>
+                    <td style={{ padding: '8px 4px' }}>
+                      {Number.isFinite(row.xMax) ? row.xMax.toFixed(4) : '—'}
+                    </td>
+                    <td style={{ padding: '8px 4px' }}>
+                      {Number.isFinite(row.xSpan) ? row.xSpan.toFixed(4) : '—'}
+                    </td>
+                    <td style={{ padding: '8px 4px' }}>
+                      {Number.isFinite(row.rms) ? row.rms.toFixed(6) : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
 

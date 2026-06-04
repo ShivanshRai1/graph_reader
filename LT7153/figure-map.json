@@ -1,0 +1,23 @@
+{
+  "capturedDir": "captured",
+  "tcFileBaseUrl": "https://www.discoveree.io/jsonld/analog/LT7153/tc/",
+  "tcFilePatterns": {
+    "4": ["figure_4", "figure 4", "g04", "500khz", "500_khz"],
+    "5": ["figure_5", "figure 5", "g05", "1mhz", "1_mhz"],
+    "6": ["figure_6", "figure 6", "g06", "2mhz", "2_mhz"],
+    "7": ["figure_7", "figure 7", "g07", "load_reg", "load reg"],
+    "10": ["figure_10", "g10", "dcm_50ma", "load transient dcm"],
+    "11": ["figure_11", "g11", "ccm_50ma"],
+    "12": ["figure_12", "g12", "ccm_8a"],
+    "16": ["figure_16", "g16", "freq_vs_rt", "switching_freq_vs_rt"],
+    "17": ["figure_17", "g17", "frequency_vs_vout", "freq_vs_vout"],
+    "18": ["figure_18", "g18", "svin_current", "svin_=_5v"],
+    "19": ["figure_19", "g19", "frequency_vs_temperature", "switching_frequency_vs_temperature"],
+    "20": ["figure_20", "g20", "regulated_fb", "fb_voltage_vs_temperature"],
+    "21": ["figure_21", "g21", "run_rising"],
+    "22": ["figure_22", "g22", "valley_current", "vith"],
+    "23": ["figure_23", "g23", "valley_current_vs_temperature", "nvmts"],
+    "24": ["figure_24", "g24", "case_temperature", "case_temperature_rise"],
+    "25": ["figure_25", "g25", "rdson", "r_ds"]
+  }
+}
