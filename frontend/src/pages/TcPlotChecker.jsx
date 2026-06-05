@@ -1,11 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import SavedGraphCombinedPreview from '../components/SavedGraphCombinedPreview';
 import {
+  downloadHtmlFragmentAsPng,
+  downloadPanelAsPng,
+} from '../utils/downloadPng';
+import {
   compareTypicalCurveFiles,
   computeDiscoverEeAnalogRms,
   prefixTypicalCurveCurves,
   readTypicalCurveFile,
 } from '../utils/tcImport';
+
+const PNG_EXPORT_SCALE = 2;
 
 const fileInputStyle = {
   display: 'block',
@@ -57,6 +63,25 @@ const imagePanelStyle = {
   maxWidth: 580,
 };
 
+const downloadBtnStyle = {
+  fontSize: 12,
+  padding: '4px 10px',
+  borderRadius: 6,
+  border: '1px solid #cbd5e1',
+  background: '#f8fafc',
+  color: '#334155',
+  cursor: 'pointer',
+  whiteSpace: 'nowrap',
+};
+
+const buildExportSlug = (value) =>
+  String(value || 'comparison')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60) || 'comparison';
+
 const TcPlotChecker = () => {
   const [reference, setReference] = useState(null);
   const [candidate, setCandidate] = useState(null);
@@ -68,6 +93,11 @@ const TcPlotChecker = () => {
   const [pasteZoneHovered, setPasteZoneHovered] = useState(false);
   const imageUrlRef = useRef(null);
   const pasteZoneRef = useRef(null);
+  const comparisonWorkspaceRef = useRef(null);
+  const panelImageRef = useRef(null);
+  const panelDiscovereeRef = useRef(null);
+  const panelAnalogRef = useRef(null);
+  const rmsExportRef = useRef(null);
 
   const revokeImageUrl = useCallback(() => {
     if (imageUrlRef.current) {
@@ -190,6 +220,60 @@ const TcPlotChecker = () => {
   const canComparePlots = Boolean(reference?.parsed && candidate?.parsed);
   const hasImage = Boolean(originalImage?.url);
 
+  const exportSlug = useMemo(() => {
+    const title =
+      candidate?.parsed?.config?.graphTitle ||
+      reference?.parsed?.config?.graphTitle ||
+      originalImage?.name ||
+      'comparison';
+    return buildExportSlug(title);
+  }, [candidate, reference, originalImage]);
+
+  const runPngExport = useCallback(async (exportFn, filename) => {
+    try {
+      await exportFn();
+    } catch (exportError) {
+      console.error('PNG export failed:', exportError);
+      setError(exportError?.message || 'Failed to download PNG.');
+    }
+  }, []);
+
+  const handlePanelPngDownload = useCallback(
+    (panelRef, label) => {
+      if (!panelRef.current) return;
+      runPngExport(
+        () =>
+          downloadPanelAsPng(panelRef.current, `${exportSlug}-${label}`, {
+            scale: PNG_EXPORT_SCALE,
+          }),
+        label
+      );
+    },
+    [exportSlug, runPngExport]
+  );
+
+  const handleComparisonPngDownload = useCallback(() => {
+    if (!comparisonWorkspaceRef.current) return;
+    runPngExport(
+      () =>
+        downloadHtmlFragmentAsPng(comparisonWorkspaceRef.current, `${exportSlug}-comparison-full`, {
+          scale: PNG_EXPORT_SCALE,
+        }),
+      'comparison-full'
+    );
+  }, [exportSlug, runPngExport]);
+
+  const handleRmsPngDownload = useCallback(() => {
+    if (!rmsExportRef.current) return;
+    runPngExport(
+      () =>
+        downloadHtmlFragmentAsPng(rmsExportRef.current, `${exportSlug}-rms`, {
+          scale: PNG_EXPORT_SCALE,
+        }),
+      'rms'
+    );
+  }, [exportSlug, runPngExport]);
+
   const layoutOptions = useMemo(() => {
     const options = [];
     if (hasImage && hasPlot) {
@@ -239,11 +323,33 @@ const TcPlotChecker = () => {
   const chartHeight = isTripleLayout ? 400 : (isTcSplitLayout ? 380 : 460);
   const imageMaxHeight = isTripleLayout ? 400 : 500;
 
-  const renderOriginalImage = () => {
+  const renderPanelHeader = (title, onDownload) => (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 8,
+        marginBottom: 8,
+      }}
+    >
+      <h3 style={{ fontSize: 14, margin: 0, color: '#334155' }}>{title}</h3>
+      {onDownload ? (
+        <button type="button" style={downloadBtnStyle} onClick={onDownload}>
+          Download PNG
+        </button>
+      ) : null}
+    </div>
+  );
+
+  const renderOriginalImage = (withExport = false) => {
     if (!originalImage?.url) return null;
     return (
-      <div style={showImageInComparison ? imagePanelStyle : undefined}>
-        <h3 style={{ fontSize: 14, margin: '0 0 8px', color: '#334155' }}>{LABEL_GRAPH_IMAGE}</h3>
+      <div ref={withExport ? panelImageRef : null} style={showImageInComparison ? imagePanelStyle : undefined}>
+        {renderPanelHeader(
+          LABEL_GRAPH_IMAGE,
+          withExport ? () => handlePanelPngDownload(panelImageRef, 'datasheet-image') : null
+        )}
         <img
           src={originalImage.url}
           alt={originalImage.name || LABEL_GRAPH_IMAGE}
@@ -272,7 +378,7 @@ const TcPlotChecker = () => {
     />
   );
 
-  const renderSplitTcCharts = (compact = false) => (
+  const renderSplitTcCharts = (compact = false, withExport = false) => (
     <div
       style={{
         display: 'grid',
@@ -283,8 +389,11 @@ const TcPlotChecker = () => {
       }}
     >
       {candidate?.parsed && candidatePlotConfig && (
-        <div>
-          <h3 style={{ fontSize: 14, margin: '0 0 8px', color: '#334155' }}>{LABEL_DISCOVEREE}</h3>
+        <div ref={withExport ? panelDiscovereeRef : null}>
+          {renderPanelHeader(
+            LABEL_DISCOVEREE,
+            withExport ? () => handlePanelPngDownload(panelDiscovereeRef, 'discoveree') : null
+          )}
           <SavedGraphCombinedPreview
             curves={candidate.parsed.curves}
             config={candidatePlotConfig}
@@ -295,8 +404,11 @@ const TcPlotChecker = () => {
         </div>
       )}
       {reference?.parsed && referencePlotConfig && (
-        <div>
-          <h3 style={{ fontSize: 14, margin: '0 0 8px', color: '#334155' }}>{LABEL_ANALOG_REFERENCE}</h3>
+        <div ref={withExport ? panelAnalogRef : null}>
+          {renderPanelHeader(
+            LABEL_ANALOG_REFERENCE,
+            withExport ? () => handlePanelPngDownload(panelAnalogRef, 'analog-reference') : null
+          )}
           <SavedGraphCombinedPreview
             curves={reference.parsed.curves}
             config={referencePlotConfig}
@@ -315,6 +427,7 @@ const TcPlotChecker = () => {
     if (hasImage && canComparePlots) {
       return (
         <div
+          ref={comparisonWorkspaceRef}
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(3, minmax(320px, 1fr))',
@@ -323,10 +436,12 @@ const TcPlotChecker = () => {
             alignItems: 'start',
           }}
         >
-          {renderOriginalImage()}
+          {renderOriginalImage(true)}
           {candidate?.parsed && candidatePlotConfig && (
-            <div>
-              <h3 style={{ fontSize: 14, margin: '0 0 8px', color: '#334155' }}>{LABEL_DISCOVEREE}</h3>
+            <div ref={panelDiscovereeRef}>
+              {renderPanelHeader(LABEL_DISCOVEREE, () =>
+                handlePanelPngDownload(panelDiscovereeRef, 'discoveree')
+              )}
               <SavedGraphCombinedPreview
                 curves={candidate.parsed.curves}
                 config={candidatePlotConfig}
@@ -337,8 +452,10 @@ const TcPlotChecker = () => {
             </div>
           )}
           {reference?.parsed && referencePlotConfig && (
-            <div>
-              <h3 style={{ fontSize: 14, margin: '0 0 8px', color: '#334155' }}>{LABEL_ANALOG_REFERENCE}</h3>
+            <div ref={panelAnalogRef}>
+              {renderPanelHeader(LABEL_ANALOG_REFERENCE, () =>
+                handlePanelPngDownload(panelAnalogRef, 'analog-reference')
+              )}
               <SavedGraphCombinedPreview
                 curves={reference.parsed.curves}
                 config={referencePlotConfig}
@@ -355,6 +472,7 @@ const TcPlotChecker = () => {
     if (showImageInComparison && hasPlot) {
       return (
         <div
+          ref={comparisonWorkspaceRef}
           style={{
             display: 'flex',
             flexWrap: 'wrap',
@@ -362,34 +480,35 @@ const TcPlotChecker = () => {
             alignItems: 'flex-start',
           }}
         >
-          {renderOriginalImage()}
+          {renderOriginalImage(true)}
           <div style={{ flex: '1 1 640px', minWidth: 360 }}>
             {isOverlayLayout && (
-              <>
-                <h3 style={{ fontSize: 14, margin: '0 0 8px', color: '#334155' }}>Reference + export (overlaid)</h3>
+              <div ref={panelDiscovereeRef}>
+                {renderPanelHeader('Reference + export (overlaid)', () =>
+                  handlePanelPngDownload(panelDiscovereeRef, 'overlay')
+                )}
                 {renderOverlayChart()}
-              </>
+              </div>
             )}
-            {isTcSplitLayout && canComparePlots && (
-              <>
-                <h3 style={{ fontSize: 14, margin: '0 0 8px', color: '#334155' }}>Reference vs export</h3>
-                {renderSplitTcCharts(true)}
-              </>
-            )}
+            {isTcSplitLayout && canComparePlots && renderSplitTcCharts(true, true)}
           </div>
         </div>
       );
     }
 
     if (hasImage && !hasPlot) {
-      return renderOriginalImage();
+      return (
+        <div ref={comparisonWorkspaceRef}>
+          {renderOriginalImage(true)}
+        </div>
+      );
     }
 
     if (!hasPlot) return null;
 
     if (isOverlayLayout) {
       return (
-        <>
+        <div ref={comparisonWorkspaceRef}>
           {isOverlayLayout && layoutMode === LAYOUT_OVERLAY && (
             <p style={{ margin: '0 0 12px', fontSize: 13, color: '#64748b' }}>
               X: {plotConfig.xLabel} ({plotConfig.xMin} – {plotConfig.xMax}, {plotConfig.xScale})
@@ -397,12 +516,21 @@ const TcPlotChecker = () => {
               Y: {plotConfig.yLabel} ({plotConfig.yMin} – {plotConfig.yMax}, {plotConfig.yScale})
             </p>
           )}
-          {renderOverlayChart()}
-        </>
+          <div ref={panelDiscovereeRef}>
+            {renderPanelHeader('Reference + export (overlaid)', () =>
+              handlePanelPngDownload(panelDiscovereeRef, 'overlay')
+            )}
+            {renderOverlayChart()}
+          </div>
+        </div>
       );
     }
 
-    return renderSplitTcCharts(false);
+    return (
+      <div ref={comparisonWorkspaceRef}>
+        {renderSplitTcCharts(false, true)}
+      </div>
+    );
   };
 
   return (
@@ -605,24 +733,51 @@ const TcPlotChecker = () => {
 
         {(hasPlot || hasImage) && (
           <div style={{ ...cardStyle, marginBottom: 16, width: '100%', overflowX: 'auto' }}>
-            <h2 style={{ fontSize: 16, margin: '0 0 12px' }}>Comparison</h2>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+                marginBottom: 12,
+              }}
+            >
+              <h2 style={{ fontSize: 16, margin: 0 }}>Comparison</h2>
+              <button type="button" style={downloadBtnStyle} onClick={handleComparisonPngDownload}>
+                Download full comparison PNG
+              </button>
+            </div>
             {renderComparisonWorkspace()}
           </div>
         )}
 
         {rmsComparison && canComparePlots && (
           <div style={{ ...cardStyle, marginBottom: 16 }}>
-            <h2 style={{ fontSize: 16, margin: '0 0 8px' }}>
-              RMS — DiscoverEE Approach vs Analog reference
-            </h2>
-            <p style={{ margin: '0 0 12px', fontSize: 13, color: '#64748b' }}>
-              Per series at reference X: sqrt( sum(y² DiscoverEE − y² Analog) / (xmax − xmin) )
-            </p>
-            {Number.isFinite(rmsComparison.overallRms) && (
-              <p style={{ margin: '0 0 12px', fontSize: 14 }}>
-                Largest RMS (any series): <strong>{rmsComparison.overallRms.toFixed(6)}</strong>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+                marginBottom: 8,
+              }}
+            >
+              <h2 style={{ fontSize: 16, margin: 0 }}>
+                RMS — DiscoverEE Approach vs Analog reference
+              </h2>
+              <button type="button" style={downloadBtnStyle} onClick={handleRmsPngDownload}>
+                Download RMS PNG
+              </button>
+            </div>
+            <div ref={rmsExportRef}>
+              <p style={{ margin: '0 0 12px', fontSize: 13, color: '#64748b' }}>
+                Per series at reference X: sqrt( sum(y² DiscoverEE − y² Analog) / (xmax − xmin) )
               </p>
-            )}
+              {Number.isFinite(rmsComparison.overallRms) && (
+                <p style={{ margin: '0 0 12px', fontSize: 14 }}>
+                  Largest RMS (any series): <strong>{rmsComparison.overallRms.toFixed(6)}</strong>
+                </p>
+              )}
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
               <thead>
                 <tr style={{ textAlign: 'left', borderBottom: '1px solid #e2e8f0' }}>
@@ -657,6 +812,7 @@ const TcPlotChecker = () => {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         )}
 

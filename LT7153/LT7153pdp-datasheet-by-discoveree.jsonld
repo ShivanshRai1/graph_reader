@@ -2385,6 +2385,7 @@
     {
       "figure": 20,
       "title": "Regulated FB Voltage vs. Temperature",
+      "tcFileUrl": "https://www.discoveree.io/jsonld/analog/LT7153/tc/Figure_20._Regulated_FB_Voltage_vs._Temperature-Figure_20._Regulated_FB_Voltage_vs._Temperature-manual_edited.tc",
       "altText": "Regulated FB voltage decreases slightly with temperature from ~501.8mV at -50°C to ~500.2mV at 125°C, showing good regulation stability.",
       "imageDescription": "X-axis is Temperature in °C ranging from -50 to 125. Y-axis is Regulated FB Voltage in mV ranging from 498 to 503. A single curve shows a mild negative slope starting at approximately 501.8mV at -50°C and declining to about 500.2mV at 125°C. The variation is less than 2mV over the full temperature range. No explicit conditions are annotated on the plot.",
       "curveSummary": {
@@ -2550,8 +2551,7 @@
           }
         ]
       },
-      "docOrder": 0,
-      "tcFileUrl": "https://www.discoveree.io/jsonld/analog/LT7153/tc/Figure_20._Regulated_FB_Voltage_vs._Temperature-Figure_20._Regulated_FB_Voltage_vs._Temperature-manual_edited.tc"
+      "docOrder": 0
     },
     {
       "figure": 21,
@@ -2979,6 +2979,7 @@
     {
       "figure": 24,
       "title": "Case Temperature vs. Load",
+      "tcFileUrl": "https://www.discoveree.io/jsonld/analog/LT7153/tc/Case_Temperature_vs._Load-Case_Temperature_Rise-manual_edited.tc",
       "altText": "A line graph showing case temperature rise versus output load current for a component, labeled Figure 24.",
       "imageDescription": "An image showing a technical line graph titled 'Figure 24. Case Temperature vs. Load'. The chart features a black grid on a white background. The vertical y-axis is labeled 'CASE TEMPERATURE RISE (°C)' with major markings at 0, 5, 10, 15, 20, and 25. The horizontal x-axis is labeled 'IOUT (A)' representing output current, with major markings at 0, 5, 10, 15, 20, and 25. A single teal-colored curve starts at the origin (0,0) and rises non-linearly with an upward curvature as output current increases. At 10A, the temperature rise is approximately 3°C; at 20A, it is roughly 10°C; and it reaches about 16°C at a maximum current of 25A.",
       "imageUrl": "https://www.discoveree.io/jsonld/analog/LT7153/fig24_casetemp.png",
@@ -3134,8 +3135,7 @@
           }
         ]
       },
-      "docOrder": 0,
-      "tcFileUrl": "https://www.discoveree.io/jsonld/analog/LT7153/tc/Case_Temperature_vs._Load-Case_Temperature_Rise-manual_edited.tc"
+      "docOrder": 0
     },
     {
       "figure": 25,

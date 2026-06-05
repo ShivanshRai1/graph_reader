@@ -198,6 +198,25 @@ const buildTcFileUrl = (baseUrl, filename) => {
   return `${normalizedBase}${filename}`;
 };
 
+/** Keep template key order: place tcFileUrl immediately after title. */
+const reorderTcFileUrlAfterTitle = (entry) => {
+  if (!entry || typeof entry !== 'object' || !Object.prototype.hasOwnProperty.call(entry, 'tcFileUrl')) {
+    return entry;
+  }
+
+  const value = entry.tcFileUrl;
+  const keys = Object.keys(entry).filter((key) => key !== 'tcFileUrl');
+  const titleIndex = keys.indexOf('title');
+  const insertAt = titleIndex >= 0 ? titleIndex + 1 : keys.length;
+  keys.splice(insertAt, 0, 'tcFileUrl');
+
+  const ordered = {};
+  keys.forEach((key) => {
+    ordered[key] = key === 'tcFileUrl' ? value : entry[key];
+  });
+  return ordered;
+};
+
 const mergeCapturedIntoEntry = (entry, parsed, tcFileUrl = '') => {
   if (tcFileUrl) entry.tcFileUrl = tcFileUrl;
 
@@ -297,7 +316,7 @@ const main = () => {
       blanked += 1;
     }
 
-    return nextEntry;
+    return reorderTcFileUrlAfterTitle(nextEntry);
   });
 
   fs.writeFileSync(OUTPUT_PATH, `${JSON.stringify(output, null, 2)}\n`, 'utf8');
