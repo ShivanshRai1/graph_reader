@@ -225,9 +225,11 @@ const computeRmsFromRefPoints = (refPoints, candidatePoints) => {
   });
 
   const xSpan = compared > 0 && Number.isFinite(xMin) && Number.isFinite(xMax) ? xMax - xMin : null;
+  const normalizedSum =
+    compared > 0 && Number.isFinite(sumSquaresDiff) ? Math.abs(sumSquaresDiff) : null;
   const rms =
-    compared > 0 && Number.isFinite(xSpan) && xSpan > 0
-      ? Math.sqrt(sumSquaresDiff / xSpan)
+    compared > 0 && Number.isFinite(xSpan) && xSpan > 0 && Number.isFinite(normalizedSum)
+      ? Math.sqrt(normalizedSum / xSpan)
       : null;
 
   return {
