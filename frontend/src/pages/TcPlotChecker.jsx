@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import SavedGraphCombinedPreview from '../components/SavedGraphCombinedPreview';
 import {
+  downloadComparisonWorkspaceAsPng,
   downloadHtmlFragmentAsPng,
   downloadPanelAsPng,
 } from '../utils/downloadPng';
@@ -258,7 +259,7 @@ const TcPlotChecker = () => {
     if (!comparisonWorkspaceRef.current) return;
     runPngExport(
       () =>
-        downloadHtmlFragmentAsPng(comparisonWorkspaceRef.current, `${exportSlug}-comparison-full`, {
+        downloadComparisonWorkspaceAsPng(comparisonWorkspaceRef.current, `${exportSlug}-comparison-full`, {
           scale: PNG_EXPORT_SCALE,
         }),
       'comparison-full'
