@@ -975,7 +975,7 @@
         ],
         "series": [
           {
-            "name": "data0",
+            "name": "V_OUT = 0.5V",
             "yAxisRef": "y1",
             "groupId": 0,
             "data": [
@@ -1022,7 +1022,7 @@
             ]
           },
           {
-            "name": "data1",
+            "name": "V_OUT = 0.8V",
             "yAxisRef": "y1",
             "groupId": 0,
             "data": [
@@ -1069,7 +1069,7 @@
             ]
           },
           {
-            "name": "data2",
+            "name": "V_OUT = 1V",
             "yAxisRef": "y1",
             "groupId": 0,
             "data": [
@@ -1316,7 +1316,7 @@
         ],
         "series": [
           {
-            "name": "data0",
+            "name": "Figure 7. Load Regulation vs. Load Current",
             "yAxisRef": "y1",
             "groupId": 0,
             "data": [
@@ -1853,7 +1853,7 @@
             "data": []
           },
           {
-            "name": "VIN=5V",
+            "name": "SVIN = 5V",
             "yAxisRef": "y1",
             "groupId": 0,
             "data": [
@@ -2030,7 +2030,7 @@
         ],
         "series": [
           {
-            "name": "data0",
+            "name": "RT = 100k?",
             "yAxisRef": "y1",
             "groupId": 0,
             "data": [
@@ -2163,7 +2163,7 @@
         ],
         "series": [
           {
-            "name": "data0",
+            "name": "SVIN = 5V",
             "yAxisRef": "y1",
             "groupId": 0,
             "data": [
@@ -2300,7 +2300,7 @@
         ],
         "series": [
           {
-            "name": "data0",
+            "name": "FREQUENCY VS. TEMPERATURE",
             "yAxisRef": "y1",
             "groupId": 0,
             "data": [
@@ -2406,7 +2406,7 @@
         "operatingConditions": [],
         "series": [
           {
-            "name": "Regulated FB Voltage vs Temperature",
+            "name": "Figure 20. Regulated FB Voltage vs. Temperature",
             "yAxisRef": "y1",
             "trend": "Slight negative slope from ~501.8mV at -50°C to ~500.2mV at 125°C.",
             "keyValues": [
@@ -2576,7 +2576,7 @@
         ],
         "series": [
           {
-            "name": "data0",
+            "name": "Figure 21. RUN Rising Threshold vs. Temperature",
             "yAxisRef": "y1",
             "groupId": 0,
             "data": [
@@ -2745,7 +2745,7 @@
         ],
         "series": [
           {
-            "name": "VIN=3.3V",
+            "name": "Valley Current Limit",
             "yAxisRef": "y1",
             "groupId": 0,
             "data": [
@@ -2858,7 +2858,7 @@
         ],
         "series": [
           {
-            "name": "data0",
+            "name": "nvmts0d4n04cl",
             "yAxisRef": "y1",
             "groupId": 0,
             "data": [
@@ -3001,7 +3001,7 @@
         "operatingConditions": [],
         "series": [
           {
-            "name": "Case Temperature Rise vs Load",
+            "name": "Case Temperature Rise",
             "yAxisRef": "y1",
             "trend": "Nonlinear (approximately quadratic) increase from near 0°C at no load to approximately 16°C at 25A.",
             "keyValues": [
@@ -3160,7 +3160,7 @@
         ],
         "series": [
           {
-            "name": "BOT FET",
+            "name": "Upper Curve",
             "yAxisRef": "y1",
             "groupId": 0,
             "data": [
@@ -3207,7 +3207,7 @@
             ]
           },
           {
-            "name": "TOP FET",
+            "name": "Lower Curve",
             "yAxisRef": "y1",
             "groupId": 0,
             "data": [

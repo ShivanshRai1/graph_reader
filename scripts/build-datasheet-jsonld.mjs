@@ -110,10 +110,21 @@ const extractTcSeries = (parsed) =>
     data: curve.points,
   }));
 
-/** Set series data from .tc capture; empty capture → `data: []`. */
-const assignSeriesData = (series, data) => {
+const seriesNamesMatch = (templateName, tcName) =>
+  normalizeSeriesNameForMatch(templateName) === normalizeSeriesNameForMatch(tcName);
+
+/** Set series data from .tc capture; update name only when it differs from the matched .tc curve. */
+const assignSeriesFromTc = (series, tcMatch) => {
   const next = deepClone(series);
-  next.data = data;
+  if (!tcMatch?.data?.length) {
+    next.data = [];
+    return next;
+  }
+
+  next.data = tcMatch.data;
+  if (!seriesNamesMatch(series.name, tcMatch.name)) {
+    next.name = tcMatch.name;
+  }
   return next;
 };
 
@@ -130,49 +141,43 @@ const blankUncapturedData = (entry) => {
   });
 };
 
-/** Update only series[].data; keep template series names, axes, trend, keyValues, etc. */
+/** Update series[].data from .tc; set series.name only when it differs from the matched .tc curve. */
 const applySeriesDataFromTc = (templateSeries, tcSeries) => {
-  const tcByName = new Map(
-    tcSeries.map((series) => [normalizeSeriesNameForMatch(series.name), series.data])
-  );
+  const tcByName = new Map();
+  tcSeries.forEach((series) => {
+    const key = normalizeSeriesNameForMatch(series.name);
+    if (key && !tcByName.has(key)) tcByName.set(key, series);
+  });
   const tcByVoltage = new Map();
   tcSeries.forEach((series) => {
     const voltageKey = extractVoltageKey(series.name);
     if (voltageKey && !tcByVoltage.has(voltageKey)) {
-      tcByVoltage.set(voltageKey, series.data);
+      tcByVoltage.set(voltageKey, series);
     }
   });
   const tcGeneric =
     tcSeries.length > 0 && tcSeries.every((series) => isGenericDataSeriesName(series.name));
 
-  const resolveData = (series, index) => {
-    let data = [];
-    if (tcGeneric && tcSeries[index]) {
-      data = tcSeries[index].data;
-    } else {
-      const key = normalizeSeriesNameForMatch(series.name);
-      if (key && tcByName.has(key)) {
-        data = tcByName.get(key);
-      } else {
-        const voltageKey = extractVoltageKey(series.name);
-        if (voltageKey && tcByVoltage.has(voltageKey)) {
-          data = tcByVoltage.get(voltageKey);
-        }
-      }
-    }
-    return data;
+  const resolveTcMatch = (series, index) => {
+    if (tcGeneric && tcSeries[index]) return tcSeries[index];
+
+    const key = normalizeSeriesNameForMatch(series.name);
+    if (key && tcByName.has(key)) return tcByName.get(key);
+
+    const voltageKey = extractVoltageKey(series.name);
+    if (voltageKey && tcByVoltage.has(voltageKey)) return tcByVoltage.get(voltageKey);
+
+    return null;
   };
 
-  const mapByNameOrIndex = () =>
-    templateSeries.map((series, index) => assignSeriesData(series, resolveData(series, index)));
+  const mapByNameOrVoltage = () =>
+    templateSeries.map((series, index) => assignSeriesFromTc(series, resolveTcMatch(series, index)));
 
-  let mapped = mapByNameOrIndex();
+  let mapped = mapByNameOrVoltage();
   const matchedPoints = mapped.reduce((sum, series) => sum + (series.data?.length || 0), 0);
 
   if (matchedPoints === 0 && tcSeries.length === templateSeries.length) {
-    mapped = templateSeries.map((series, index) =>
-      assignSeriesData(series, tcSeries[index]?.data || [])
-    );
+    mapped = templateSeries.map((series, index) => assignSeriesFromTc(series, tcSeries[index] || null));
   }
 
   return mapped;
