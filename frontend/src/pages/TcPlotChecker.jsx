@@ -65,13 +65,15 @@ const imagePanelStyle = {
 
 const downloadBtnStyle = {
   fontSize: 12,
-  padding: '4px 10px',
+  fontWeight: 600,
+  padding: '6px 12px',
   borderRadius: 6,
-  border: '1px solid #cbd5e1',
-  background: '#f8fafc',
-  color: '#334155',
+  border: '1px solid #93c5fd',
+  background: '#eff6ff',
+  color: '#1d4ed8',
   cursor: 'pointer',
   whiteSpace: 'nowrap',
+  flexShrink: 0,
 };
 
 const buildExportSlug = (value) =>
@@ -327,13 +329,14 @@ const TcPlotChecker = () => {
     <div
       style={{
         display: 'flex',
+        flexWrap: 'wrap',
         alignItems: 'center',
         justifyContent: 'space-between',
         gap: 8,
         marginBottom: 8,
       }}
     >
-      <h3 style={{ fontSize: 14, margin: 0, color: '#334155' }}>{title}</h3>
+      <h3 style={{ fontSize: 14, margin: 0, color: '#334155', minWidth: 0 }}>{title}</h3>
       {onDownload ? (
         <button type="button" style={downloadBtnStyle} onClick={onDownload}>
           Download PNG
@@ -732,10 +735,11 @@ const TcPlotChecker = () => {
         )}
 
         {(hasPlot || hasImage) && (
-          <div style={{ ...cardStyle, marginBottom: 16, width: '100%', overflowX: 'auto' }}>
+          <div style={{ ...cardStyle, marginBottom: 16, width: '100%' }}>
             <div
               style={{
                 display: 'flex',
+                flexWrap: 'wrap',
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 gap: 12,
@@ -747,7 +751,9 @@ const TcPlotChecker = () => {
                 Download full comparison PNG
               </button>
             </div>
-            {renderComparisonWorkspace()}
+            <div style={{ width: '100%', overflowX: 'auto' }}>
+              {renderComparisonWorkspace()}
+            </div>
           </div>
         )}
 
@@ -756,6 +762,7 @@ const TcPlotChecker = () => {
             <div
               style={{
                 display: 'flex',
+                flexWrap: 'wrap',
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 gap: 12,
