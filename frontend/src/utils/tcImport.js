@@ -204,77 +204,141 @@ export const compareTypicalCurveFiles = (referenceParsed, candidateParsed) => {
   return { rows, overallMax };
 };
 
+const extractVoltageKey = (name) => {
+  const match = String(name || '').match(/([\d.]+)\s*v\b/i);
+  return match ? match[1] : '';
+};
+
+const computeRmsFromRefPoints = (refPoints, candidatePoints) => {
+  let sumSquaresDiff = 0;
+  let compared = 0;
+  let xMin = Infinity;
+  let xMax = -Infinity;
+
+  refPoints.forEach((refPoint) => {
+    const candidateY = findYAtX(candidatePoints, refPoint.x);
+    if (!Number.isFinite(candidateY) || !Number.isFinite(refPoint.y)) return;
+    sumSquaresDiff += candidateY * candidateY - refPoint.y * refPoint.y;
+    compared += 1;
+    xMin = Math.min(xMin, refPoint.x);
+    xMax = Math.max(xMax, refPoint.x);
+  });
+
+  const xSpan = compared > 0 && Number.isFinite(xMin) && Number.isFinite(xMax) ? xMax - xMin : null;
+  const rms =
+    compared > 0 && Number.isFinite(xSpan) && xSpan > 0
+      ? Math.sqrt(sumSquaresDiff / xSpan)
+      : null;
+
+  return {
+    pointCount: compared,
+    xMin: compared > 0 ? xMin : null,
+    xMax: compared > 0 ? xMax : null,
+    xSpan,
+    rms,
+    status: compared > 0 ? 'ok' : 'no_overlap',
+  };
+};
+
+/** Pair curves for RMS: name → voltage → index (same count), so generic names still compare. */
+const pairCurvesForRms = (referenceParsed, candidateParsed) => {
+  const refCurves = referenceParsed.curves;
+  const candCurves = candidateParsed.curves;
+  const usedRef = new Set();
+  const usedCand = new Set();
+  const pairs = [];
+
+  const addPair = (refIndex, candIndex) => {
+    if (usedRef.has(refIndex) || usedCand.has(candIndex)) return false;
+    usedRef.add(refIndex);
+    usedCand.add(candIndex);
+    pairs.push({ ref: refCurves[refIndex], cand: candCurves[candIndex] });
+    return true;
+  };
+
+  candCurves.forEach((cand, candIndex) => {
+    const key = normalizeSeriesNameForMatch(cand.name);
+    refCurves.forEach((ref, refIndex) => {
+      if (normalizeSeriesNameForMatch(ref.name) === key) addPair(refIndex, candIndex);
+    });
+  });
+
+  candCurves.forEach((cand, candIndex) => {
+    if (usedCand.has(candIndex)) return;
+    const voltageKey = extractVoltageKey(cand.name);
+    if (!voltageKey) return;
+    refCurves.forEach((ref, refIndex) => {
+      if (usedRef.has(refIndex)) return;
+      if (extractVoltageKey(ref.name) === voltageKey) addPair(refIndex, candIndex);
+    });
+  });
+
+  const unmatchedRef = refCurves.map((_, index) => index).filter((index) => !usedRef.has(index));
+  const unmatchedCand = candCurves.map((_, index) => index).filter((index) => !usedCand.has(index));
+  if (unmatchedRef.length > 0 && unmatchedRef.length === unmatchedCand.length) {
+    unmatchedRef.forEach((refIndex, pairIndex) => {
+      addPair(refIndex, unmatchedCand[pairIndex]);
+    });
+  }
+
+  return { pairs, usedRef, usedCand, refCurves, candCurves };
+};
+
+const formatRmsSeriesLabel = (candidateName, referenceName) => {
+  if (normalizeSeriesNameForMatch(candidateName) === normalizeSeriesNameForMatch(referenceName)) {
+    return candidateName;
+  }
+  return `${candidateName} ↔ ${referenceName}`;
+};
+
 /**
  * RMS per supervisor spec: sqrt( sum(y²_discoveree - y²_analog) / (xmax - xmin) )
  * at each reference X where DiscoverEE Y can be interpolated.
  */
 export const computeDiscoverEeAnalogRms = (referenceParsed, candidateParsed) => {
-  const refByName = indexPointsByName(referenceParsed);
+  const { pairs, usedRef, usedCand, refCurves, candCurves } = pairCurvesForRms(
+    referenceParsed,
+    candidateParsed
+  );
   const rows = [];
 
-  candidateParsed.curves.forEach((candidateCurve) => {
-    const key = normalizeSeriesNameForMatch(candidateCurve.name);
-    const refEntry = refByName.get(key);
-    const refPoints = refEntry?.points;
-    if (!refPoints) {
-      rows.push({
-        series: candidateCurve.name,
-        status: 'missing_in_reference',
-        pointCount: 0,
-        xMin: null,
-        xMax: null,
-        xSpan: null,
-        rms: null,
-      });
-      return;
-    }
-
-    let sumSquaresDiff = 0;
-    let compared = 0;
-    let xMin = Infinity;
-    let xMax = -Infinity;
-
-    refPoints.forEach((refPoint) => {
-      const candidateY = findYAtX(candidateCurve.points, refPoint.x);
-      if (!Number.isFinite(candidateY) || !Number.isFinite(refPoint.y)) return;
-      sumSquaresDiff += candidateY * candidateY - refPoint.y * refPoint.y;
-      compared += 1;
-      xMin = Math.min(xMin, refPoint.x);
-      xMax = Math.max(xMax, refPoint.x);
-    });
-
-    const xSpan = compared > 0 && Number.isFinite(xMin) && Number.isFinite(xMax) ? xMax - xMin : null;
-    const rms =
-      compared > 0 && Number.isFinite(xSpan) && xSpan > 0
-        ? Math.sqrt(sumSquaresDiff / xSpan)
-        : null;
-
+  pairs.forEach(({ ref, cand }) => {
+    const metrics = computeRmsFromRefPoints(ref.points, cand.points);
     rows.push({
-      series: candidateCurve.name,
-      status: compared > 0 ? 'ok' : 'no_overlap',
-      pointCount: compared,
-      xMin: compared > 0 ? xMin : null,
-      xMax: compared > 0 ? xMax : null,
-      xSpan,
-      rms,
+      series: formatRmsSeriesLabel(cand.name, ref.name),
+      status: metrics.status,
+      pointCount: metrics.pointCount,
+      xMin: metrics.xMin,
+      xMax: metrics.xMax,
+      xSpan: metrics.xSpan,
+      rms: metrics.rms,
     });
   });
 
-  refByName.forEach((entry, nameKey) => {
-    const hasCandidate = candidateParsed.curves.some(
-      (curve) => normalizeSeriesNameForMatch(curve.name) === nameKey
-    );
-    if (!hasCandidate) {
-      rows.push({
-        series: entry.label || nameKey,
-        status: 'missing_in_candidate',
-        pointCount: 0,
-        xMin: null,
-        xMax: null,
-        xSpan: null,
-        rms: null,
-      });
-    }
+  candCurves.forEach((cand, index) => {
+    if (usedCand.has(index)) return;
+    rows.push({
+      series: cand.name,
+      status: 'missing_in_reference',
+      pointCount: 0,
+      xMin: null,
+      xMax: null,
+      xSpan: null,
+      rms: null,
+    });
+  });
+
+  refCurves.forEach((ref, index) => {
+    if (usedRef.has(index)) return;
+    rows.push({
+      series: ref.name,
+      status: 'missing_in_candidate',
+      pointCount: 0,
+      xMin: null,
+      xMax: null,
+      xSpan: null,
+      rms: null,
+    });
   });
 
   const comparable = rows.filter((row) => row.status === 'ok' && Number.isFinite(row.rms));

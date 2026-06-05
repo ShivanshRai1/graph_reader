@@ -110,19 +110,24 @@ const extractTcSeries = (parsed) =>
     data: curve.points,
   }));
 
-/** Set series data from .tc; omit empty `data` when template had no `data` key. */
+/** Set series data from .tc capture; empty capture → `data: []`. */
 const assignSeriesData = (series, data) => {
   const next = deepClone(series);
-  if (data.length > 0) {
-    next.data = data;
-    return next;
-  }
-  if (Object.prototype.hasOwnProperty.call(series, 'data')) {
+  next.data = data;
+  return next;
+};
+
+/** Uncaptured figures: clear tc link and blank every series `data` array only. */
+const blankUncapturedData = (entry) => {
+  if ('tcFileUrl' in entry) entry.tcFileUrl = '';
+
+  if (!entry.curveSummary || !Array.isArray(entry.curveSummary.series)) return;
+
+  entry.curveSummary.series = entry.curveSummary.series.map((series) => {
+    const next = deepClone(series);
     next.data = [];
     return next;
-  }
-  delete next.data;
-  return next;
+  });
 };
 
 /** Update only series[].data; keep template series names, axes, trend, keyValues, etc. */
@@ -283,6 +288,7 @@ const main = () => {
       mergeCapturedIntoEntry(nextEntry, capture.parsed, tcFileUrl);
       filled += 1;
     } else {
+      blankUncapturedData(nextEntry);
       blanked += 1;
     }
 

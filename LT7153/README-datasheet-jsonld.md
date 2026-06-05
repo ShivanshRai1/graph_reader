@@ -16,7 +16,7 @@ This folder builds `LT7153pdp-datasheet-by-discoveree.jsonld` from **Graph Captu
 
 ## Rules
 
-- Figures with **no** matching `.tc` in `captured/`: **unchanged** from template (AI text, `keyValues`, series shape, etc.).
+- Figures with **no** matching `.tc` in `captured/`: `tcFileUrl` cleared and every `series[].data` set to `[]`. AI text, axes, `trend`, `keyValues`, etc. stay from template.
 - Figures with a `.tc`: `curveSummary` and `data` come from that file only, and `tcFileUrl` is set to `tcFileBaseUrl` + filename (default `…/LT7153/tc/`, see `figure-map.json`). **Upload the same `.tc` files** under that `tc/` folder on DiscoverEE so the URLs work.
 - Per-series: only curves present in the `.tc` get points; other series slots keep `data: []`.
 - Spec tables, sections, and equations are **not** modified (template copy).

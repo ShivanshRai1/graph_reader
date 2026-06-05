@@ -760,7 +760,8 @@
                 "y": 87,
                 "note": "full load efficiency"
               }
-            ]
+            ],
+            "data": []
           },
           {
             "name": "POWER LOSS",
@@ -777,7 +778,8 @@
                 "y": 2.5,
                 "note": "full load power loss"
               }
-            ]
+            ],
+            "data": []
           }
         ]
       },
@@ -1476,12 +1478,14 @@
           {
             "name": "data0",
             "yAxisRef": "y1",
-            "groupId": 0
+            "groupId": 0,
+            "data": []
           },
           {
             "name": "data1",
             "yAxisRef": "y1",
-            "groupId": 0
+            "groupId": 0,
+            "data": []
           }
         ]
       },
@@ -1519,12 +1523,14 @@
           {
             "name": "data0",
             "yAxisRef": "y1",
-            "groupId": 0
+            "groupId": 0,
+            "data": []
           },
           {
             "name": "data1",
             "yAxisRef": "y1",
-            "groupId": 0
+            "groupId": 0,
+            "data": []
           }
         ]
       },
@@ -1562,12 +1568,14 @@
           {
             "name": "data0",
             "yAxisRef": "y1",
-            "groupId": 0
+            "groupId": 0,
+            "data": []
           },
           {
             "name": "data1",
             "yAxisRef": "y1",
-            "groupId": 0
+            "groupId": 0,
+            "data": []
           }
         ]
       },
@@ -1623,7 +1631,8 @@
                 "y": 3000,
                 "note": "peak tracking voltage"
               }
-            ]
+            ],
+            "data": []
           },
           {
             "name": "VOUT",
@@ -1635,7 +1644,8 @@
                 "y": 500,
                 "note": "VOUT at peak, clamped to regulated value"
               }
-            ]
+            ],
+            "data": []
           }
         ]
       },
@@ -1692,7 +1702,8 @@
                 "y": 3,
                 "note": "VRUN assertion"
               }
-            ]
+            ],
+            "data": []
           },
           {
             "name": "VPGOOD",
@@ -1704,7 +1715,8 @@
                 "y": 3,
                 "note": "PGOOD assertion after regulation"
               }
-            ]
+            ],
+            "data": []
           },
           {
             "name": "VOUT",
@@ -1716,7 +1728,8 @@
                 "y": 500,
                 "note": "VOUT reaches regulation"
               }
-            ]
+            ],
+            "data": []
           }
         ]
       },
@@ -1773,7 +1786,8 @@
                 "y": 3,
                 "note": "VRUN assertion"
               }
-            ]
+            ],
+            "data": []
           },
           {
             "name": "VPGOOD",
@@ -1785,7 +1799,8 @@
                 "y": 3,
                 "note": "PGOOD assertion"
               }
-            ]
+            ],
+            "data": []
           },
           {
             "name": "VOUT",
@@ -1802,7 +1817,8 @@
                 "y": 500,
                 "note": "regulated output"
               }
-            ]
+            ],
+            "data": []
           }
         ]
       },
