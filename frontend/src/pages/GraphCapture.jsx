@@ -3673,10 +3673,12 @@ const GraphCapture = () => {
     temperature: curve.config?.temperature || curve.temperature || prevConfig.temperature || '',
   });
 
-  const restoreGraphDisplayFromSavedCurve = (curve, graphId, { keepCurveNameEmpty = false, allCurves = null, loadPoints = true } = {}) => {
+  const restoreGraphDisplayFromSavedCurve = (curve, graphId, { keepCurveNameEmpty = false, allCurves = null, loadPoints = true, graphAreaOverride = null } = {}) => {
     const persistedContext = getPersistedGraphContext(graphId);
     const persistedAxis = persistedContext?.axis;
-    const restoredArea = normalizePersistedGraphArea(persistedContext?.graphArea);
+    const restoredArea =
+      normalizePersistedGraphArea(graphAreaOverride) ||
+      normalizePersistedGraphArea(persistedContext?.graphArea);
     let nextConfig = buildCurveConfigFromSaved(curve, graphConfig, persistedAxis);
     const curveList = Array.isArray(allCurves) && allCurves.length > 0 ? allCurves : [curve];
     const apiAxisPatch = buildGraphConfigAxisPatch(
@@ -3777,12 +3779,23 @@ const GraphCapture = () => {
       (savedCurve) => String(savedCurve.graphId || graphId) === graphId
     );
 
-    if (curve.graphImageUrl) {
+    if (curve.graphImageUrl && curve.graphImageUrl !== uploadedImage) {
       setUploadedImageFromExistingGraph(curve.graphImageUrl);
     }
 
+    const liveGraphArea =
+      graphArea.width > 0 && graphArea.height > 0
+        ? {
+            x: graphArea.x,
+            y: graphArea.y,
+            width: graphArea.width,
+            height: graphArea.height,
+          }
+        : null;
+
     restoreGraphDisplayFromSavedCurve(curve, graphId, {
       allCurves: curvesForGraph.length > 0 ? curvesForGraph : [curve],
+      graphAreaOverride: liveGraphArea,
     });
 
     const curveSymbols = normalizeCurveSymbolValues(curve);
@@ -3800,7 +3813,17 @@ const GraphCapture = () => {
     const referenceCurve = curveList[0];
     const graphId = String(referenceCurve.graphId || getGraphIdForCurve(referenceCurve) || urlParams.graph_id || '').trim();
 
-    if (referenceCurve.graphImageUrl) {
+    const liveGraphArea =
+      graphArea.width > 0 && graphArea.height > 0
+        ? {
+            x: graphArea.x,
+            y: graphArea.y,
+            width: graphArea.width,
+            height: graphArea.height,
+          }
+        : null;
+
+    if (referenceCurve.graphImageUrl && referenceCurve.graphImageUrl !== uploadedImage) {
       setUploadedImageFromExistingGraph(referenceCurve.graphImageUrl);
     }
 
@@ -3808,6 +3831,7 @@ const GraphCapture = () => {
       allCurves: curveList,
       keepCurveNameEmpty: true,
       loadPoints: false,
+      graphAreaOverride: liveGraphArea,
     });
     replaceDataPoints(buildCombinedOverlayPoints(curveList));
     setIsReadOnly(true);
@@ -3904,23 +3928,34 @@ const GraphCapture = () => {
       (savedCurve) => String(savedCurve.graphId || graphId) === graphId
     );
 
-    if (curve.graphImageUrl) {
-      setUploadedImageFromExistingGraph(curve.graphImageUrl);
+    const liveGraphArea =
+      graphArea.width > 0 && graphArea.height > 0
+        ? {
+            x: graphArea.x,
+            y: graphArea.y,
+            width: graphArea.width,
+            height: graphArea.height,
+          }
+        : null;
+
+    const nextImage = curve.graphImageUrl || '';
+    if (nextImage && nextImage !== uploadedImage) {
+      setUploadedImageFromExistingGraph(nextImage);
     }
 
     const { nextConfig } = restoreGraphDisplayFromSavedCurve(curve, graphId, {
       allCurves: curvesForGraph.length > 0 ? curvesForGraph : [curve],
+      graphAreaOverride: liveGraphArea,
     });
 
     if (hasUsableAxisMapping(nextConfig)) {
       setIsAxisMappingConfirmed(true);
       setFrozenGraphConfig({ ...nextConfig });
-      const persistedContext = getPersistedGraphContext(graphId);
-      const persistArea =
-        normalizePersistedGraphArea(persistedContext?.graphArea) ||
-        (graphArea.width > 0 && graphArea.height > 0 ? graphArea : null);
-      if (graphId && persistArea) {
-        persistGraphContext(graphId, persistArea, nextConfig);
+      const areaToPersist =
+        normalizePersistedGraphArea(liveGraphArea) ||
+        normalizePersistedGraphArea(getPersistedGraphContext(graphId)?.graphArea);
+      if (graphId && areaToPersist) {
+        persistGraphContext(graphId, areaToPersist, nextConfig);
       }
     }
 
