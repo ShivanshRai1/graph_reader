@@ -1,7 +1,8 @@
 import { useRef, useState, useEffect } from 'react';
 import { useGraph, isManualCapturePoint } from '../context/GraphContext';
+import { buildDefaultGraphArea } from '../utils/graphAreaHelpers';
 
-const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', isAxisMappingConfirmed = false, hasReturnUrl = false, isEditingCurve = false, savedCurveViewActive = false }) => {
+const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', isAxisMappingConfirmed = false, hasReturnUrl = false, isEditingCurve = false, savedCurveViewActive = false, useInsetDefaultAxisBox = false }) => {
   const { uploadedImage, graphArea, setGraphArea, dataPoints, addDataPoint, clearDataPoints, graphConfig, deleteDataPoint, convertGraphToCanvasCoordinates, convertCanvasToGraphCoordinates, replaceDataPoints, updateDataPointFromCanvas } = useGraph();
   const [showRedrawMsg, setShowRedrawMsg] = useState(false);
   const canvasRef = useRef(null);
@@ -66,7 +67,17 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
 
   const canShowImportedCurveOverlay = () => {
     if (isAxisMappingConfirmed || isEditingCurve) return true;
-    return savedCurveViewActive && hasValidAxisForOverlay() && graphArea.width > 0 && graphArea.height > 0;
+    if (savedCurveViewActive && hasValidAxisForOverlay() && graphArea.width > 0 && graphArea.height > 0) return true;
+    const hasImportedPoints = dataPoints.some((point) => point.imported);
+    if (hasImportedPoints && hasValidAxisForOverlay() && graphArea.width > 0 && graphArea.height > 0) {
+      return true;
+    }
+    return false;
+  };
+
+  const isImportedPreviewMode = () => {
+    if (isAxisMappingConfirmed || isEditingCurve || savedCurveViewActive) return false;
+    return dataPoints.some((point) => point.imported) && hasValidAxisForOverlay();
   };
   const EDGE_GAP = 12; // Hysteresis for edge checks to reduce flicker
   const EPS = 1e-6;
@@ -88,6 +99,11 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       height = Math.abs(height);
     }
     return { x, y, width, height };
+  };
+
+  const createInitialAxisBox = (canvasW, canvasH) => {
+    const raw = buildDefaultGraphArea(canvasW, canvasH, { useInset: useInsetDefaultAxisBox });
+    return constrainAreaToMargin(raw, canvasW, canvasH);
   };
 
   const constrainAreaToMargin = (area, canvasW, canvasH) => {
@@ -190,16 +206,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
           requestAnimationFrame(() => {
             const currentArea = normalizeArea(graphAreaRef.current);
             if (currentArea.width === 0 || currentArea.height === 0) {
-              const initialBox = constrainAreaToMargin(
-                {
-                  x: 0,
-                  y: 0,
-                  width: img.width,
-                  height: img.height,
-                },
-                img.width,
-                img.height
-              );
+              const initialBox = createInitialAxisBox(img.width, img.height);
               setGraphArea(initialBox);
               lastUserBoxRef.current = initialBox;
               setBoxTransparent(false);
@@ -228,20 +235,11 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     const area = normalizeArea(graphArea);
     if (area.width > 0 && area.height > 0) return;
 
-    const initialBox = constrainAreaToMargin(
-      {
-        x: 0,
-        y: 0,
-        width: imageSize.width,
-        height: imageSize.height,
-      },
-      imageSize.width,
-      imageSize.height
-    );
+    const initialBox = createInitialAxisBox(imageSize.width, imageSize.height);
     setGraphArea(initialBox);
     lastUserBoxRef.current = initialBox;
     setBoxTransparent(false);
-  }, [uploadedImage, imageSize.width, imageSize.height, graphArea.width, graphArea.height, graphArea.x, graphArea.y, setGraphArea]);
+  }, [uploadedImage, imageSize.width, imageSize.height, graphArea.width, graphArea.height, graphArea.x, graphArea.y, setGraphArea, useInsetDefaultAxisBox]);
 
   // Separate effect to redraw selection box and points without reloading image
   useEffect(() => {
@@ -269,13 +267,19 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     }
 
     const hasOnlyImported = dataPoints.every((point) => point.imported);
-    if (hasOnlyImported && !canShowImportedCurveOverlay()) {
-      setBoxTransparent(false);
-      return;
+    if (hasOnlyImported) {
+      if (!canShowImportedCurveOverlay()) {
+        setBoxTransparent(false);
+        return;
+      }
+      if (isImportedPreviewMode()) {
+        setBoxTransparent(false);
+        return;
+      }
     }
 
     setBoxTransparent(true);
-  }, [dataPoints, isAxisMappingConfirmed, isEditingCurve, savedCurveViewActive, graphArea.width, graphArea.height]);
+  }, [dataPoints, isAxisMappingConfirmed, isEditingCurve, savedCurveViewActive, graphArea.width, graphArea.height, graphConfig.xMin, graphConfig.xMax, graphConfig.yMin, graphConfig.yMax]);
 
   useEffect(() => {
     if (savedCurveViewActive && dataPoints.some((point) => point.imported)) {
@@ -481,6 +485,11 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     if (hasImportedPoints && !canShowImportedCurveOverlay()) return;
 
     const inSavedView = savedCurveViewActive && canShowImportedCurveOverlay();
+    const previewMode = isImportedPreviewMode();
+    if (previewMode) {
+      ctx.save();
+      ctx.globalAlpha = 0.45;
+    }
 
     dataPoints.forEach((point, index) => {
       // Use graph value -> canvas position so dots update when box is resized
@@ -510,12 +519,22 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       ctx.arc(drawX, drawY, pointRadius, 0, 2 * Math.PI);
       ctx.fill();
     });
+
+    if (previewMode) {
+      ctx.restore();
+    }
   };
 
   // Draw lines connecting all captured points
   const drawFixPoints = (ctx) => {
     const hasImportedPoints = dataPoints.some((point) => point.imported);
     if (hasImportedPoints && !canShowImportedCurveOverlay()) return;
+
+    const previewMode = isImportedPreviewMode();
+    if (previewMode) {
+      ctx.save();
+      ctx.globalAlpha = 0.35;
+    }
 
     // Only draw if there are at least 2 valid points with graph values
     const validPoints = dataPoints
@@ -525,7 +544,10 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
         return { ...p, canvasX, canvasY };
       })
       .filter(p => Number.isFinite(p.canvasX) && Number.isFinite(p.canvasY));
-    if (validPoints.length < 2) return;
+    if (validPoints.length < 2) {
+      if (previewMode) ctx.restore();
+      return;
+    }
 
     const curveGroups = new Map();
     validPoints.forEach((point, index) => {
@@ -583,6 +605,9 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     }
 
     ctx.restore();
+    if (previewMode) {
+      ctx.restore();
+    }
   };
 
   const getCanvasCoordinatesFromEvent = (e) => {

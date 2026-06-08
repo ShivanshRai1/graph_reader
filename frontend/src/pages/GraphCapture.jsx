@@ -1108,6 +1108,30 @@ const resolveAxisBoundsWithFallback = (curves) => {
   return { xMin: storedXMin, xMax: storedXMax, yMin: storedYMin, yMax: storedYMax, source: 'fallback' };
 };
 
+const hasPersistedMappingContext = (persistedContext) => {
+  const area = normalizePersistedGraphArea(persistedContext?.graphArea);
+  const axis = persistedContext?.axis;
+  return Boolean(area && axis && hasValidAxisMapping(axis));
+};
+
+const applyComputedAxisBounds = (config = {}, curves = []) => {
+  if (hasValidAxisMapping(config)) return config;
+
+  const curveList = Array.isArray(curves) ? curves : (curves ? [curves] : []);
+  if (curveList.length === 0) return config;
+
+  const bounds = resolveAxisBoundsWithFallback(curveList);
+  if (bounds.source !== 'computed' && bounds.source !== 'stored') return config;
+
+  return {
+    ...config,
+    xMin: bounds.xMin,
+    xMax: bounds.xMax,
+    yMin: bounds.yMin,
+    yMax: bounds.yMax,
+  };
+};
+
 const hasValidStoredAxisBounds = (bounds = {}) => {
   const xMin = parseFloat(bounds.xMin);
   const xMax = parseFloat(bounds.xMax);
@@ -3653,18 +3677,7 @@ const GraphCapture = () => {
       nextConfig = { ...nextConfig, ...apiAxisPatch };
     }
 
-    if (!hasValidAxisMapping(nextConfig)) {
-      const bounds = resolveAxisBoundsWithFallback(curveList);
-      if (bounds.source === 'computed' || bounds.source === 'stored') {
-        nextConfig = {
-          ...nextConfig,
-          xMin: bounds.xMin,
-          xMax: bounds.xMax,
-          yMin: bounds.yMin,
-          yMax: bounds.yMax,
-        };
-      }
-    }
+    nextConfig = applyComputedAxisBounds(nextConfig, curveList);
 
     if (restoredArea) {
       setGraphArea(restoredArea);
@@ -3692,9 +3705,14 @@ const GraphCapture = () => {
       replaceDataPoints(loadedPoints);
     }
 
-    const mappingConfirmed = false;
-    setIsAxisMappingConfirmed(false);
-    setFrozenGraphConfig(null);
+    const mappingConfirmed = hasPersistedMappingContext(persistedContext);
+    if (mappingConfirmed) {
+      setIsAxisMappingConfirmed(true);
+      setFrozenGraphConfig({ ...nextConfig });
+    } else {
+      setIsAxisMappingConfirmed(false);
+      setFrozenGraphConfig(null);
+    }
 
     return { nextConfig, loadedPoints, mappingConfirmed };
   };
@@ -4726,24 +4744,28 @@ const GraphCapture = () => {
 
   const normalizeCurveConfig = (curve) => normalizeCurveConfigFields(curve);
 
-  const applyDiscovereeGraphMetadataToConfig = (discovereeGraph = {}, resolvedGraphTitle = '', firstDetail = null) => {
+  const applyDiscovereeGraphMetadataToConfig = (discovereeGraph = {}, resolvedGraphTitle = '', firstDetail = null, curves = []) => {
     if (!discovereeGraph || typeof discovereeGraph !== 'object') return;
 
     const axisFields = resolveDiscovereeAxisFields(discovereeGraph, firstDetail || {});
+    const curveList = Array.isArray(curves) ? curves : [];
 
-    setGraphConfig((prev) => ({
-      ...prev,
-      graphTitle: resolvedGraphTitle || discovereeGraph.graph_title || prev.graphTitle || '',
-      partNumber: discovereeGraph.partno || prev.partNumber || '',
-      manufacturer: discovereeGraph.manf || prev.manufacturer || '',
-      xLabel: axisFields.xLabel || discovereeGraph.x_title || discovereeGraph.x_label || prev.xLabel || '',
-      yLabel: axisFields.yLabel || discovereeGraph.y_title || discovereeGraph.y_label || prev.yLabel || '',
-      ...buildGraphConfigAxisPatch(axisFields),
-      ...(axisFields.xScale ? { xScale: axisFields.xScale } : {}),
-      ...(axisFields.yScale ? { yScale: axisFields.yScale } : {}),
-      ...(axisFields.xUnitPrefix ? { xUnitPrefix: axisFields.xUnitPrefix } : {}),
-      ...(axisFields.yUnitPrefix ? { yUnitPrefix: axisFields.yUnitPrefix } : {}),
-    }));
+    setGraphConfig((prev) => {
+      let next = {
+        ...prev,
+        graphTitle: resolvedGraphTitle || discovereeGraph.graph_title || prev.graphTitle || '',
+        partNumber: discovereeGraph.partno || prev.partNumber || '',
+        manufacturer: discovereeGraph.manf || prev.manufacturer || '',
+        xLabel: axisFields.xLabel || discovereeGraph.x_title || discovereeGraph.x_label || prev.xLabel || '',
+        yLabel: axisFields.yLabel || discovereeGraph.y_title || discovereeGraph.y_label || prev.yLabel || '',
+        ...buildGraphConfigAxisPatch(axisFields),
+        ...(axisFields.xScale ? { xScale: axisFields.xScale } : {}),
+        ...(axisFields.yScale ? { yScale: axisFields.yScale } : {}),
+        ...(axisFields.xUnitPrefix ? { xUnitPrefix: axisFields.xUnitPrefix } : {}),
+        ...(axisFields.yUnitPrefix ? { yUnitPrefix: axisFields.yUnitPrefix } : {}),
+      };
+      return applyComputedAxisBounds(next, curveList);
+    });
   };
 
   const formatDisplayValue = (value) => {
@@ -5097,7 +5119,7 @@ const GraphCapture = () => {
                 setUploadedImageFromExistingGraph(graphImageUrl);
               }
 
-              applyDiscovereeGraphMetadataToConfig(discovereeGraph, resolvedGraphTitle, discovereeDetails[0]);
+              applyDiscovereeGraphMetadataToConfig(discovereeGraph, resolvedGraphTitle, discovereeDetails[0], dedupedFetched);
               return;
             }
           }
@@ -5315,8 +5337,6 @@ const GraphCapture = () => {
       if (overlayCurves.length > 0) {
         replaceDataPoints(buildCombinedOverlayPoints(overlayCurves));
       }
-      setIsAxisMappingConfirmed(false);
-      setFrozenGraphConfig(null);
       setIsReadOnly(false);
 
       console.log('[DEBUG] Graph context and captured points restored after refresh.');
@@ -6452,6 +6472,11 @@ const GraphCapture = () => {
                 hasReturnUrl={!!urlParams.return_url}
                 isEditingCurve={Boolean(editingCurveId)}
                 savedCurveViewActive={Boolean((selectedCurveId || combinedGroupId || showAllCombinedModal) && !editingCurveId)}
+                useInsetDefaultAxisBox={Boolean(
+                  urlParams.graph_id ||
+                  dataPoints.some((point) => point.imported) ||
+                  savedCurves.some((curve) => String(curve.graphId || '').trim() !== '')
+                )}
               />
               <CapturedPointsList isReadOnly={isReadOnly} hasReturnUrl={!!urlParams.return_url} isEditingCurve={Boolean(editingCurveId)} />
             </div>
