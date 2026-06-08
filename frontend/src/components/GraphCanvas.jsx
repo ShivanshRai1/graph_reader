@@ -67,6 +67,51 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
 
   const hasImportedCurvePoints = () => dataPoints.some((point) => point.imported);
 
+  /**
+   * Datasheet plots with step-4 ticks often label only up to max−4 (e.g. 16 on a 0–20 scale).
+   * Returns the inner fraction where that last printed tick sits, or null when not applicable.
+   */
+  const resolveLastLabeledTickFraction = (axisMin, axisMax) => {
+    const min = Number(axisMin);
+    const max = Number(axisMax);
+    if (min !== 0 || !Number.isFinite(max) || max < 20 || max % 4 !== 0) return null;
+    const lastLabeled = max - 4;
+    if (lastLabeled <= 0) return null;
+    return lastLabeled / max;
+  };
+
+  const getAxisTickGuideContext = () => {
+    if (graphConfig.xScale === 'Logarithmic' || graphConfig.yScale === 'Logarithmic') return null;
+    const xMin = parseFloat(graphConfig.xMin);
+    const yMin = parseFloat(graphConfig.yMin);
+    const xMax = parseFloat(graphConfig.xMax);
+    const yMax = parseFloat(graphConfig.yMax);
+    if (xMin !== 0 || yMin !== 0 || xMax !== yMax) return null;
+    const fraction = resolveLastLabeledTickFraction(xMin, xMax);
+    if (!fraction) return null;
+    return { axisMax: xMax, lastLabeled: xMax - 4, fraction };
+  };
+
+  const drawLastLabeledTickGuides = (ctx, area, fraction) => {
+    if (!fraction || fraction <= 0 || fraction >= 1) return;
+    const xGuide = area.x + area.width * fraction;
+    const yGuide = area.y + area.height * (1 - fraction);
+    ctx.save();
+    ctx.setLineDash([5, 5]);
+    ctx.strokeStyle = 'rgba(234, 88, 12, 0.5)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(xGuide, area.y);
+    ctx.lineTo(xGuide, area.y + area.height);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(area.x, yGuide);
+    ctx.lineTo(area.x + area.width, yGuide);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  };
+
   const canShowImportedCurveOverlay = () => {
     if (isAxisMappingConfirmed || isEditingCurve) return true;
     return savedCurveViewActive && hasValidAxisForOverlay() && graphArea.width > 0 && graphArea.height > 0;
@@ -429,6 +474,8 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       ctx.strokeStyle = 'blue';
       ctx.lineWidth = 4;
       ctx.strokeRect(area.x, area.y, area.width, area.height);
+      const tickGuide = getAxisTickGuideContext();
+      if (tickGuide) drawLastLabeledTickGuides(ctx, area, tickGuide.fraction);
       ctx.globalAlpha = 1; // Reset for handles
       
       // Draw resize handles
@@ -1229,6 +1276,8 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     );
   }
 
+  const axisTickGuideContext = getAxisTickGuideContext();
+
   return (
     <div className="w-full p-5 bg-white rounded-lg mt-5">
       <div className="bg-blue-50 p-4 rounded mb-4">
@@ -1339,12 +1388,28 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
         )}
         {hasImportedCurvePoints() && !canShowImportedCurveOverlay() && (
           <div className="text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2 mt-2 text-sm">
-            AI curve points are loaded. Set min/max to the full plot scale (tick labels may stop at 16 while the axis runs to 20). Drag the blue box so bottom-left is at ({graphConfig.xMin}, {graphConfig.yMin}) and top-right at ({graphConfig.xMax}, {graphConfig.yMax}), then click Final Check.
+            {axisTickGuideContext ? (
+              <>
+                Set axis 0–{axisTickGuideContext.axisMax}. Place bottom-left on (0, 0). Orange dashed lines mark the last printed tick ({axisTickGuideContext.lastLabeled}) — the blue corner must sit on the outer plot border at {axisTickGuideContext.axisMax}, not on that inner grid line. Then Final Check.
+              </>
+            ) : (
+              <>
+                AI curve points are loaded. Set min/max to the full plot scale. Drag the blue box so bottom-left is at ({graphConfig.xMin}, {graphConfig.yMin}) and top-right at ({graphConfig.xMax}, {graphConfig.yMax}), then click Final Check.
+              </>
+            )}
           </div>
         )}
         {hasImportedCurvePoints() && canShowImportedCurveOverlay() && isAxisMappingConfirmed && !isEditingCurve && (
           <div className="text-blue-800 bg-blue-50 border border-blue-200 rounded px-3 py-2 mt-2 text-sm">
-            Drag the blue box handles to fine-tune alignment — AI points move with the box. Use Edit curve to drag individual points if needed.
+            {axisTickGuideContext ? (
+              <>
+                If points cross the top or right edge, the box corner is on the {axisTickGuideContext.lastLabeled} tick instead of the {axisTickGuideContext.axisMax} border — drag top-right outward past the orange dashed lines. Otherwise fine-tune with box handles or Edit curve.
+              </>
+            ) : (
+              <>
+                Drag the blue box handles to fine-tune alignment — AI points move with the box. Use Edit curve to drag individual points if needed.
+              </>
+            )}
           </div>
         )}
         {removedPointsMsg && (
