@@ -13,11 +13,18 @@ const ImageUpload = ({ onImageLoaded, onAiExtensionCapture, isAiExtractionLoadin
   const { setUploadedImage, clearDataPoints, setGraphConfig, setGraphArea } = useGraph();
   const fileInputRef = useRef(null);
   const [pendingCapture, setPendingCapture] = useState(null);
-  const [aiMaxPoints, setAiMaxPointsState] = useState(() => getAiMaxPointsLimit());
+  const [aiMaxPointsInput, setAiMaxPointsInput] = useState(() => String(getAiMaxPointsLimit()));
 
   useEffect(() => {
-    setAiMaxPointsState(getAiMaxPointsLimit());
+    setAiMaxPointsInput(String(getAiMaxPointsLimit()));
   }, []);
+
+  const commitAiMaxPoints = (rawValue = aiMaxPointsInput) => {
+    const next = clampAiMaxPoints(rawValue);
+    setAiMaxPointsInput(String(next));
+    setAiMaxPointsLimit(next);
+    return next;
+  };
 
   useEffect(() => {
     if (!initialPendingCapture?.imageBase64) return;
@@ -81,14 +88,12 @@ const ImageUpload = ({ onImageLoaded, onAiExtensionCapture, isAiExtractionLoadin
   };
 
   const handleAiMaxPointsChange = (event) => {
-    const next = clampAiMaxPoints(event.target.value);
-    setAiMaxPointsState(next);
-    setAiMaxPointsLimit(next);
+    setAiMaxPointsInput(event.target.value);
   };
 
   const handleCaptureWithAiExtension = async () => {
     if (!pendingCapture?.imageBase64 || isAiExtractionLoading) return;
-    setAiMaxPointsLimit(aiMaxPoints);
+    commitAiMaxPoints();
     const succeeded = await onAiExtensionCapture?.(pendingCapture.imageBase64, pendingCapture.source);
     if (succeeded) {
       setPendingCapture(null);
@@ -162,8 +167,14 @@ const ImageUpload = ({ onImageLoaded, onAiExtensionCapture, isAiExtractionLoadin
                 type="number"
                 min={MIN_AI_MAX_POINTS}
                 max={MAX_AI_MAX_POINTS}
-                value={aiMaxPoints}
+                value={aiMaxPointsInput}
                 onChange={handleAiMaxPointsChange}
+                onBlur={() => commitAiMaxPoints()}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.currentTarget.blur();
+                  }
+                }}
                 className="w-24 px-3 py-2 border border-gray-300 rounded text-sm text-gray-900"
               />
               <span className="text-xs text-gray-600">
