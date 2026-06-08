@@ -5,7 +5,6 @@ import {
   clearAnnotationsForCurve,
   convertAnnotationsToPoints 
 } from '../utils/annotationStorage';
-import { resolveImportedPlotX } from '../utils/importedPlotMapping';
 
 const GraphContext = createContext();
 
@@ -410,8 +409,7 @@ export const GraphProvider = ({ children }) => {
         return point;
       }
 
-      const plotX = resolveImportedPlotX(point.x, graphConfig, dataPoints);
-      const canvasCoords = graphToCanvasWithBounds(plotX, point.y, graphArea, graphConfig);
+      const canvasCoords = graphToCanvasWithBounds(point.x, point.y, graphArea, graphConfig);
       if (
         Number.isFinite(point.canvasX) &&
         Number.isFinite(point.canvasY) &&
