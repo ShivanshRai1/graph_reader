@@ -1035,15 +1035,33 @@ const snapAxisMinBound = (min, max) => {
   return lo;
 };
 
+/** Common printed axis tick values on datasheet plots (includes 7 between 6 and 8). */
+const COMPACT_AXIS_MAX_TICKS = [
+  0.5, 1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 7, 8, 9, 10,
+  12, 15, 16, 18, 20, 25, 30, 40, 50, 60, 70, 80, 90, 100,
+  120, 150, 200, 250, 300, 400, 500, 600, 700, 800, 900, 1000,
+  1200, 1500, 2000, 2500, 3000, 5000, 10000,
+];
+
 const snapAxisMaxBound = (max) => {
   const value = Number(max);
   if (!Number.isFinite(value)) return max;
   if (value <= 0) return value;
 
+  const nextTick = COMPACT_AXIS_MAX_TICKS.find((tick) => tick >= value);
+  if (nextTick !== undefined) {
+    const tickIndex = COMPACT_AXIS_MAX_TICKS.indexOf(nextTick);
+    const prevTick = tickIndex > 0 ? COMPACT_AXIS_MAX_TICKS[tickIndex - 1] : null;
+    if (prevTick && nextTick - prevTick === 1 && value <= prevTick * 1.06) {
+      return prevTick;
+    }
+    return nextTick;
+  }
+
   const abs = Math.abs(value);
   const exponent = Math.floor(Math.log10(abs));
   const fraction = abs / (10 ** exponent);
-  const niceFractions = [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10];
+  const niceFractions = [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 7, 8, 10];
   const niceFraction = niceFractions.find((candidate) => candidate >= fraction) || 10;
   return niceFraction * (10 ** exponent);
 };
@@ -1088,7 +1106,8 @@ const resolveAxisBoundsWithFallback = (curves) => {
   const storedValid =
     Number.isFinite(storedXMin) && Number.isFinite(storedXMax) &&
     Number.isFinite(storedYMin) && Number.isFinite(storedYMax) &&
-    storedXMax > storedXMin && storedYMax > storedYMin;
+    storedXMax > storedXMin && storedYMax > storedYMin &&
+    !isDefaultPlaceholderAxisBounds({ xMin: storedXMin, xMax: storedXMax, yMin: storedYMin, yMax: storedYMax });
 
   if (storedValid) {
     return { xMin: storedXMin, xMax: storedXMax, yMin: storedYMin, yMax: storedYMax, source: 'stored' };
