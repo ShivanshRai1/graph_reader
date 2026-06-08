@@ -24,6 +24,10 @@ import {
   resolveDiscovereeAxisFields,
   syncImportedOverlayCanvas,
 } from '../utils/aiCurveProcessing';
+import {
+  inferTransferCharacteristicsAxis,
+  resolveImportedPlotX,
+} from '../utils/importedPlotMapping';
 import { useGraph, graphToCanvasWithBounds, getManualCapturePoints } from '../context/GraphContext';
 import { clearAnnotationsForCurve } from '../utils/annotationStorage';
 import { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
@@ -994,22 +998,27 @@ const buildRestoredSavedCurves = ({
 
 const buildImportedPointsForCurve = (curve, area, config) => {
   const pointList = Array.isArray(curve?.points) ? curve.points : [];
-  return pointList
+  const importedStubs = pointList
     .map((point) => {
       const x = Number(point?.x_value ?? point?.x);
       const y = Number(point?.y_value ?? point?.y);
       if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+      return { x, y, imported: true };
+    })
+    .filter(Boolean);
 
-      const { canvasX, canvasY } = graphToCanvasWithBounds(x, y, area, config);
+  return importedStubs
+    .map((point) => {
+      const plotX = resolveImportedPlotX(point.x, config, importedStubs);
+      const { canvasX, canvasY } = graphToCanvasWithBounds(plotX, point.y, area, config);
       return {
-        x,
-        y,
+        x: point.x,
+        y: point.y,
         canvasX,
         canvasY,
         imported: true,
       };
-    })
-    .filter(Boolean);
+    });
 };
 
 const normalizeCurveConfigFields = (curve) => ({
@@ -1143,6 +1152,15 @@ const resolveAxisBoundsWithFallback = (curves) => {
   });
 
   if (allPoints.length > 0) {
+    const graphTitle =
+      normalizeCurveConfigFields(curveList[0]).graphTitle ||
+      curveList[0]?.name ||
+      '';
+    const transferAxis = inferTransferCharacteristicsAxis(graphTitle, allPoints);
+    if (transferAxis) {
+      return { ...transferAxis, source: 'computed' };
+    }
+
     const xs = allPoints.map((pt) => pt.x);
     const ys = allPoints.map((pt) => pt.y);
     return {
@@ -1166,9 +1184,33 @@ const hasPersistedMappingContext = (persistedContext) => {
 };
 
 const applyComputedAxisBounds = (config = {}, curves = []) => {
-  if (hasUsableAxisMapping(config)) return config;
-
   const curveList = Array.isArray(curves) ? curves : (curves ? [curves] : []);
+  const graphTitle =
+    config.graphTitle ||
+    normalizeCurveConfigFields(curveList[0] || {}).graphTitle ||
+    '';
+  const allPoints = curveList.flatMap((curve) => {
+    const pts = curve?.points ?? curve?.data_points ?? [];
+    return pts
+      .map((pt) => ({
+        x: Number(pt.x_value ?? pt.x),
+        y: Number(pt.y_value ?? pt.y),
+      }))
+      .filter((pt) => Number.isFinite(pt.x) && Number.isFinite(pt.y));
+  });
+  const transferAxis = inferTransferCharacteristicsAxis(graphTitle, allPoints);
+
+  if (hasUsableAxisMapping(config)) {
+    if (transferAxis) {
+      const xMax = parseFloat(config.xMax);
+      const yMax = parseFloat(config.yMax);
+      if (xMax <= 10 || yMax <= 150) {
+        return { ...config, ...transferAxis };
+      }
+    }
+    return config;
+  }
+
   if (curveList.length === 0) return config;
 
   const bounds = resolveAxisBoundsWithFallback(curveList);

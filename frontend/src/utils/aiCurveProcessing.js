@@ -1,4 +1,5 @@
 import { graphToCanvasWithBounds } from '../context/GraphContext';
+import { resolveImportedPlotX } from './importedPlotMapping';
 
 export const AI_MAX_POINTS_STORAGE_KEY = 'ai_max_points_per_curve';
 export const DEFAULT_AI_MAX_POINTS = 20;
@@ -177,7 +178,8 @@ export const syncImportedOverlayCanvas = (points = [], graphArea, graphConfig) =
   let changed = false;
   const next = points.map((point) => {
     if (!point?.imported) return point;
-    const { canvasX, canvasY } = graphToCanvasWithBounds(point.x, point.y, graphArea, graphConfig);
+    const plotX = resolveImportedPlotX(point.x, graphConfig, points);
+    const { canvasX, canvasY } = graphToCanvasWithBounds(plotX, point.y, graphArea, graphConfig);
     if (
       Number.isFinite(point.canvasX) &&
       Number.isFinite(point.canvasY) &&
