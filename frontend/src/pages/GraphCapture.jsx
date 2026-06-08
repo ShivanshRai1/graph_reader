@@ -1208,6 +1208,12 @@ const pickStoredAxisBounds = (source = {}) => {
   return { xMin, xMax, yMin, yMax };
 };
 
+const pickUsableAxisBounds = (source = {}) => {
+  const bounds = pickStoredAxisBounds(source);
+  if (!bounds || isDefaultPlaceholderAxisBounds(bounds)) return null;
+  return bounds;
+};
+
 const resolveDataBoundsFromCurves = (curves = []) => {
   const curveList = Array.isArray(curves) ? curves : (curves ? [curves] : []);
   const allPoints = curveList.flatMap((curve) => {
@@ -1238,20 +1244,19 @@ const resolveDataBoundsFromCurves = (curves = []) => {
 const resolveAxisBoundsForGraphPreview = (curves, { graphId = '', liveGraphConfig = {} } = {}) => {
   const curveList = Array.isArray(curves) ? curves : (curves ? [curves] : []);
 
-  if (curveList.length > 0) {
-    const fromCurve = pickStoredAxisBounds(normalizeCurveConfigFields(curveList[0]));
-    if (fromCurve) return { ...fromCurve, source: 'curve' };
-  }
+  const fromLive = pickUsableAxisBounds(liveGraphConfig);
+  if (fromLive) return { ...fromLive, source: 'live' };
 
   const normalizedGraphId = String(graphId || '').trim();
   if (normalizedGraphId) {
-    const persistedAxis = getPersistedGraphContext(normalizedGraphId)?.axis;
-    const fromPersisted = pickStoredAxisBounds(persistedAxis);
+    const fromPersisted = pickUsableAxisBounds(getPersistedGraphContext(normalizedGraphId)?.axis);
     if (fromPersisted) return { ...fromPersisted, source: 'persisted' };
   }
 
-  const fromLive = pickStoredAxisBounds(liveGraphConfig);
-  if (fromLive) return { ...fromLive, source: 'live' };
+  if (curveList.length > 0) {
+    const fromCurve = pickUsableAxisBounds(normalizeCurveConfigFields(curveList[0]));
+    if (fromCurve) return { ...fromCurve, source: 'curve' };
+  }
 
   return resolveAxisBoundsWithFallback(curveList);
 };
