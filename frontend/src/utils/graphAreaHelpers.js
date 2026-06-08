@@ -1,11 +1,11 @@
 export const DEFAULT_AXIS_BOX_INSET_RATIO = 0.12;
 
-/** Typical B&W datasheet plot margins (Y labels left, X labels bottom). */
+/** Typical datasheet plot margins (Y labels left, X labels bottom, legend/title excluded). */
 export const DATASHEET_PLOT_MARGINS = {
   left: 0.15,
-  top: 0.05,
-  right: 0.04,
-  bottom: 0.11,
+  top: 0.10,
+  right: 0.20,
+  bottom: 0.12,
 };
 
 export const buildDatasheetPlotArea = (canvasW, canvasH, margins = DATASHEET_PLOT_MARGINS) => {

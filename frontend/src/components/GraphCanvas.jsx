@@ -1356,7 +1356,12 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
         )}
         {dataPoints.some((point) => point.imported) && !canShowImportedCurveOverlay() && (
           <div className="text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2 mt-2 text-sm">
-            AI curve points are loaded. Adjust the blue axis box if needed, then confirm axis mapping to show them on the graph.
+            AI curve points are loaded. Set axis min/max, adjust the blue box, then confirm axis mapping to show them on the graph.
+          </div>
+        )}
+        {dataPoints.some((point) => point.imported) && isImportedPreviewMode() && (
+          <div className="text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2 mt-2 text-sm">
+            Faint dots = AI curve preview at the current box and axis. Drag the blue box so bottom-left sits on graph (0, 0) and top-right on max (e.g. {graphConfig.xMax}, {graphConfig.yMax}), then Final Check.
           </div>
         )}
         {removedPointsMsg && (

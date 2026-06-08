@@ -12,6 +12,7 @@ import { useEffect, useState } from 'react';
 const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false, isEditingCurve = false }) => {
   const { dataPoints, clearDataPoints, importDataPoints, uploadedImage, updateDataPoint, deleteDataPoint, graphConfig, graphArea, convertCanvasToGraphCoordinates } = useGraph();
   const manualCapturePoints = getManualCapturePoints(dataPoints);
+  const importedOverlayCount = dataPoints.filter((point) => point.imported).length;
   const [editingIndex, setEditingIndex] = useState(null);
   const [editX, setEditX] = useState('');
   const [editY, setEditY] = useState('');
@@ -321,7 +322,13 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false, isEditin
       <div className="flex justify-between items-center mb-4 pb-4 border-b-2 border-gray-100">
         <div>
           <h3 className="text-gray-800 text-lg font-semibold m-0">Captured Points: {manualCapturePoints.length}</h3>
-          {manualCapturePoints.length === 0 && (
+          {manualCapturePoints.length === 0 && importedOverlayCount > 0 && (
+            <p className="text-xs text-gray-500 mt-1">
+              AI preview on graph: {importedOverlayCount} faint dot{importedOverlayCount === 1 ? '' : 's'} (not counted here).
+              Align the blue box to the plot grid, then Final Check.
+            </p>
+          )}
+          {manualCapturePoints.length === 0 && importedOverlayCount === 0 && (
             <p className="text-xs text-gray-500 mt-1">No points captured yet. Confirm axis mapping first, then click on the graph.</p>
           )}
 
