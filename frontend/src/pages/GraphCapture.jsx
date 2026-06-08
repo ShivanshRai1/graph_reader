@@ -3676,9 +3676,7 @@ const GraphCapture = () => {
   const restoreGraphDisplayFromSavedCurve = (curve, graphId, { keepCurveNameEmpty = false, allCurves = null, loadPoints = true } = {}) => {
     const persistedContext = getPersistedGraphContext(graphId);
     const persistedAxis = persistedContext?.axis;
-    const restoredArea =
-      persistedContext?.graphArea ||
-      (graphArea.width > 0 && graphArea.height > 0 ? graphArea : null);
+    const restoredArea = normalizePersistedGraphArea(persistedContext?.graphArea);
     let nextConfig = buildCurveConfigFromSaved(curve, graphConfig, persistedAxis);
     const curveList = Array.isArray(allCurves) && allCurves.length > 0 ? allCurves : [curve];
     const apiAxisPatch = buildGraphConfigAxisPatch(
@@ -3692,6 +3690,9 @@ const GraphCapture = () => {
 
     if (restoredArea) {
       setGraphArea(restoredArea);
+    } else {
+      // Force GraphCanvas to apply a fresh plot-area box for this image (avoid stale box from another graph).
+      setGraphArea({ x: 0, y: 0, width: 0, height: 0 });
     }
 
     setGraphConfig((prev) => ({
@@ -5349,7 +5350,7 @@ const GraphCapture = () => {
         }
       })();
 
-      restoreGraphDisplayFromSavedCurve(firstCurve, graphId, {
+      const { mappingConfirmed } = restoreGraphDisplayFromSavedCurve(firstCurve, graphId, {
         keepCurveNameEmpty: true,
         allCurves: savedCurves,
         loadPoints: false,
@@ -5359,7 +5360,10 @@ const GraphCapture = () => {
       );
       const overlayCurves = curvesForGraph.length > 0 ? curvesForGraph : savedCurves;
       if (overlayCurves.length > 0) {
-        replaceDataPoints(buildCombinedOverlayPoints(overlayCurves));
+        // Before mapping is confirmed, preview one curve so box tuning is easier to judge.
+        const previewCurves =
+          !mappingConfirmed && overlayCurves.length > 1 ? [overlayCurves[0]] : overlayCurves;
+        replaceDataPoints(buildCombinedOverlayPoints(previewCurves));
       }
       setIsReadOnly(false);
 
@@ -6539,6 +6543,15 @@ const GraphCapture = () => {
                       );
                       if (curvesForGraph.length > 0) {
                         persistSavedCurves(graphId, curvesForGraph, savedCurvesSource);
+                      }
+                      if (
+                        curvesForGraph.length > 1 &&
+                        !selectedCurveId &&
+                        !combinedGroupId &&
+                        !showAllCombinedModal &&
+                        !editingCurveId
+                      ) {
+                        replaceDataPoints(buildCombinedOverlayPoints(curvesForGraph));
                       }
                       return patched;
                     });
