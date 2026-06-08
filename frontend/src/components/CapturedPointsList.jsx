@@ -324,8 +324,7 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false, isEditin
           <h3 className="text-gray-800 text-lg font-semibold m-0">Captured Points: {manualCapturePoints.length}</h3>
           {manualCapturePoints.length === 0 && importedOverlayCount > 0 && (
             <p className="text-xs text-gray-500 mt-1">
-              AI preview on graph: {importedOverlayCount} faint dot{importedOverlayCount === 1 ? '' : 's'} (not counted here).
-              Align the blue box to the plot grid, then Final Check.
+              AI loaded {importedOverlayCount} point{importedOverlayCount === 1 ? '' : 's'}. Set min/max to match axis labels on the graph, align the blue box, then Final Check.
             </p>
           )}
           {manualCapturePoints.length === 0 && importedOverlayCount === 0 && (

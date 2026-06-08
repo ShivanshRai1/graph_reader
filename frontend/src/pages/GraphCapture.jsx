@@ -6554,11 +6554,6 @@ const GraphCapture = () => {
                 hasReturnUrl={!!urlParams.return_url}
                 isEditingCurve={Boolean(editingCurveId)}
                 savedCurveViewActive={Boolean((selectedCurveId || combinedGroupId || showAllCombinedModal) && !editingCurveId)}
-                useInsetDefaultAxisBox={Boolean(
-                  urlParams.graph_id ||
-                  dataPoints.some((point) => point.imported) ||
-                  savedCurves.some((curve) => String(curve.graphId || '').trim() !== '')
-                )}
               />
               <CapturedPointsList isReadOnly={isReadOnly} hasReturnUrl={!!urlParams.return_url} isEditingCurve={Boolean(editingCurveId)} />
             </div>

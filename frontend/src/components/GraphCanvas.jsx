@@ -2,7 +2,7 @@ import { useRef, useState, useEffect } from 'react';
 import { useGraph, isManualCapturePoint } from '../context/GraphContext';
 import { buildDefaultGraphArea } from '../utils/graphAreaHelpers';
 
-const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', isAxisMappingConfirmed = false, hasReturnUrl = false, isEditingCurve = false, savedCurveViewActive = false, useInsetDefaultAxisBox = false }) => {
+const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', isAxisMappingConfirmed = false, hasReturnUrl = false, isEditingCurve = false, savedCurveViewActive = false }) => {
   const { uploadedImage, graphArea, setGraphArea, dataPoints, addDataPoint, clearDataPoints, graphConfig, deleteDataPoint, convertGraphToCanvasCoordinates, convertCanvasToGraphCoordinates, replaceDataPoints, updateDataPointFromCanvas } = useGraph();
   const [showRedrawMsg, setShowRedrawMsg] = useState(false);
   const canvasRef = useRef(null);
@@ -65,20 +65,16 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     );
   };
 
+  const hasImportedCurvePoints = () => dataPoints.some((point) => point.imported);
+
   const canShowImportedCurveOverlay = () => {
     if (isAxisMappingConfirmed || isEditingCurve) return true;
-    if (savedCurveViewActive && hasValidAxisForOverlay() && graphArea.width > 0 && graphArea.height > 0) return true;
-    const hasImportedPoints = dataPoints.some((point) => point.imported);
-    if (hasImportedPoints && hasValidAxisForOverlay() && graphArea.width > 0 && graphArea.height > 0) {
-      return true;
-    }
-    return false;
+    return savedCurveViewActive && hasValidAxisForOverlay() && graphArea.width > 0 && graphArea.height > 0;
   };
 
-  const isImportedPreviewMode = () => {
-    if (isAxisMappingConfirmed || isEditingCurve || savedCurveViewActive) return false;
-    return dataPoints.some((point) => point.imported) && hasValidAxisForOverlay();
-  };
+  // Allow box resize before Final Check, while editing, or after confirm when tuning AI overlay alignment.
+  const canAdjustAxisBox = () =>
+    !isAxisMappingConfirmed || isEditingCurve || hasImportedCurvePoints();
   const EDGE_GAP = 12; // Hysteresis for edge checks to reduce flicker
   const EPS = 1e-6;
   const WARN_CLEAR_DELAY = 180; // ms to hold warning before clearing
@@ -102,7 +98,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   };
 
   const createInitialAxisBox = (canvasW, canvasH) => {
-    const raw = buildDefaultGraphArea(canvasW, canvasH, { useInset: useInsetDefaultAxisBox });
+    const raw = buildDefaultGraphArea(canvasW, canvasH);
     return constrainAreaToMargin(raw, canvasW, canvasH);
   };
 
@@ -239,7 +235,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     setGraphArea(initialBox);
     lastUserBoxRef.current = initialBox;
     setBoxTransparent(false);
-  }, [uploadedImage, imageSize.width, imageSize.height, graphArea.width, graphArea.height, graphArea.x, graphArea.y, setGraphArea, useInsetDefaultAxisBox]);
+  }, [uploadedImage, imageSize.width, imageSize.height, graphArea.width, graphArea.height, graphArea.x, graphArea.y, setGraphArea]);
 
   // Separate effect to redraw selection box and points without reloading image
   useEffect(() => {
@@ -272,19 +268,13 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     }
 
     const hasOnlyImported = dataPoints.every((point) => point.imported);
-    if (hasOnlyImported) {
-      if (!canShowImportedCurveOverlay()) {
-        setBoxTransparent(false);
-        return;
-      }
-      if (isImportedPreviewMode()) {
-        setBoxTransparent(false);
-        return;
-      }
+    if (hasOnlyImported && !canShowImportedCurveOverlay()) {
+      setBoxTransparent(false);
+      return;
     }
 
     setBoxTransparent(true);
-  }, [dataPoints, isAxisMappingConfirmed, isEditingCurve, savedCurveViewActive, graphArea.width, graphArea.height, graphConfig.xMin, graphConfig.xMax, graphConfig.yMin, graphConfig.yMax]);
+  }, [dataPoints, isAxisMappingConfirmed, isEditingCurve, savedCurveViewActive, graphArea.width, graphArea.height]);
 
   useEffect(() => {
     if (savedCurveViewActive && dataPoints.some((point) => point.imported)) {
@@ -490,11 +480,6 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     if (hasImportedPoints && !canShowImportedCurveOverlay()) return;
 
     const inSavedView = savedCurveViewActive && canShowImportedCurveOverlay();
-    const previewMode = isImportedPreviewMode();
-    if (previewMode) {
-      ctx.save();
-      ctx.globalAlpha = 0.45;
-    }
 
     dataPoints.forEach((point, index) => {
       // Use graph value -> canvas position so dots update when box is resized
@@ -524,22 +509,12 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       ctx.arc(drawX, drawY, pointRadius, 0, 2 * Math.PI);
       ctx.fill();
     });
-
-    if (previewMode) {
-      ctx.restore();
-    }
   };
 
   // Draw lines connecting all captured points
   const drawFixPoints = (ctx) => {
     const hasImportedPoints = dataPoints.some((point) => point.imported);
     if (hasImportedPoints && !canShowImportedCurveOverlay()) return;
-
-    const previewMode = isImportedPreviewMode();
-    if (previewMode) {
-      ctx.save();
-      ctx.globalAlpha = 0.35;
-    }
 
     // Only draw if there are at least 2 valid points with graph values
     const validPoints = dataPoints
@@ -549,10 +524,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
         return { ...p, canvasX, canvasY };
       })
       .filter(p => Number.isFinite(p.canvasX) && Number.isFinite(p.canvasY));
-    if (validPoints.length < 2) {
-      if (previewMode) ctx.restore();
-      return;
-    }
+    if (validPoints.length < 2) return;
 
     const curveGroups = new Map();
     validPoints.forEach((point, index) => {
@@ -610,9 +582,6 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     }
 
     ctx.restore();
-    if (previewMode) {
-      ctx.restore();
-    }
   };
 
   const getCanvasCoordinatesFromEvent = (e) => {
@@ -729,8 +698,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     }
 
     if (mode) {
-      // Prevent resizing when locked, except while editing a saved curve (box alignment tune-up)
-      if (isAxisMappingConfirmed && !isEditingCurve) {
+      if (!canAdjustAxisBox()) {
         return;
       }
       // Store that a handle was clicked, but don't resize yet
@@ -761,7 +729,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     }
 
     // Check if we need to activate resize mode based on potential handle
-    if (!resizeMode && potentialResizeHandleRef.current && initialArea && (!isAxisMappingConfirmed || isEditingCurve)) {
+    if (!resizeMode && potentialResizeHandleRef.current && initialArea && canAdjustAxisBox()) {
       const dx = x - initialMouse.x;
       const dy = y - initialMouse.y;
       const moveDistance = Math.sqrt(dx * dx + dy * dy);
@@ -776,7 +744,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       }
     }
 
-    if (resizeMode && initialArea && (!isAxisMappingConfirmed || isEditingCurve)) {
+    if (resizeMode && initialArea && canAdjustAxisBox()) {
       const dx = x - initialMouse.x;
       const dy = y - initialMouse.y;
       const minSize = 20;
@@ -1354,14 +1322,14 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
             Please redraw the axis box
           </div>
         )}
-        {dataPoints.some((point) => point.imported) && !canShowImportedCurveOverlay() && (
+        {hasImportedCurvePoints() && !canShowImportedCurveOverlay() && (
           <div className="text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2 mt-2 text-sm">
-            AI curve points are loaded. Set axis min/max, adjust the blue box, then confirm axis mapping to show them on the graph.
+            AI curve points are loaded. Set min/max to match the axis labels on the graph image, drag the blue box so bottom-left is at ({graphConfig.xMin}, {graphConfig.yMin}) and top-right at ({graphConfig.xMax}, {graphConfig.yMax}), then click Final Check.
           </div>
         )}
-        {dataPoints.some((point) => point.imported) && isImportedPreviewMode() && (
-          <div className="text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2 mt-2 text-sm">
-            Faint dots = AI curve preview at the current box and axis. Drag the blue box so bottom-left sits on graph (0, 0) and top-right on max (e.g. {graphConfig.xMax}, {graphConfig.yMax}), then Final Check.
+        {hasImportedCurvePoints() && canShowImportedCurveOverlay() && isAxisMappingConfirmed && !isEditingCurve && (
+          <div className="text-blue-800 bg-blue-50 border border-blue-200 rounded px-3 py-2 mt-2 text-sm">
+            Drag the blue box handles to fine-tune alignment — AI points move with the box. Use Edit curve to drag individual points if needed.
           </div>
         )}
         {removedPointsMsg && (
