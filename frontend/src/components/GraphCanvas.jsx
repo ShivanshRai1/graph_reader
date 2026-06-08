@@ -85,6 +85,9 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   const EDIT_POINT_HIT_RADIUS = 12;
 
   const normalizeArea = (area) => {
+    if (!area || typeof area !== 'object') {
+      return { x: 0, y: 0, width: 0, height: 0 };
+    }
     let { x, y, width, height } = area;
     if (width < 0) {
       x = x + width;

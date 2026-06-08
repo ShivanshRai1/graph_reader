@@ -183,6 +183,9 @@ const isEmbeddedGraphImage = (value) => {
   return normalized.startsWith('data:') || normalized.startsWith('blob:');
 };
 
+/** localStorage quota is ~5 MB; skip caching oversized base64 graph images. */
+const MAX_PERSISTED_GRAPH_IMAGE_CHARS = 1_500_000;
+
 const isRejectedGraphImageToken = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
   return !normalized || normalized === '0' || normalized === 'null' || normalized === 'undefined' || normalized === 'nan';
@@ -3693,6 +3696,10 @@ const GraphCapture = () => {
     if (!normalizedGraphId || !normalizedImage) return;
     // Only cache embeddable images. DiscoverEE filename URLs often 404 and should not be cached.
     if (!isEmbeddedGraphImage(normalizedImage)) return;
+    if (normalizedImage.length > MAX_PERSISTED_GRAPH_IMAGE_CHARS) {
+      console.warn('[DEBUG] Graph image too large for localStorage cache; skipping persist for graph_id:', normalizedGraphId);
+      return;
+    }
 
     try {
       localStorage.setItem(`graph_image_${normalizedGraphId}`, normalizedImage);
