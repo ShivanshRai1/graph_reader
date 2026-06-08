@@ -1055,6 +1055,10 @@ const snapAxisMaxBound = (max) => {
     if (prevTick && nextTick - prevTick === 1 && value <= prevTick * 1.06) {
       return prevTick;
     }
+    // Datasheet plots often label ticks 0,4,8,12,16 but the full axis runs to 20.
+    if (nextTick === 16 && value >= 8 && value <= 16) {
+      return 20;
+    }
     return nextTick;
   }
 
@@ -1081,11 +1085,25 @@ const snapAxisBounds = ({ xMin, xMax, yMin, yMax }) => {
 
   const snappedXMin = snapAxisMinBound(rawXMin, rawXMax);
   const snappedYMin = snapAxisMinBound(rawYMin, rawYMax);
+  let snappedXMax = snapAxisMaxBound(rawXMax);
+  let snappedYMax = snapAxisMaxBound(rawYMax);
+
+  // Id-Vds style plots: both axes share a 0–20 scale even when Y data peaks below 16.
+  if (
+    snappedXMin === 0 &&
+    snappedYMin === 0 &&
+    snappedXMax === 20 &&
+    snappedYMax >= 8 &&
+    snappedYMax <= 16
+  ) {
+    snappedYMax = 20;
+  }
+
   return {
     xMin: snappedXMin,
-    xMax: snapAxisMaxBound(rawXMax),
+    xMax: snappedXMax,
     yMin: snappedYMin,
-    yMax: snapAxisMaxBound(rawYMax),
+    yMax: snappedYMax,
   };
 };
 
@@ -2505,6 +2523,11 @@ const GraphCapture = () => {
     setGraphArea,
   } = useGraph();
   const graphWorkspaceRef = useRef(null);
+  const graphAreaRef = useRef(graphArea);
+
+  useEffect(() => {
+    graphAreaRef.current = graphArea;
+  }, [graphArea]);
 
   // Restore AI extraction logs on component mount
   useEffect(() => {
@@ -3518,6 +3541,10 @@ const GraphCapture = () => {
         yLabel: persistedContext.axis.yLabel ?? prev.yLabel,
       }));
     }
+    if (hasPersistedMappingContext(persistedContext)) {
+      setIsAxisMappingConfirmed(true);
+      setFrozenGraphConfig((prev) => prev || { ...persistedContext.axis });
+    }
   }, [setGraphArea, setGraphConfig]);
 
   const uniqueSavedCurves = useMemo(() => {
@@ -3712,8 +3739,13 @@ const GraphCapture = () => {
     if (restoredArea) {
       setGraphArea(restoredArea);
     } else {
-      // Force GraphCanvas to apply a fresh plot-area box for this image (avoid stale box from another graph).
-      setGraphArea({ x: 0, y: 0, width: 0, height: 0 });
+      const liveArea =
+        normalizePersistedGraphArea(graphAreaOverride) ||
+        normalizePersistedGraphArea(graphAreaRef.current);
+      if (!liveArea) {
+        // Force GraphCanvas to apply a fresh plot-area box for this image (avoid stale box from another graph).
+        setGraphArea({ x: 0, y: 0, width: 0, height: 0 });
+      }
     }
 
     setGraphConfig((prev) => ({
@@ -5408,6 +5440,10 @@ const GraphCapture = () => {
         keepCurveNameEmpty: true,
         allCurves: savedCurves,
         loadPoints: false,
+        graphAreaOverride:
+          graphAreaRef.current?.width > 0 && graphAreaRef.current?.height > 0
+            ? graphAreaRef.current
+            : null,
       });
       const curvesForGraph = savedCurves.filter(
         (curve) => (curve.graphId || getGraphIdForCurve(curve)) === String(graphId)
@@ -6554,6 +6590,11 @@ const GraphCapture = () => {
                 hasReturnUrl={!!urlParams.return_url}
                 isEditingCurve={Boolean(editingCurveId)}
                 savedCurveViewActive={Boolean((selectedCurveId || combinedGroupId || showAllCombinedModal) && !editingCurveId)}
+                useInsetDefaultAxisBox={Boolean(
+                  urlParams.graph_id ||
+                  dataPoints.some((point) => point.imported) ||
+                  savedCurves.some((curve) => String(curve.graphId || '').trim() !== '')
+                )}
               />
               <CapturedPointsList isReadOnly={isReadOnly} hasReturnUrl={!!urlParams.return_url} isEditingCurve={Boolean(editingCurveId)} />
             </div>

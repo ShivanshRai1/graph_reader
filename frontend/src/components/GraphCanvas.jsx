@@ -2,7 +2,7 @@ import { useRef, useState, useEffect } from 'react';
 import { useGraph, isManualCapturePoint } from '../context/GraphContext';
 import { buildDefaultGraphArea } from '../utils/graphAreaHelpers';
 
-const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', isAxisMappingConfirmed = false, hasReturnUrl = false, isEditingCurve = false, savedCurveViewActive = false }) => {
+const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', isAxisMappingConfirmed = false, hasReturnUrl = false, isEditingCurve = false, savedCurveViewActive = false, useInsetDefaultAxisBox = false }) => {
   const { uploadedImage, graphArea, setGraphArea, dataPoints, addDataPoint, clearDataPoints, graphConfig, deleteDataPoint, convertGraphToCanvasCoordinates, convertCanvasToGraphCoordinates, replaceDataPoints, updateDataPointFromCanvas } = useGraph();
   const [showRedrawMsg, setShowRedrawMsg] = useState(false);
   const canvasRef = useRef(null);
@@ -98,7 +98,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   };
 
   const createInitialAxisBox = (canvasW, canvasH) => {
-    const raw = buildDefaultGraphArea(canvasW, canvasH);
+    const raw = buildDefaultGraphArea(canvasW, canvasH, { useInset: useInsetDefaultAxisBox });
     return constrainAreaToMargin(raw, canvasW, canvasH);
   };
 
@@ -202,7 +202,11 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
           requestAnimationFrame(() => {
             const currentArea = normalizeArea(graphAreaRef.current);
             if (currentArea.width === 0 || currentArea.height === 0) {
-              const initialBox = createInitialAxisBox(img.width, img.height);
+              const rememberedBox = normalizeArea(lastUserBoxRef.current);
+              const initialBox =
+                rememberedBox.width > 0 && rememberedBox.height > 0
+                  ? rememberedBox
+                  : createInitialAxisBox(img.width, img.height);
               setGraphArea(initialBox);
               lastUserBoxRef.current = initialBox;
               setBoxTransparent(false);
@@ -231,11 +235,18 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     const area = normalizeArea(graphArea);
     if (area.width > 0 && area.height > 0) return;
 
+    const rememberedBox = normalizeArea(lastUserBoxRef.current);
+    if (rememberedBox.width > 0 && rememberedBox.height > 0) {
+      setGraphArea(rememberedBox);
+      setBoxTransparent(false);
+      return;
+    }
+
     const initialBox = createInitialAxisBox(imageSize.width, imageSize.height);
     setGraphArea(initialBox);
     lastUserBoxRef.current = initialBox;
     setBoxTransparent(false);
-  }, [uploadedImage, imageSize.width, imageSize.height, graphArea.width, graphArea.height, graphArea.x, graphArea.y, setGraphArea]);
+  }, [uploadedImage, imageSize.width, imageSize.height, graphArea.width, graphArea.height, graphArea.x, graphArea.y, setGraphArea, useInsetDefaultAxisBox]);
 
   // Separate effect to redraw selection box and points without reloading image
   useEffect(() => {
@@ -252,6 +263,12 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   // Keep live refs always in sync with latest state
   const graphConfigRef = useRef(graphConfig);
   useEffect(() => { graphAreaRef.current = graphArea; }, [graphArea]);
+  useEffect(() => {
+    const area = normalizeArea(graphArea);
+    if (area.width > 0 && area.height > 0) {
+      lastUserBoxRef.current = area;
+    }
+  }, [graphArea.x, graphArea.y, graphArea.width, graphArea.height]);
   useEffect(() => { dataPointsRef.current = dataPoints; }, [dataPoints]);
   useEffect(() => { graphConfigRef.current = graphConfig; }, [graphConfig]);
 
@@ -1291,15 +1308,10 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
         <button
           className="px-4 py-2 rounded bg-gray-700 text-white font-medium"
           onClick={() => {
-            if (lastUserBoxRef.current) {
+            if (lastUserBoxRef.current?.width > 0 && lastUserBoxRef.current?.height > 0) {
               setGraphArea({ ...lastUserBoxRef.current });
             } else if (imageSize.width && imageSize.height) {
-              const newBox = {
-                x: MARGIN,
-                y: MARGIN,
-                width: imageSize.width - (MARGIN * 2),
-                height: imageSize.height - (MARGIN * 2),
-              };
+              const newBox = createInitialAxisBox(imageSize.width, imageSize.height);
               setGraphArea(newBox);
               lastUserBoxRef.current = newBox;
             }
@@ -1324,7 +1336,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
         )}
         {hasImportedCurvePoints() && !canShowImportedCurveOverlay() && (
           <div className="text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2 mt-2 text-sm">
-            AI curve points are loaded. Set min/max to match the axis labels on the graph image, drag the blue box so bottom-left is at ({graphConfig.xMin}, {graphConfig.yMin}) and top-right at ({graphConfig.xMax}, {graphConfig.yMax}), then click Final Check.
+            AI curve points are loaded. Set min/max to the full plot scale (tick labels may stop at 16 while the axis runs to 20). Drag the blue box so bottom-left is at ({graphConfig.xMin}, {graphConfig.yMin}) and top-right at ({graphConfig.xMax}, {graphConfig.yMax}), then click Final Check.
           </div>
         )}
         {hasImportedCurvePoints() && canShowImportedCurveOverlay() && isAxisMappingConfirmed && !isEditingCurve && (
