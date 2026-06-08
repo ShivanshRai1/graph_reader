@@ -644,6 +644,17 @@ const hasValidAxisMapping = (config = {}) => {
   );
 };
 
+const isDefaultPlaceholderAxisBounds = (config = {}) => {
+  const xMin = parseFloat(config.xMin);
+  const xMax = parseFloat(config.xMax);
+  const yMin = parseFloat(config.yMin);
+  const yMax = parseFloat(config.yMax);
+  return xMin === 0 && xMax === 100 && yMin === 0 && yMax === 100;
+};
+
+const hasUsableAxisMapping = (config = {}) =>
+  hasValidAxisMapping(config) && !isDefaultPlaceholderAxisBounds(config);
+
 const getPersistedGraphContext = (graphId) => {
   const normalizedGraphId = String(graphId || '').trim();
   if (!normalizedGraphId) return null;
@@ -1111,11 +1122,11 @@ const resolveAxisBoundsWithFallback = (curves) => {
 const hasPersistedMappingContext = (persistedContext) => {
   const area = normalizePersistedGraphArea(persistedContext?.graphArea);
   const axis = persistedContext?.axis;
-  return Boolean(area && axis && hasValidAxisMapping(axis));
+  return Boolean(area && axis && hasUsableAxisMapping(axis));
 };
 
 const applyComputedAxisBounds = (config = {}, curves = []) => {
-  if (hasValidAxisMapping(config)) return config;
+  if (hasUsableAxisMapping(config)) return config;
 
   const curveList = Array.isArray(curves) ? curves : (curves ? [curves] : []);
   if (curveList.length === 0) return config;
@@ -3899,6 +3910,19 @@ const GraphCapture = () => {
     const { nextConfig } = restoreGraphDisplayFromSavedCurve(curve, graphId, {
       allCurves: curvesForGraph.length > 0 ? curvesForGraph : [curve],
     });
+
+    if (hasUsableAxisMapping(nextConfig)) {
+      setIsAxisMappingConfirmed(true);
+      setFrozenGraphConfig({ ...nextConfig });
+      const persistedContext = getPersistedGraphContext(graphId);
+      const persistArea =
+        normalizePersistedGraphArea(persistedContext?.graphArea) ||
+        (graphArea.width > 0 && graphArea.height > 0 ? graphArea : null);
+      if (graphId && persistArea) {
+        persistGraphContext(graphId, persistArea, nextConfig);
+      }
+    }
+
     setIsReadOnly(false);
 
     setEditingCurveId(curve.id);

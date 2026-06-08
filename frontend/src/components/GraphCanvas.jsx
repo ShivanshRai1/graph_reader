@@ -266,6 +266,11 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       return;
     }
 
+    if (isEditingCurve) {
+      setBoxTransparent(false);
+      return;
+    }
+
     const hasOnlyImported = dataPoints.every((point) => point.imported);
     if (hasOnlyImported) {
       if (!canShowImportedCurveOverlay()) {
@@ -692,8 +697,8 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
         editDragMovedRef.current = false;
         editDragPointIndexRef.current = hitIndex;
         setEditDragPointIndex(hitIndex);
+        return;
       }
-      return;
     }
 
     const area = normalizeArea(graphArea);
@@ -724,8 +729,8 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     }
 
     if (mode) {
-      // Prevent resizing if configuration is locked (after Final Check)
-      if (isAxisMappingConfirmed) {
+      // Prevent resizing when locked, except while editing a saved curve (box alignment tune-up)
+      if (isAxisMappingConfirmed && !isEditingCurve) {
         return;
       }
       // Store that a handle was clicked, but don't resize yet
@@ -756,7 +761,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     }
 
     // Check if we need to activate resize mode based on potential handle
-    if (!resizeMode && potentialResizeHandleRef.current && initialArea && !isAxisMappingConfirmed) {
+    if (!resizeMode && potentialResizeHandleRef.current && initialArea && (!isAxisMappingConfirmed || isEditingCurve)) {
       const dx = x - initialMouse.x;
       const dy = y - initialMouse.y;
       const moveDistance = Math.sqrt(dx * dx + dy * dy);
@@ -771,7 +776,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       }
     }
 
-    if (resizeMode && initialArea && !isAxisMappingConfirmed) {
+    if (resizeMode && initialArea && (!isAxisMappingConfirmed || isEditingCurve)) {
       const dx = x - initialMouse.x;
       const dy = y - initialMouse.y;
       const minSize = 20;
