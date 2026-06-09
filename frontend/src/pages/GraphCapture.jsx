@@ -19,7 +19,7 @@ import {
   applyAiPointLimitToCurve,
   buildGraphConfigAxisPatch,
   getAiMaxPointsLimit,
-  limitPointsEvenlyOnX,
+  processAiImportedPoints,
   normalizeAiExtractedMetadata,
   resolveDiscovereeAxisFields,
   syncImportedOverlayCanvas,
@@ -5158,7 +5158,7 @@ const GraphCapture = () => {
 
             const fetched = discovereeDetails.map((detail, i) => {
               const axisFields = resolveDiscovereeAxisFields(discovereeGraph, detail);
-              const points = limitPointsEvenlyOnX(parseXyString(detail.xy), getAiMaxPointsLimit());
+              const points = processAiImportedPoints(parseXyString(detail.xy), getAiMaxPointsLimit());
               const resolvedXMin = axisFields.xMin;
               const resolvedXMax = axisFields.xMax;
               const resolvedYMin = axisFields.yMin;

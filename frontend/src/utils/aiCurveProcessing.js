@@ -4,6 +4,10 @@ export const AI_MAX_POINTS_STORAGE_KEY = 'ai_max_points_per_curve';
 export const DEFAULT_AI_MAX_POINTS = 20;
 export const MIN_AI_MAX_POINTS = 2;
 export const MAX_AI_MAX_POINTS = 200;
+/** Require at least this many AI points before auto-trimming a constant-axis line to endpoints. */
+export const MIN_POINTS_FOR_STRAIGHT_LINE_DETECTION = 4;
+const STRAIGHT_LINE_RELATIVE_TOLERANCE = 0.01;
+const STRAIGHT_LINE_VARYING_AXIS_RATIO = 3;
 
 const isValidAxisCandidate = (value) => {
   if (value === undefined || value === null) return false;
@@ -98,6 +102,98 @@ export const limitPointsEvenlyOnX = (points = [], maxPoints = DEFAULT_AI_MAX_POI
   return sampled.map((entry) => toStoredPoint({ x: entry.x, y: entry.y }, entry.point));
 };
 
+const buildParsedPointEntries = (points = []) =>
+  (Array.isArray(points) ? points : [])
+    .map((point, index) => {
+      const pair = parsePointPair(point);
+      if (!pair) return null;
+      return { point, index, x: pair.x, y: pair.y };
+    })
+    .filter(Boolean);
+
+const axisTolerance = (values, span) => {
+  if (values.length === 0) return 0;
+  const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+  const ref = Math.max(Math.abs(mean), span, 1e-12);
+  return Math.max(ref * STRAIGHT_LINE_RELATIVE_TOLERANCE, span * 0.02);
+};
+
+/**
+ * Detect horizontal (constant Y) or vertical (constant X) AI curves.
+ * Uses every point — if any point breaks flatness, returns null.
+ */
+export const detectConstantAxisLine = (points = []) => {
+  const entries = buildParsedPointEntries(points);
+  if (entries.length < MIN_POINTS_FOR_STRAIGHT_LINE_DETECTION) return null;
+
+  const xs = entries.map((entry) => entry.x);
+  const ys = entries.map((entry) => entry.y);
+  const xSpan = Math.max(...xs) - Math.min(...xs);
+  const ySpan = Math.max(...ys) - Math.min(...ys);
+  const meanX = xs.reduce((sum, value) => sum + value, 0) / xs.length;
+  const meanY = ys.reduce((sum, value) => sum + value, 0) / ys.length;
+  const xTol = axisTolerance(xs, xSpan);
+  const yTol = axisTolerance(ys, ySpan);
+
+  const allYFlat = ys.every((y) => Math.abs(y - meanY) <= yTol);
+  const allXFlat = xs.every((x) => Math.abs(x - meanX) <= xTol);
+
+  if (
+    allYFlat &&
+    xSpan >= Math.max(ySpan, yTol) * STRAIGHT_LINE_VARYING_AXIS_RATIO &&
+    xSpan > xTol
+  ) {
+    return 'horizontal';
+  }
+
+  if (
+    allXFlat &&
+    ySpan >= Math.max(xSpan, xTol) * STRAIGHT_LINE_VARYING_AXIS_RATIO &&
+    ySpan > yTol
+  ) {
+    return 'vertical';
+  }
+
+  return null;
+};
+
+/** Keep first and last point along the varying axis for constant-axis lines. */
+export const keepConstantAxisLineEndpoints = (points = [], orientation = null) => {
+  const entries = buildParsedPointEntries(points);
+  if (!orientation || entries.length < 2) return points;
+
+  const sorted =
+    orientation === 'vertical'
+      ? [...entries].sort((a, b) => a.y - b.y || a.index - b.index)
+      : [...entries].sort((a, b) => a.x - b.x || a.index - b.index);
+
+  const first = sorted[0];
+  const last = sorted[sorted.length - 1];
+  if (first.index === last.index) {
+    return [toStoredPoint({ x: first.x, y: first.y }, first.point)];
+  }
+
+  return [
+    toStoredPoint({ x: first.x, y: first.y }, first.point),
+    toStoredPoint({ x: last.x, y: last.y }, last.point),
+  ];
+};
+
+/**
+ * AI point post-processing: constant-axis lines → 2 endpoints; otherwise existing X sampling.
+ */
+export const processAiImportedPoints = (points = [], maxPoints = DEFAULT_AI_MAX_POINTS) => {
+  const list = Array.isArray(points) ? points : [];
+  if (list.length === 0) return list;
+
+  const orientation = detectConstantAxisLine(list);
+  if (orientation) {
+    return keepConstantAxisLineEndpoints(list, orientation);
+  }
+
+  return limitPointsEvenlyOnX(list, maxPoints);
+};
+
 export const resolveDiscovereeAxisFields = (graph = {}, detail = {}) => {
   const xMin = pickAxisValue(detail?.x_min, detail?.xmin, detail?.xMin, graph?.x_min, graph?.xmin, graph?.xMin);
   const xMax = pickAxisValue(detail?.x_max, detail?.xmax, detail?.xMax, graph?.x_max, graph?.xmax, graph?.xMax);
@@ -156,7 +252,7 @@ export const applyAiPointLimitToCurve = (curve, { maxPoints = getAiMaxPointsLimi
   const pointList = curve.points ?? curve.data_points ?? [];
   if (!Array.isArray(pointList) || pointList.length === 0) return curve;
 
-  const limited = limitPointsEvenlyOnX(pointList, maxPoints);
+  const limited = processAiImportedPoints(pointList, maxPoints);
   if (limited.length === pointList.length) return curve;
 
   const next = { ...curve, points: limited };
