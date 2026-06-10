@@ -5936,7 +5936,7 @@ const GraphCapture = () => {
         if (detailsVerifiedOnDiscoveree) {
           alert('Data saved successfully!');
         } else {
-          alert(`Save completed. DiscoverEE returned no curve details (graph_id ${companyGraphId}).`);
+          alert(`Save completed. API did not return any curve details (graph_id ${companyGraphId}).`);
         }
       }
 
