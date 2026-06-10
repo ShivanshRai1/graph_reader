@@ -5805,9 +5805,12 @@ const GraphCapture = () => {
           });
 
           if (refetchDetails.length === 0) {
-            console.warn(
-              '[RE-FETCH] DiscoverEE POST succeeded but GET returned no curve details. Save will continue; Show(1) may not appear until DiscoverEE exposes details for this graph_id.'
-            );
+            console.warn('[CAPTURE MANUALLY DEBUG]', {
+              graph_id: String(companyGraphId || ''),
+              post_response: 'success',
+              get_details_count: 0,
+              verify_url: `https://www.discoveree.io/graph_capture_api.php?graph_id=${encodeURIComponent(companyGraphId || '')}`,
+            });
           } else {
             detailsVerifiedOnDiscoveree = true;
 
@@ -5933,11 +5936,7 @@ const GraphCapture = () => {
         if (detailsVerifiedOnDiscoveree) {
           alert('Data saved successfully!');
         } else {
-          alert(
-            'Graph saved on DiscoverEE, but curve details were not returned yet.\n\nYour save completed in this app. If Show(1) does not appear on DiscoverEE, ask their team to check graph_id ' +
-              companyGraphId +
-              '.'
-          );
+          alert(`Save completed. DiscoverEE returned no curve details (graph_id ${companyGraphId}).`);
         }
       }
 
