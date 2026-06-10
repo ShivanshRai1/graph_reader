@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from 'react';
-import { useGraph, isManualCapturePoint } from '../context/GraphContext';
+import { useGraph, isManualCapturePoint, getManualCapturePoints } from '../context/GraphContext';
 import { buildDefaultGraphArea } from '../utils/graphAreaHelpers';
 
 const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', isAxisMappingConfirmed = false, hasReturnUrl = false, isEditingCurve = false, savedCurveViewActive = false, useInsetDefaultAxisBox = false }) => {
@@ -547,6 +547,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     if (hasImportedPoints && !canShowImportedCurveOverlay()) return;
 
     const inSavedView = savedCurveViewActive && canShowImportedCurveOverlay();
+    let manualPointLabel = 0;
 
     dataPoints.forEach((point, index) => {
       // Use graph value -> canvas position so dots update when box is resized
@@ -575,6 +576,19 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       ctx.beginPath();
       ctx.arc(drawX, drawY, pointRadius, 0, 2 * Math.PI);
       ctx.fill();
+
+      if (isManualCapturePoint(point) && !inSavedView) {
+        manualPointLabel += 1;
+        const label = String(manualPointLabel);
+        const labelX = drawX + 8;
+        const labelY = drawY - 8;
+        ctx.font = 'bold 12px sans-serif';
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = '#000000';
+        ctx.fillStyle = '#ffffff';
+        ctx.strokeText(label, labelX, labelY);
+        ctx.fillText(label, labelX, labelY);
+      }
     });
   };
 
@@ -1277,6 +1291,13 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   }
 
   const axisTickGuideContext = getAxisTickGuideContext();
+  const manualCapturePoints = getManualCapturePoints(dataPoints);
+  const showCapturePointStatus =
+    !isReadOnly &&
+    !isEditingCurve &&
+    !savedCurveViewActive &&
+    isAxisMappingConfirmed;
+  const captureHudVisible = showCapturePointStatus || showCoords;
 
   return (
     <div className="w-full p-5 bg-white rounded-lg mt-5">
@@ -1297,18 +1318,20 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
           Part Number: {partNumber && manufacturer ? `${partNumber}(${manufacturer})` : partNumber || ''}
         </div>
       ) : null}
-      <div
-        className="mb-2 inline-block bg-black bg-opacity-85 text-white border-2 border-green-500 px-4 py-2 rounded font-mono text-base font-bold shadow transition-opacity duration-150"
-        style={{ visibility: showCoords ? 'visible' : 'hidden', opacity: showCoords ? 1 : 0.35 }}
-      >
-        x={formatCoord(mousePos.x)} y={formatCoord(mousePos.y)}
-      </div>
-      {imageLoadFailed && (
-        <div className="mb-3 rounded border border-amber-400 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          The graph image could not be loaded from the server. Re-upload the screenshot, or open this graph after it was saved once in this tool (stored copy).
-        </div>
-      )}
       <div className="border border-gray-200 rounded mb-4 overflow-auto">
+        <div
+          className="sticky top-0 z-10 px-3 py-2 bg-gray-900 bg-opacity-90 text-white border-b border-green-500 font-mono text-sm font-bold"
+          style={{ visibility: captureHudVisible ? 'visible' : 'hidden', opacity: showCapturePointStatus || showCoords ? 1 : 0.35 }}
+        >
+          {showCapturePointStatus ? (
+            <div className="text-yellow-300 text-xs font-semibold mb-1">
+              {manualCapturePoints.length > 0
+                ? `Captured: ${manualCapturePoints.length} point${manualCapturePoints.length === 1 ? '' : 's'} · Next: #${manualCapturePoints.length + 1}`
+                : 'Next point: #1'}
+            </div>
+          ) : null}
+          <div>x={formatCoord(mousePos.x)} y={formatCoord(mousePos.y)}</div>
+        </div>
         <canvas
           ref={canvasRef}
           onMouseDown={handleMouseDown}
@@ -1323,6 +1346,11 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
           className="w-full block cursor-default max-w-full"
         />
       </div>
+      {imageLoadFailed && (
+        <div className="mb-3 rounded border border-amber-400 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          The graph image could not be loaded from the server. Re-upload the screenshot, or open this graph after it was saved once in this tool (stored copy).
+        </div>
+      )}
       <div className="flex items-center gap-4 mt-4 mb-6">
         <div className="relative">
           <button

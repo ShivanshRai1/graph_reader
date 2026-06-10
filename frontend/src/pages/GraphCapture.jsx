@@ -1387,6 +1387,22 @@ const parseCompanyApiText = (rawText) => {
   const match = rawText.match(/[{\[][\s\S]*[}\]]/);
   return JSON.parse(match ? match[0] : rawText);
 };
+
+const parseCompanyApiDetails = (result) => {
+  if (Array.isArray(result?.details)) {
+    return result.details;
+  }
+  if (Array.isArray(result?.graph?.details)) {
+    return result.graph.details;
+  }
+  if (result?.details && typeof result.details === 'object') {
+    return Object.values(result.details);
+  }
+  if (result?.graph?.details && typeof result.graph.details === 'object') {
+    return Object.values(result.graph.details);
+  }
+  return [];
+};
 const AI_DIRECT_CAPTURE_PARAM = 'ai_direct_capture';
 const AI_PENDING_CAPTURE_STORAGE_KEY = 'ai_pending_capture_image';
 const AI_PENDING_CAPTURE_TTL_MS = 5 * 60 * 1000;
@@ -3234,6 +3250,7 @@ const GraphCapture = () => {
   const [isInitialGraphFetchPending, setIsInitialGraphFetchPending] = useState(
     () => Boolean(new URLSearchParams(window.location.search).get('graph_id'))
   );
+  const [graphLoadNotice, setGraphLoadNotice] = useState('');
   const [savedCurvesSource, setSavedCurvesSource] = useState('company');
   const [showSavedPanel, setShowSavedPanel] = useState(false);
   const [previewSortByX, setPreviewSortByX] = useState(true);
@@ -5077,12 +5094,14 @@ const GraphCapture = () => {
     
     if (!graphId) {
       console.log('[DEBUG] No graph_id in URL params, skipping fetch');
+      setIsInitialGraphFetchPending(false);
       return;
     }
 
     // Skip auto-fetch when URL hydration restored a pending AI image (upload-only Page A).
     if (String(restoredPendingImageRef.current || '').trim()) {
       aiLogVerbose('[DEBUG] Pending AI capture restored on mount, skipping auto-fetch to stay in upload mode');
+      setIsInitialGraphFetchPending(false);
       return;
     }
 
@@ -5101,13 +5120,10 @@ const GraphCapture = () => {
           console.log('[DEBUG] DiscoverEE response:', result);
 
           const discovereeGraph = result?.graph && !Array.isArray(result.graph) ? result.graph : null;
-          const discovereeDetails = Array.isArray(result?.details)
-            ? result.details
-            : Array.isArray(discovereeGraph?.details)
-              ? discovereeGraph.details
-              : [];
+          const discovereeDetails = parseCompanyApiDetails(result);
 
           if (result.status === 'success' && discovereeGraph && discovereeDetails.length > 0) {
+            setGraphLoadNotice('');
             console.log('[DEBUG] Successfully parsed DiscoverEE data, details count:', discovereeDetails.length);
             console.log('[DEBUG] discovereeGraph all fields:', JSON.stringify(discovereeGraph, null, 2));
             const localFallbackCurve = await fetchLocalCurveByDiscovereeId({
@@ -5303,12 +5319,24 @@ const GraphCapture = () => {
               if (graphImageUrl || restored.curves[0]?.graphImageUrl) {
                 setUploadedImageFromExistingGraph(graphImageUrl || restored.curves[0]?.graphImageUrl);
               }
+              setGraphLoadNotice(
+                'Saved curves were loaded from this browser only — DiscoverEE has no curve records for this graph yet. Re-save to sync.'
+              );
             } else {
               setSavedCurves([]);
               setSavedCurvesSource('company');
-              activateAppendSession(discovereeGraph.graph_id, '', 'fetchGraphById-emptyDetails');
+              activateAppendSession(
+                discovereeGraph.graph_id,
+                graphImageUrl || '',
+                'fetchGraphById-emptyDetails'
+              );
+              if (graphImageUrl) {
+                setUploadedImageFromExistingGraph(graphImageUrl);
+              }
+              setGraphLoadNotice('');
             }
             setShouldSkipCaptureChoiceAfterAi(false);
+            applyDiscovereeGraphMetadataToConfig(discovereeGraph, resolvedGraphTitle, null, restored.curves);
 
             if (resolvedGraphTitle && !urlParams.graph_title) {
               setGraphConfig((prev) => ({
@@ -5739,76 +5767,72 @@ const GraphCapture = () => {
             const refetchRaw = await refetchResp.text();
             const refetchResult = parseCompanyApiText(refetchRaw);
             console.log('[RE-FETCH] Full API response:', refetchResult);
-            
-            // Company API can return details in different structures
-            let refetchDetails = [];
-            if (Array.isArray(refetchResult?.details)) {
-              refetchDetails = refetchResult.details;
-            } else if (Array.isArray(refetchResult?.graph?.details)) {
-              refetchDetails = refetchResult.graph.details;
-            } else if (refetchResult?.details && typeof refetchResult.details === 'object') {
-              // Sometimes it's an object with numeric keys, convert to array
-              refetchDetails = Object.values(refetchResult.details);
-            }
-            
+
+            const refetchDetails = parseCompanyApiDetails(refetchResult);
+
             console.log('[RE-FETCH] Parsed details array:', {
               totalDetails: refetchDetails.length,
-              details: refetchDetails.map((d, idx) => ({ 
-                idx, 
-                id: d?.id, 
+              details: refetchDetails.map((d, idx) => ({
+                idx,
+                id: d?.id,
                 curve_title: d?.curve_title,
-                xy: d?.xy ? d.xy.substring(0, 50) + '...' : 'no xy'
+                xy: d?.xy ? d.xy.substring(0, 50) + '...' : 'no xy',
               })),
             });
-            
-            if (refetchDetails.length > 0) {
-              // Try to match by XY data first
-              const savedPoints = payload?.data_points || [];
-              const savedXyStr = savedPoints.map((p) => `{x:${p.x_value},y:${p.y_value}}`).join(',');
-              
-              console.log('[RE-FETCH] Attempting XY match with:', {
-                pointCount: savedPoints.length,
-                xyLength: savedXyStr.length,
-              });
-              
-              let matchedDetail = refetchDetails.find((d) => {
-                if (!savedXyStr || !d?.xy) return false;
-                const normalizedSavedXy = savedXyStr.replace(/\s/g, '').toLowerCase();
-                const normalizedApiXy = d.xy.replace(/\s/g, '').toLowerCase();
-                const matches = normalizedSavedXy === normalizedApiXy;
-                if (matches) {
-                  console.log('[RE-FETCH] XY MATCH FOUND for detail:', d?.id);
-                }
-                return matches;
-              });
-              
-              // If no XY match, use the LAST detail (most recently added)
-              if (!matchedDetail && refetchDetails.length > 0) {
-                matchedDetail = refetchDetails[refetchDetails.length - 1];
-                console.log('[RE-FETCH] No XY match, using last (newest) detail:', {
-                  id: matchedDetail?.id,
-                  curve_title: matchedDetail?.curve_title,
-                });
+
+            if (refetchDetails.length === 0) {
+              throw new Error(
+                'DiscoverEE save could not be verified — no curve details found after save. Your points were kept — please try saving again.'
+              );
+            }
+
+            // Try to match by XY data first
+            const savedPoints = payload?.data_points || [];
+            const savedXyStr = savedPoints.map((p) => `{x:${p.x_value},y:${p.y_value}}`).join(',');
+
+            console.log('[RE-FETCH] Attempting XY match with:', {
+              pointCount: savedPoints.length,
+              xyLength: savedXyStr.length,
+            });
+
+            let matchedDetail = refetchDetails.find((d) => {
+              if (!savedXyStr || !d?.xy) return false;
+              const normalizedSavedXy = savedXyStr.replace(/\s/g, '').toLowerCase();
+              const normalizedApiXy = d.xy.replace(/\s/g, '').toLowerCase();
+              const matches = normalizedSavedXy === normalizedApiXy;
+              if (matches) {
+                console.log('[RE-FETCH] XY MATCH FOUND for detail:', d?.id);
               }
-              
-              // Extract the detail_id
-              if (matchedDetail && matchedDetail.id) {
-                realDetailId = String(matchedDetail.id);
-                console.log('[RE-FETCH] ✓ Successfully extracted detail_id:', realDetailId);
-              } else {
-                console.warn('[RE-FETCH] Matched detail has no id field', {
-                  matchedDetail,
-                  keys: matchedDetail ? Object.keys(matchedDetail) : 'null',
-                });
-              }
+              return matches;
+            });
+
+            // If no XY match, use the LAST detail (most recently added)
+            if (!matchedDetail && refetchDetails.length > 0) {
+              matchedDetail = refetchDetails[refetchDetails.length - 1];
+              console.log('[RE-FETCH] No XY match, using last (newest) detail:', {
+                id: matchedDetail?.id,
+                curve_title: matchedDetail?.curve_title,
+              });
+            }
+
+            // Extract the detail_id
+            if (matchedDetail && matchedDetail.id) {
+              realDetailId = String(matchedDetail.id);
+              console.log('[RE-FETCH] ✓ Successfully extracted detail_id:', realDetailId);
             } else {
-              console.warn('[RE-FETCH] No details returned from API');
+              console.warn('[RE-FETCH] Matched detail has no id field', {
+                matchedDetail,
+                keys: matchedDetail ? Object.keys(matchedDetail) : 'null',
+              });
             }
           } else {
             console.warn('[RE-FETCH] API returned non-OK status:', refetchResp.status);
           }
         } catch (refetchErr) {
           console.error('[RE-FETCH] Error fetching details:', refetchErr.message);
+          if (String(refetchErr?.message || '').includes('could not be verified')) {
+            throw refetchErr;
+          }
         }
       }
       
@@ -6571,10 +6595,14 @@ const GraphCapture = () => {
 
   return (
     <div className="w-full min-h-screen p-8" style={{ backgroundColor: '#ffffff', color: '#213547' }}>
-      {(isAiExtractionLoading || aiFlowStatusMessage) && (
+      {(isAiExtractionLoading || aiFlowStatusMessage || isInitialGraphFetchPending) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
           <div className="rounded-md bg-white px-5 py-3 text-sm font-medium" style={{ color: '#213547' }}>
-            {isAiExtractionLoading ? 'AI extraction in progress, please wait...' : aiFlowStatusMessage}
+            {isInitialGraphFetchPending
+              ? 'Loading graph...'
+              : isAiExtractionLoading
+                ? 'AI extraction in progress, please wait...'
+                : aiFlowStatusMessage}
           </div>
         </div>
       )}
@@ -6603,6 +6631,12 @@ const GraphCapture = () => {
           onPendingCaptureChange={setHasPendingCaptureChoice}
         />
         {(showCaptureWorkspace) && (
+          <>
+            {graphLoadNotice ? (
+              <div className="w-full rounded border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                {graphLoadNotice}
+              </div>
+            ) : null}
           <div ref={graphWorkspaceRef} className="flex flex-col lg:flex-row gap-8">
             <div className="w-full lg:w-2/5 flex flex-col gap-4">
               <GraphCanvas
@@ -7061,6 +7095,7 @@ const GraphCapture = () => {
               </div> */}
             </div>
           </div>
+          </>
         )}
 
       </div>
