@@ -5608,6 +5608,29 @@ const GraphCapture = () => {
     });
   }, [savedCurves.length, uploadedImage]);
 
+  const resolveGraphImageForCompanyPayload = () => {
+    const graphId = String(urlParams.graph_id || '').trim();
+    const existingCurveForGraphId = graphId
+      ? savedCurves.find((curve) => (curve.graphId || getGraphIdForCurve(curve)) === graphId)
+      : null;
+
+    return (
+      normalizeImageCandidate(
+        uploadedImage ||
+        activeSessionImageKeyRef.current ||
+        previousUploadedImageRef.current ||
+        restoredPendingImageRef.current ||
+        restoredPendingCapture?.imageBase64 ||
+        (graphId ? getPersistedGraphImage(graphId) : '') ||
+        selectedCurve?.graphImageUrl ||
+        selectedCurve?.graph_img ||
+        existingCurveForGraphId?.graphImageUrl ||
+        existingCurveForGraphId?.graph_img ||
+        ''
+      ) || ''
+    );
+  };
+
   const saveCurveToBackend = async ({ allowRedirect }) => {
     if (isSaving) {
       console.warn('Save ignored: request already in progress.');
@@ -5679,20 +5702,7 @@ const GraphCapture = () => {
         shouldDefaultRoomTemperature: shouldShowTemperatureInput,
       });
 
-      // When appending to an existing graph (graph_id in URL), try to preserve the existing image
-      const existingCurveForGraphId = urlParams.graph_id
-        ? savedCurves.find((curve) => (curve.graphId || getGraphIdForCurve(curve)) === String(urlParams.graph_id))
-        : null;
-      
-      const resolvedGraphImage = normalizeImageCandidate(
-        uploadedImage ||
-        activeSessionImageKeyRef.current ||
-        selectedCurve?.graphImageUrl ||
-        selectedCurve?.graph_img ||
-        existingCurveForGraphId?.graphImageUrl ||
-        existingCurveForGraphId?.graph_img ||
-        ''
-      ) || null;
+      const resolvedGraphImage = resolveGraphImageForCompanyPayload() || null;
 
       const payload = {
         part_number: urlParams.partno || graphConfig.partNumber || null,
@@ -5753,21 +5763,7 @@ const GraphCapture = () => {
       console.log('Backend save successful! Response:', result);
       console.log('Graph ID from backend:', result.id);
 
-      // When appending to an existing graph (graph_id in URL), try to preserve the existing image
-      const existingCurveForCompanyPayload = urlParams.graph_id
-        ? savedCurves.find((curve) => (curve.graphId || getGraphIdForCurve(curve)) === String(urlParams.graph_id))
-        : null;
-
-      const graphImageUrl =
-        normalizeImageCandidate(
-          uploadedImage ||
-          activeSessionImageKeyRef.current ||
-          selectedCurve?.graphImageUrl ||
-          selectedCurve?.graph_img ||
-          existingCurveForCompanyPayload?.graphImageUrl ||
-          existingCurveForCompanyPayload?.graph_img ||
-          ''
-        ) || '';
+      const graphImageUrl = resolveGraphImageForCompanyPayload();
       const graphGroupId = buildGraphGroupId(graphImageUrl || '');
       console.log('Local save successful, calling sendToCompanyDatabase...');
       const companyResult = await sendToCompanyDatabase(graphImageUrl, result.id, allowRedirect);
@@ -6161,6 +6157,18 @@ const GraphCapture = () => {
       const uniqueIdentifier = `usergraph_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
       // Keep append identifier stable. If identifier is invalid (e.g. "0"), leave it empty and rely on graph_id.
       const resolvedOutgoingIdentifier = isAppendingToExistingGraph ? appendIdentifier : uniqueIdentifier;
+      const effectiveGraphImageUrl =
+        normalizeImageCandidate(graphImageUrl) || resolveGraphImageForCompanyPayload();
+      if (effectiveGraphImageUrl && !normalizeImageCandidate(graphImageUrl)) {
+        console.log('[GRAPH_IMG] Recovered graph image for company POST via save fallbacks.', {
+          graphId: existingGraphId || '(create-new)',
+          length: effectiveGraphImageUrl.length,
+        });
+      } else if (isAppendingToExistingGraph && !effectiveGraphImageUrl) {
+        console.warn('[GRAPH_IMG] Append save has no graph image to send — graph_img will be omitted.', {
+          graphId: existingGraphId,
+        });
+      }
       const companyApiPayload = {
         graph: {
           // Include graph_id explicitly during append to reduce graph split risk.
@@ -6174,7 +6182,7 @@ const GraphCapture = () => {
           curve_title: urlParams.curve_title || graphConfig.curveName || '',
           x_title: graphConfig.xLabel || urlParams.x_label || '',
           y_title: graphConfig.yLabel || urlParams.y_label || '',
-          ...(graphImageUrl ? { graph_img: graphImageUrl } : {}),
+          ...(effectiveGraphImageUrl ? { graph_img: effectiveGraphImageUrl } : {}),
           mark_review: '1',
           testuser_id: urlParams.testuser_id || '',
           uname: urlParams.username || graphConfig.username || '',
@@ -6316,8 +6324,8 @@ const GraphCapture = () => {
       if (companyGraphId) {
         if (uploadedImage && isEmbeddedGraphImage(uploadedImage)) {
           persistGraphImage(companyGraphId, uploadedImage);
-        } else if (graphImageUrl && isEmbeddedGraphImage(graphImageUrl)) {
-          persistGraphImage(companyGraphId, graphImageUrl);
+        } else if (effectiveGraphImageUrl && isEmbeddedGraphImage(effectiveGraphImageUrl)) {
+          persistGraphImage(companyGraphId, effectiveGraphImageUrl);
         }
       }
       console.log('Company Detail ID from API:', companyDetailId);
