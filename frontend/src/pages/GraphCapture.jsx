@@ -1403,6 +1403,36 @@ const parseCompanyApiDetails = (result) => {
   }
   return [];
 };
+
+const fetchCompanyGraphDetailsWithRetry = async (graphId, { attempts = 4, delayMs = 750 } = {}) => {
+  const normalizedGraphId = String(graphId || '').trim();
+  if (!normalizedGraphId) {
+    return { details: [], result: null };
+  }
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const response = await fetch(
+        `https://www.discoveree.io/graph_capture_api.php?graph_id=${encodeURIComponent(normalizedGraphId)}`
+      );
+      if (response.ok) {
+        const parsed = parseCompanyApiText(await response.text());
+        const details = parseCompanyApiDetails(parsed);
+        console.log(`[RE-FETCH] Attempt ${attempt}/${attempts}:`, { totalDetails: details.length });
+        if (details.length > 0) {
+          return { details, result: parsed };
+        }
+      }
+    } catch (error) {
+      console.warn(`[RE-FETCH] Attempt ${attempt}/${attempts} failed:`, error.message);
+    }
+    if (attempt < attempts) {
+      await new Promise((resolve) => window.setTimeout(resolve, delayMs));
+    }
+  }
+
+  return { details: [], result: null };
+};
 const AI_DIRECT_CAPTURE_PARAM = 'ai_direct_capture';
 const AI_PENDING_CAPTURE_STORAGE_KEY = 'ai_pending_capture_image';
 const AI_PENDING_CAPTURE_TTL_MS = 5 * 60 * 1000;
@@ -5757,34 +5787,33 @@ const GraphCapture = () => {
 
       // Re-fetch from company API to get the real detail ID for the newly created curve
       let realDetailId = '';
+      let detailsVerifiedOnDiscoveree = false;
       if (companyGraphId) {
         try {
           console.log('[RE-FETCH] Fetching details for graph_id:', companyGraphId);
-          const refetchResp = await fetch(
-            `https://www.discoveree.io/graph_capture_api.php?graph_id=${encodeURIComponent(companyGraphId)}`
+          const { details: refetchDetails, result: refetchResult } = await fetchCompanyGraphDetailsWithRetry(
+            companyGraphId
           );
-          if (refetchResp.ok) {
-            const refetchRaw = await refetchResp.text();
-            const refetchResult = parseCompanyApiText(refetchRaw);
+          if (refetchResult) {
             console.log('[RE-FETCH] Full API response:', refetchResult);
+          }
 
-            const refetchDetails = parseCompanyApiDetails(refetchResult);
+          console.log('[RE-FETCH] Parsed details array:', {
+            totalDetails: refetchDetails.length,
+            details: refetchDetails.map((d, idx) => ({
+              idx,
+              id: d?.id,
+              curve_title: d?.curve_title,
+              xy: d?.xy ? d.xy.substring(0, 50) + '...' : 'no xy',
+            })),
+          });
 
-            console.log('[RE-FETCH] Parsed details array:', {
-              totalDetails: refetchDetails.length,
-              details: refetchDetails.map((d, idx) => ({
-                idx,
-                id: d?.id,
-                curve_title: d?.curve_title,
-                xy: d?.xy ? d.xy.substring(0, 50) + '...' : 'no xy',
-              })),
-            });
-
-            if (refetchDetails.length === 0) {
-              throw new Error(
-                'DiscoverEE save could not be verified — no curve details found after save. Your points were kept — please try saving again.'
-              );
-            }
+          if (refetchDetails.length === 0) {
+            console.warn(
+              '[RE-FETCH] DiscoverEE POST succeeded but GET returned no curve details. Save will continue; Show(1) may not appear until DiscoverEE exposes details for this graph_id.'
+            );
+          } else {
+            detailsVerifiedOnDiscoveree = true;
 
             // Try to match by XY data first
             const savedPoints = payload?.data_points || [];
@@ -5825,14 +5854,9 @@ const GraphCapture = () => {
                 keys: matchedDetail ? Object.keys(matchedDetail) : 'null',
               });
             }
-          } else {
-            console.warn('[RE-FETCH] API returned non-OK status:', refetchResp.status);
           }
         } catch (refetchErr) {
           console.error('[RE-FETCH] Error fetching details:', refetchErr.message);
-          if (String(refetchErr?.message || '').includes('could not be verified')) {
-            throw refetchErr;
-          }
         }
       }
       
@@ -5910,7 +5934,15 @@ const GraphCapture = () => {
       setIsSaving(false);
 
       if (!urlParams.return_url) {
-        alert('Data saved successfully!');
+        if (detailsVerifiedOnDiscoveree) {
+          alert('Data saved successfully!');
+        } else {
+          alert(
+            'Graph saved on DiscoverEE, but curve details were not returned yet.\n\nYour save completed in this app. If Show(1) does not appear on DiscoverEE, ask their team to check graph_id ' +
+              companyGraphId +
+              '.'
+          );
+        }
       }
 
       return result.id;
