@@ -5695,11 +5695,6 @@ const GraphCapture = () => {
       console.log('Backend save successful! Response:', result);
       console.log('Graph ID from backend:', result.id);
 
-      // Show only one success message after saving
-      if (!urlParams.return_url) {
-        alert('Data saved successfully!');
-      }
-
       // When appending to an existing graph (graph_id in URL), try to preserve the existing image
       const existingCurveForCompanyPayload = urlParams.graph_id
         ? savedCurves.find((curve) => (curve.graphId || getGraphIdForCurve(curve)) === String(urlParams.graph_id))
@@ -5726,6 +5721,11 @@ const GraphCapture = () => {
         detailId: companyDetailId,
         identifier: companyIdentifier,
       });
+
+      if (!companyGraphId) {
+        setIsSaving(false);
+        return null;
+      }
 
       // Re-fetch from company API to get the real detail ID for the newly created curve
       let realDetailId = '';
@@ -5884,6 +5884,11 @@ const GraphCapture = () => {
       }));
       setIsReadOnly(false);
       setIsSaving(false);
+
+      if (!urlParams.return_url) {
+        alert('Data saved successfully!');
+      }
+
       return result.id;
     } catch (error) {
       console.error('=== SAVE CURVE ERROR ===');
@@ -6206,6 +6211,14 @@ const GraphCapture = () => {
         ? requestedGraphId
         : (returnedGraphId || requestedGraphId);
       const companyGraphId = effectiveGraphId || null;
+
+      if (result?.status && result.status !== 'success') {
+        throw new Error(result?.msg || 'Company API returned non-success status');
+      }
+
+      if (!companyGraphId || String(companyGraphId).trim() === '' || String(companyGraphId) === '0') {
+        throw new Error('Company API did not return a valid graph_id');
+      }
       
       // Extract detail_id from multiple possible locations in API response
       let companyDetailId = '';
@@ -6346,8 +6359,6 @@ const GraphCapture = () => {
         console.log('Showing decision modal for capture another vs return.');
         setPendingReturnUrl(returnUrl);
         setShowReturnDecisionModal(true);
-      } else if (allowRedirect && urlParams.return_url && !companyGraphId) {
-        alert('Company graph ID missing. Saved locally, but cannot redirect without a company graph ID.');
       } else {
         // Do not show a second success message
         console.log('No return URL - data saved.');
