@@ -7203,14 +7203,7 @@ const GraphCapture = () => {
             height: '100vh',
             background: `rgba(0,0,0,${viewModalBackdropOpacity})`,
             zIndex: 1000,
-          }}
-          onClick={() => {
-            if (shouldSuppressViewModalBackdropClose(singleDragRef)) return;
-            setSingleModalLayout(null);
-            setSelectedCurveId('');
-            setViewModalTableVisible(true);
-            clearSavedViewOverlay();
-            setIsReadOnly(false);
+            pointerEvents: 'none',
           }}
         >
           <ViewModalPanel
@@ -7461,12 +7454,7 @@ const GraphCapture = () => {
             height: '100vh',
             background: `rgba(0,0,0,${viewModalBackdropOpacity})`,
             zIndex: 1000,
-          }}
-          onClick={() => {
-            if (shouldSuppressViewModalBackdropClose(combinedDragRef)) return;
-            setCombinedModalLayout(null);
-            setCombinedGroupId('');
-            clearSavedViewOverlay();
+            pointerEvents: 'none',
           }}
         >
           <ViewModalPanel
@@ -7657,12 +7645,7 @@ const GraphCapture = () => {
             height: '100vh',
             background: `rgba(0,0,0,${viewModalBackdropOpacity})`,
             zIndex: 1000,
-          }}
-          onClick={() => {
-            if (shouldSuppressViewModalBackdropClose(allCombinedDragRef)) return;
-            setAllCombinedModalLayout(null);
-            setShowAllCombinedModal(false);
-            clearSavedViewOverlay();
+            pointerEvents: 'none',
           }}
         >
           <ViewModalPanel

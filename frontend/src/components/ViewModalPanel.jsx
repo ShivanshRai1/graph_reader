@@ -127,6 +127,7 @@ const ViewModalPanel = ({
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
+        pointerEvents: 'auto',
         ...panelStyle,
       }}
       onClick={(event) => event.stopPropagation()}

@@ -1510,7 +1510,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       {showMagnifier && (
         <canvas
           ref={magnifierRef}
-          className="fixed border-4 border-gray-800 rounded shadow bg-white top-12 right-5 z-50"
+          className={`fixed border-4 border-gray-800 rounded shadow bg-white top-12 right-5 ${savedViewCrosscheckActive ? 'z-[1100]' : 'z-50'}`}
         />
       )}
     </div>
