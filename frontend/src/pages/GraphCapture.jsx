@@ -24,9 +24,13 @@ import {
   resolveDiscovereeAxisFields,
   syncImportedOverlayCanvas,
 } from '../utils/aiCurveProcessing';
+import {
+  graphAreasAreSimilar,
+  suggestGraphAreaFromImportedPoints,
+} from '../utils/graphAreaHelpers';
 import { useGraph, graphToCanvasWithBounds, getManualCapturePoints } from '../context/GraphContext';
 import { clearAnnotationsForCurve } from '../utils/annotationStorage';
-import { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 
 const MiniGraphCanvas = ({ points }) => {
   const canvasRef = useRef(null);
@@ -2578,10 +2582,22 @@ const GraphCapture = () => {
   } = useGraph();
   const graphWorkspaceRef = useRef(null);
   const graphAreaRef = useRef(graphArea);
+  const importedBoxAutoFitDoneRef = useRef(false);
+  const userManuallyAdjustedGraphAreaRef = useRef(false);
 
   useEffect(() => {
     graphAreaRef.current = graphArea;
   }, [graphArea]);
+
+  useEffect(() => {
+    importedBoxAutoFitDoneRef.current = false;
+    userManuallyAdjustedGraphAreaRef.current = false;
+  }, [uploadedImage]);
+
+  const handleGraphAreaManuallyAdjusted = useCallback(() => {
+    userManuallyAdjustedGraphAreaRef.current = true;
+    importedBoxAutoFitDoneRef.current = true;
+  }, []);
 
   // Restore AI extraction logs on component mount
   useEffect(() => {
@@ -5562,6 +5578,58 @@ const GraphCapture = () => {
     graphConfig.yLabel,
   ]);
 
+  // One-time blue-box auto-fit from imported AI points (skip if user moved box or area was persisted).
+  useEffect(() => {
+    if (importedBoxAutoFitDoneRef.current) return;
+    if (userManuallyAdjustedGraphAreaRef.current) return;
+    if (Boolean(editingCurveId)) return;
+    if (isReadOnly) return;
+    if (Boolean(selectedCurveId) || Boolean(combinedGroupId) || showAllCombinedModal) return;
+    if (!uploadedImage) return;
+    if (graphArea.width <= 0 || graphArea.height <= 0) return;
+    if (!hasValidAxisMapping(graphConfig)) return;
+
+    const importedPoints = dataPoints.filter(
+      (point) => point?.imported && Number.isFinite(point.x) && Number.isFinite(point.y)
+    );
+    if (importedPoints.length < 2) return;
+
+    const searchParams = new URLSearchParams(window.location.search);
+    const graphId = String(searchParams.get('graph_id') || activeSessionGraphIdRef.current || '').trim();
+    if (graphId) {
+      const persistedArea = normalizePersistedGraphArea(getPersistedGraphContext(graphId)?.graphArea);
+      if (persistedArea) {
+        importedBoxAutoFitDoneRef.current = true;
+        return;
+      }
+    }
+
+    const suggested = suggestGraphAreaFromImportedPoints(dataPoints, graphArea, graphConfig);
+    importedBoxAutoFitDoneRef.current = true;
+    if (!suggested || graphAreasAreSimilar(suggested, graphArea)) return;
+
+    setGraphArea(suggested);
+  }, [
+    uploadedImage,
+    graphArea.x,
+    graphArea.y,
+    graphArea.width,
+    graphArea.height,
+    graphConfig.xMin,
+    graphConfig.xMax,
+    graphConfig.yMin,
+    graphConfig.yMax,
+    graphConfig.xScale,
+    graphConfig.yScale,
+    dataPoints,
+    editingCurveId,
+    isReadOnly,
+    selectedCurveId,
+    combinedGroupId,
+    showAllCombinedModal,
+    setGraphArea,
+  ]);
+
   // Keep imported AI overlay dots aligned with the current graph box + axis setup.
   useEffect(() => {
     if (Boolean(editingCurveId)) return;
@@ -6693,6 +6761,7 @@ const GraphCapture = () => {
                   dataPoints.some((point) => point.imported) ||
                   savedCurves.some((curve) => String(curve.graphId || '').trim() !== '')
                 )}
+                onGraphAreaManuallyAdjusted={handleGraphAreaManuallyAdjusted}
               />
               <CapturedPointsList isReadOnly={isReadOnly} hasReturnUrl={!!urlParams.return_url} isEditingCurve={Boolean(editingCurveId)} />
             </div>

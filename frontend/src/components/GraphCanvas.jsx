@@ -2,7 +2,7 @@ import { useRef, useState, useEffect } from 'react';
 import { useGraph, isManualCapturePoint, getManualCapturePoints } from '../context/GraphContext';
 import { buildDefaultGraphArea } from '../utils/graphAreaHelpers';
 
-const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', isAxisMappingConfirmed = false, hasReturnUrl = false, isEditingCurve = false, savedCurveViewActive = false, useInsetDefaultAxisBox = false }) => {
+const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', isAxisMappingConfirmed = false, hasReturnUrl = false, isEditingCurve = false, savedCurveViewActive = false, useInsetDefaultAxisBox = false, onGraphAreaManuallyAdjusted }) => {
   const { uploadedImage, graphArea, setGraphArea, dataPoints, addDataPoint, clearDataPoints, graphConfig, deleteDataPoint, convertGraphToCanvasCoordinates, convertCanvasToGraphCoordinates, replaceDataPoints, updateDataPointFromCanvas } = useGraph();
   const [showRedrawMsg, setShowRedrawMsg] = useState(false);
   const canvasRef = useRef(null);
@@ -933,12 +933,14 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       justFinishedResizingRef.current = true;
       lastUserBoxRef.current = { ...graphArea };
       setBoxTransparent(true);
+      onGraphAreaManuallyAdjusted?.();
       setTimeout(() => {
         justFinishedResizingRef.current = false;
       }, 100);
     } else if (isDrawingBox) {
       lastUserBoxRef.current = { ...graphArea };
       setBoxTransparent(true);
+      onGraphAreaManuallyAdjusted?.();
     }
     
     if (editDragPointIndexRef.current !== null) {
@@ -1453,6 +1455,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
             }
             setBoxTransparent(false);
             setShowRedrawMsg(false);
+            onGraphAreaManuallyAdjusted?.();
           }}
           title="Redraw/retake the bounding box for the axis (clears only the box, not captured points)"
         >
