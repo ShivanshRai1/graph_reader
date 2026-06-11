@@ -117,6 +117,12 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     return savedCurveViewActive && hasValidAxisForOverlay() && graphArea.width > 0 && graphArea.height > 0;
   };
 
+  const isSavedViewCrosscheckActive = () =>
+    savedCurveViewActive &&
+    isReadOnly &&
+    !isEditingCurve &&
+    canShowImportedCurveOverlay();
+
   // Allow box resize before Final Check, while editing, or after confirm when tuning AI overlay alignment.
   const canAdjustAxisBox = () =>
     !isAxisMappingConfirmed || isEditingCurve || hasImportedCurvePoints();
@@ -538,6 +544,29 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   const drawCurveOverlayLayers = (ctx) => {
     if (showFixPoints) drawFixPoints(ctx);
     drawDataPoints(ctx);
+    drawSavedViewCrosshair(ctx);
+  };
+
+  const drawSavedViewCrosshair = (ctx) => {
+    if (!isSavedViewCrosscheckActive()) return;
+    if (previewMousePos.x === null || previewMousePos.y === null) return;
+    if (graphArea.width <= 0 || graphArea.height <= 0) return;
+
+    const area = normalizeArea(graphArea);
+    ctx.save();
+    ctx.strokeStyle = 'rgba(34, 197, 94, 0.9)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(previewMousePos.x, area.y);
+    ctx.lineTo(previewMousePos.x, area.y + area.height);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(area.x, previewMousePos.y);
+    ctx.lineTo(area.x + area.width, previewMousePos.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
   };
 
   const drawDataPoints = (ctx) => {
@@ -727,6 +756,10 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
 
   const handleMouseDown = (e) => {
     if (e.button !== 0) return;
+
+    if (isReadOnly && !isEditingCurve) {
+      return;
+    }
 
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
@@ -1175,28 +1208,30 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
 
     const showStuck = stuckFramesRef.current >= 2;
 
-    // Zero detection: only warn if truly stuck at zero, not near-zero on log scales
-    // Require strictly inside box (further from edges)
-    const strictInsideX = canvasX > areaForWarn.x + EDGE_GAP * 2 && canvasX < areaForWarn.x + areaForWarn.width - EDGE_GAP * 2;
-    const strictInsideY = canvasY > areaForWarn.y + EDGE_GAP * 2 && canvasY < areaForWarn.y + areaForWarn.height - EDGE_GAP * 2;
-    const nextZeroWarn = areaForWarn.width > 0 && areaForWarn.height > 0 && (
-      (strictInsideX && Math.abs(graphX) < EPS * 10) ||
-      (strictInsideY && Math.abs(graphY) < EPS * 10)
-    );
+    if (!isSavedViewCrosscheckActive()) {
+      // Zero detection: only warn if truly stuck at zero, not near-zero on log scales
+      // Require strictly inside box (further from edges)
+      const strictInsideX = canvasX > areaForWarn.x + EDGE_GAP * 2 && canvasX < areaForWarn.x + areaForWarn.width - EDGE_GAP * 2;
+      const strictInsideY = canvasY > areaForWarn.y + EDGE_GAP * 2 && canvasY < areaForWarn.y + areaForWarn.height - EDGE_GAP * 2;
+      const nextZeroWarn = areaForWarn.width > 0 && areaForWarn.height > 0 && (
+        (strictInsideX && Math.abs(graphX) < EPS * 10) ||
+        (strictInsideY && Math.abs(graphY) < EPS * 10)
+      );
 
-    // Apply a brief hold when clearing to prevent flicker on edge jitters
-    // Suppress stuck warning if zero warning is already showing
-    if (warningHoldTimeoutRef.current) {
-      clearTimeout(warningHoldTimeoutRef.current);
-    }
-    if (nextZeroWarn || (showStuck && !nextZeroWarn)) {
-      setZeroWarnActive(nextZeroWarn);
-      setStuckWarnActive(showStuck && !nextZeroWarn);
-    } else {
-      warningHoldTimeoutRef.current = setTimeout(() => {
-        setZeroWarnActive(false);
-        setStuckWarnActive(false);
-      }, WARN_CLEAR_DELAY);
+      // Apply a brief hold when clearing to prevent flicker on edge jitters
+      // Suppress stuck warning if zero warning is already showing
+      if (warningHoldTimeoutRef.current) {
+        clearTimeout(warningHoldTimeoutRef.current);
+      }
+      if (nextZeroWarn || (showStuck && !nextZeroWarn)) {
+        setZeroWarnActive(nextZeroWarn);
+        setStuckWarnActive(showStuck && !nextZeroWarn);
+      } else {
+        warningHoldTimeoutRef.current = setTimeout(() => {
+          setZeroWarnActive(false);
+          setStuckWarnActive(false);
+        }, WARN_CLEAR_DELAY);
+      }
     }
 
     // Update magnifier
@@ -1292,12 +1327,15 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
 
   const axisTickGuideContext = getAxisTickGuideContext();
   const manualCapturePoints = getManualCapturePoints(dataPoints);
+  const savedViewCrosscheckActive = isSavedViewCrosscheckActive();
   const showCapturePointStatus =
     !isReadOnly &&
     !isEditingCurve &&
     !savedCurveViewActive &&
     isAxisMappingConfirmed;
-  const captureHudVisible = showCapturePointStatus || showCoords;
+  const captureHudVisible = showCapturePointStatus || showCoords || savedViewCrosscheckActive;
+  const xAxisHoverLabel = formatAxisHoverLabel('X', graphConfig.xLabel);
+  const yAxisHoverLabel = formatAxisHoverLabel('Y', graphConfig.yLabel);
 
   return (
     <div className="w-full p-5 bg-white rounded-lg mt-5">
@@ -1321,7 +1359,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       <div className="border border-gray-200 rounded mb-4 overflow-auto">
         <div
           className="sticky top-0 z-10 px-3 py-2 bg-gray-900 bg-opacity-90 text-white border-b border-green-500 font-mono text-sm font-bold"
-          style={{ visibility: captureHudVisible ? 'visible' : 'hidden', opacity: showCapturePointStatus || showCoords ? 1 : 0.35 }}
+          style={{ visibility: captureHudVisible ? 'visible' : 'hidden', opacity: showCapturePointStatus || showCoords || savedViewCrosscheckActive ? 1 : 0.35 }}
         >
           {showCapturePointStatus ? (
             <div className="text-yellow-300 text-xs font-semibold mb-1">
@@ -1330,7 +1368,25 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
                 : 'Next point: #1'}
             </div>
           ) : null}
-          <div>x={formatCoord(mousePos.x)} y={formatCoord(mousePos.y)}</div>
+          {savedViewCrosscheckActive ? (
+            <div className="text-green-300 text-xs font-semibold mb-1">
+              {showCoords
+                ? 'Cross-check · hover coordinates'
+                : 'Hover over the graph to cross-check coordinates'}
+            </div>
+          ) : null}
+          {savedViewCrosscheckActive ? (
+            showCoords ? (
+              <>
+                <div>{xAxisHoverLabel}={formatCoord(mousePos.x)}</div>
+                <div>{yAxisHoverLabel}={formatCoord(mousePos.y)}</div>
+              </>
+            ) : (
+              <div className="text-gray-300 text-xs">Move cursor over the graph image below</div>
+            )
+          ) : (
+            <div>x={formatCoord(mousePos.x)} y={formatCoord(mousePos.y)}</div>
+          )}
         </div>
         <canvas
           ref={canvasRef}
@@ -1427,7 +1483,12 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
             )}
           </div>
         )}
-        {hasImportedCurvePoints() && canShowImportedCurveOverlay() && isAxisMappingConfirmed && !isEditingCurve && (
+        {savedViewCrosscheckActive && (
+          <div className="text-blue-800 bg-blue-50 border border-blue-200 rounded px-3 py-2 mt-2 text-sm">
+            Hover over the graph image to read live axis coordinates and use the magnifier (top-right) to cross-check captured points against the datasheet.
+          </div>
+        )}
+        {hasImportedCurvePoints() && canShowImportedCurveOverlay() && isAxisMappingConfirmed && !isEditingCurve && !savedViewCrosscheckActive && (
           <div className="text-blue-800 bg-blue-50 border border-blue-200 rounded px-3 py-2 mt-2 text-sm">
             {axisTickGuideContext ? (
               <>
@@ -1465,4 +1526,9 @@ function formatCoord(val) {
     return val.toExponential(3);
   }
   return val.toFixed(3);
+}
+
+function formatAxisHoverLabel(axisFallback, axisTitle) {
+  const title = String(axisTitle || '').trim();
+  return title ? `${axisFallback}[${title}]` : axisFallback;
 }

@@ -3567,6 +3567,7 @@ const GraphCapture = () => {
   const [allCombinedModalLayout, setAllCombinedModalLayout] = useState(null);
   const [showAllCombinedModal, setShowAllCombinedModal] = useState(false);
   const [viewModalBackdropOpacity, setViewModalBackdropOpacity] = useState(0.15);
+  const [viewModalTableVisible, setViewModalTableVisible] = useState(true);
   const singleDragRef = useRef({ wasDragged: false, wasResized: false });
   const combinedDragRef = useRef({ wasDragged: false, wasResized: false });
   const allCombinedDragRef = useRef({ wasDragged: false, wasResized: false });
@@ -3883,6 +3884,7 @@ const GraphCapture = () => {
     setCombinedModalLayout(null);
     setAllCombinedModalLayout(null);
     setSelectedCurveId(curve.id);
+    setViewModalTableVisible(true);
 
     const graphId = String(curve.graphId || getGraphIdForCurve(curve) || urlParams.graph_id || '').trim();
     const curvesForGraph = savedCurves.filter(
@@ -7206,6 +7208,7 @@ const GraphCapture = () => {
             if (shouldSuppressViewModalBackdropClose(singleDragRef)) return;
             setSingleModalLayout(null);
             setSelectedCurveId('');
+            setViewModalTableVisible(true);
             clearSavedViewOverlay();
             setIsReadOnly(false);
           }}
@@ -7218,6 +7221,7 @@ const GraphCapture = () => {
             onClose={() => {
               setSingleModalLayout(null);
               setSelectedCurveId('');
+              setViewModalTableVisible(true);
               clearSavedViewOverlay();
             }}
             defaultWidth={640}
@@ -7372,7 +7376,7 @@ const GraphCapture = () => {
                 sortByX={previewSortByX}
               />
             </div>
-            <div style={{ marginTop: 12, marginBottom: 8 }}>
+            <div style={{ marginTop: 12, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <button
                 type="button"
                 onClick={() => {
@@ -7405,7 +7409,24 @@ const GraphCapture = () => {
               >
                 Copy Table
               </button>
+              <button
+                type="button"
+                onClick={() => setViewModalTableVisible((prev) => !prev)}
+                style={{
+                  padding: '6px 14px',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  background: '#475569',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 4,
+                  cursor: 'pointer',
+                }}
+              >
+                {viewModalTableVisible ? 'Hide Table' : 'Show Table'}
+              </button>
             </div>
+            {viewModalTableVisible ? (
             <table className="mt-2 w-full text-xs border" style={{ borderColor: 'var(--color-border)', marginTop: 12 }}>
               <thead>
                 <tr style={{ backgroundColor: '#222', color: '#fff' }}>
@@ -7426,6 +7447,7 @@ const GraphCapture = () => {
                 ))}
               </tbody>
             </table>
+            ) : null}
           </ViewModalPanel>
         </div>
       )}
