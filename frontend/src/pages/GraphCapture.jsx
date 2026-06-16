@@ -3581,6 +3581,7 @@ const GraphCapture = () => {
   const [frozenGraphConfig, setFrozenGraphConfig] = useState(null);
   const [partNumberLocked, setPartNumberLocked] = useState(false);
   const [showReturnDecisionModal, setShowReturnDecisionModal] = useState(false);
+  const [showCaptureAnotherGuidance, setShowCaptureAnotherGuidance] = useState(false);
   const [pendingReturnUrl, setPendingReturnUrl] = useState('');
   const savedGraphsSectionRef = useRef(null);
   const hasAutoScrolledToSavedGraphs = useRef(false);
@@ -6063,12 +6064,21 @@ const GraphCapture = () => {
     // CRITICAL: Close the modal and prepare for next curve capture
     // But preserve the session state (graph_id and identifier) for the append-to-graph flow
     setShowReturnDecisionModal(false);
-    
+    setShowCaptureAnotherGuidance(true);
+    setIsAxisMappingConfirmed(false);
+    setFrozenGraphConfig(null);
+    setGraphConfig((prevConfig) => ({
+      ...prevConfig,
+      curveName: '',
+    }));
+
     // Clear data points to show a clean canvas for the next curve
     clearDataPoints();
-    
+
     // Clear the selected curve details modal if any is open
     setSelectedCurveId('');
+    setCombinedGroupId('');
+    setShowAllCombinedModal(false);
     
     // Verify session state is still intact after closing modal
     setTimeout(() => {
@@ -6782,7 +6792,12 @@ const GraphCapture = () => {
               <CapturedPointsList isReadOnly={isReadOnly} hasReturnUrl={!!urlParams.return_url} isEditingCurve={Boolean(editingCurveId)} />
             </div>
             <div className="w-full lg:w-3/5">
-              <GraphConfig 
+              {showCaptureAnotherGuidance && !isAxisMappingConfirmed ? (
+                <div className="mb-4 rounded border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                  Enter a new curve or line name, then click <strong>Final Check</strong> to capture the next curve.
+                </div>
+              ) : null}
+              <GraphConfig
                 showTctj={shouldShowTemperatureInput} 
                 isGraphTitleReadOnly={Boolean(urlParams.graph_id || urlParams.graph_title) && !graphTitleUnlocked} 
                 isCurveNameReadOnly={false} 
@@ -6806,6 +6821,7 @@ const GraphCapture = () => {
                   setIsAxisMappingConfirmed(true);
                   setFrozenGraphConfig({ ...graphConfig });
                   setPartNumberLocked(true);
+                  setShowCaptureAnotherGuidance(false);
                   const graphId = String(urlParams.graph_id || activeSessionGraphIdRef.current || '').trim();
                   if (graphId && graphArea.width > 0 && graphArea.height > 0) {
                     persistGraphContext(graphId, graphArea, graphConfig);
@@ -6816,15 +6832,6 @@ const GraphCapture = () => {
                       );
                       if (curvesForGraph.length > 0) {
                         persistSavedCurves(graphId, curvesForGraph, savedCurvesSource);
-                      }
-                      if (
-                        curvesForGraph.length > 1 &&
-                        !selectedCurveId &&
-                        !combinedGroupId &&
-                        !showAllCombinedModal &&
-                        !editingCurveId
-                      ) {
-                        replaceDataPoints(buildCombinedOverlayPoints(curvesForGraph));
                       }
                       return patched;
                     });
