@@ -900,6 +900,20 @@ const clearPersistedSavedCurves = (graphId) => {
   }
 };
 
+const clearPersistedGraphSessionArtifacts = (graphId) => {
+  const normalizedGraphId = String(graphId || '').trim();
+  if (!normalizedGraphId) return;
+
+  clearPersistedSavedCurves(normalizedGraphId);
+
+  try {
+    localStorage.removeItem(`graph_image_${normalizedGraphId}`);
+    localStorage.removeItem(`graph_context_${normalizedGraphId}`);
+  } catch (error) {
+    console.warn('[DEBUG] Failed to clear persisted graph session artifacts:', error);
+  }
+};
+
 const hydrateStoredCurves = (curves, graphId) => {
   const fallbackImage = readPersistedGraphImageKey(graphId);
   return (Array.isArray(curves) ? curves : []).map((curve) => {
@@ -5325,47 +5339,24 @@ const GraphCapture = () => {
             }
           }
 
-          if (result.status === 'success' && discovereeGraph) {
-            console.log('[DEBUG] DiscoverEE graph found but details are empty. Preserving graph context.');
-            const localFallbackCurve = await fetchLocalCurveByDiscovereeId({
-              graphId,
-              discovereeCatId: discovereeGraph?.discoveree_cat_id || result?.discoveree_cat_id || discovereeCatIdFromUrl,
-            });
-            const restoredPendingImage = normalizeImageCandidate(restoredPendingImageRef.current);
-            const graphImageUrl = await resolveReachableGraphImageUrl(
-              discovereeGraph,
-              discovereeDetails,
-              graphId,
-              {
-                restoredPending: restoredPendingImage,
-                localGraphImage: localFallbackCurve?.graph_image || '',
-              }
-            );
-            logGraphImageAvailability(discovereeGraph.graph_id || graphId, graphImageUrl, 'discoveree-success-empty-details', {
-              detailsCount: discovereeDetails.length,
-              companyGraphImgPresent: Boolean(String(discovereeGraph?.graph_img || '').trim()),
-              localFallbackImagePresent: Boolean(String(localFallbackCurve?.graph_image || '').trim()),
-            });
-            const resolvedGraphTitle = resolveGraphTitle(discovereeGraph, []);
+          if (result.status === 'success' && discovereeGraph && discovereeDetails.length === 0) {
+            console.log('[DEBUG] DiscoverEE graph found but details are empty. Showing upload panel.');
+            const resolvedGraphId = discovereeGraph.graph_id || graphId;
 
-            if (graphImageUrl) {
-              persistGraphImage(discovereeGraph.graph_id || graphId, graphImageUrl);
-            }
-
-            clearPersistedSavedCurves(discovereeGraph.graph_id || graphId);
+            clearPersistedGraphSessionArtifacts(resolvedGraphId);
 
             setSavedCurves([]);
             setSavedCurvesSource('company');
-            activateAppendSession(
-              discovereeGraph.graph_id,
-              graphImageUrl || '',
-              'fetchGraphById-emptyDetails'
-            );
-            if (graphImageUrl) {
-              setUploadedImageFromExistingGraph(graphImageUrl);
-            }
+            setUploadedImage(null);
+            clearDataPoints();
+            setGraphArea({ x: 0, y: 0, width: 0, height: 0 });
+            setIsAxisMappingConfirmed(false);
+            setFrozenGraphConfig(null);
+            activateAppendSession(resolvedGraphId, '', 'fetchGraphById-emptyDetails');
             setGraphLoadNotice('');
             setShouldSkipCaptureChoiceAfterAi(false);
+
+            const resolvedGraphTitle = resolveGraphTitle(discovereeGraph, []);
             applyDiscovereeGraphMetadataToConfig(discovereeGraph, resolvedGraphTitle, null, []);
 
             if (resolvedGraphTitle && !urlParams.graph_title) {
