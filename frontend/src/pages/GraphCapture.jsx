@@ -4805,8 +4805,15 @@ const GraphCapture = () => {
     }
 
     if (!detailId) {
-      console.error('Remove skipped: missing detail id', { curve });
-      throw new Error('Missing curve id for remove.');
+      const localCurveId = Number(curve.id);
+      if (Number.isFinite(localCurveId) && localCurveId > 0) {
+        try {
+          await fetch(`${apiUrl}/api/curves/${localCurveId}`, { method: 'DELETE' });
+        } catch {
+          // Best-effort cleanup for unsynced local-only curves.
+        }
+      }
+      return;
     }
 
     const removePayload = new URLSearchParams({
@@ -5299,23 +5306,13 @@ const GraphCapture = () => {
             const dedupedFetched = dedupeCurves(fetched);
             console.log('[DEBUG] Total fetched curves:', fetched.length, 'after dedupe:', dedupedFetched.length);
             if (dedupedFetched.length > 0) {
-              const localApiCurvesRaw = await fetchAllLocalCurvesByGraphId(
-                apiUrl,
-                discovereeGraph.graph_id || graphId
-              );
-              const restored = buildRestoredSavedCurves({
-                graphId: discovereeGraph.graph_id || graphId,
-                companyCurves: dedupedFetched,
-                localApiCurvesRaw,
-                graphImageUrl,
-              });
-              console.log('[DEBUG] Setting savedCurves after restore merge:', restored.curves.length);
-              setSavedCurves(restored.curves);
-              setSavedCurvesSource(restored.source);
+              console.log('[DEBUG] Setting savedCurves from DiscoverEE details:', dedupedFetched.length);
+              setSavedCurves(dedupedFetched);
+              setSavedCurvesSource('company');
               persistSavedCurves(
                 discovereeGraph.graph_id || graphId,
-                restored.curves,
-                restored.source
+                dedupedFetched,
+                'company'
               );
               activateAppendSession(discovereeGraph.graph_id, graphImageUrl, 'fetchGraphById');
 
@@ -5355,53 +5352,21 @@ const GraphCapture = () => {
               persistGraphImage(discovereeGraph.graph_id || graphId, graphImageUrl);
             }
 
-            const localApiCurvesRaw = await fetchAllLocalCurvesByGraphId(
-              apiUrl,
-              discovereeGraph.graph_id || graphId
+            clearPersistedSavedCurves(discovereeGraph.graph_id || graphId);
+
+            setSavedCurves([]);
+            setSavedCurvesSource('company');
+            activateAppendSession(
+              discovereeGraph.graph_id,
+              graphImageUrl || '',
+              'fetchGraphById-emptyDetails'
             );
-            const restored = buildRestoredSavedCurves({
-              graphId: discovereeGraph.graph_id || graphId,
-              companyCurves: [],
-              localApiCurvesRaw,
-              graphImageUrl,
-            });
-
-            if (restored.curves.length > 0) {
-              console.log('[DEBUG] Restored saved curves from local persistence:', restored.curves.length);
-              setSavedCurves(restored.curves);
-              setSavedCurvesSource(restored.source);
-              persistSavedCurves(
-                discovereeGraph.graph_id || graphId,
-                restored.curves,
-                restored.source
-              );
-              activateAppendSession(
-                discovereeGraph.graph_id,
-                graphImageUrl || restored.curves[0]?.graphImageUrl || '',
-                'fetchGraphById-emptyDetails-restored'
-              );
-
-              if (graphImageUrl || restored.curves[0]?.graphImageUrl) {
-                setUploadedImageFromExistingGraph(graphImageUrl || restored.curves[0]?.graphImageUrl);
-              }
-              setGraphLoadNotice(
-                'Saved curves were loaded from this browser only — DiscoverEE has no curve records for this graph yet. Re-save to sync.'
-              );
-            } else {
-              setSavedCurves([]);
-              setSavedCurvesSource('company');
-              activateAppendSession(
-                discovereeGraph.graph_id,
-                graphImageUrl || '',
-                'fetchGraphById-emptyDetails'
-              );
-              if (graphImageUrl) {
-                setUploadedImageFromExistingGraph(graphImageUrl);
-              }
-              setGraphLoadNotice('');
+            if (graphImageUrl) {
+              setUploadedImageFromExistingGraph(graphImageUrl);
             }
+            setGraphLoadNotice('');
             setShouldSkipCaptureChoiceAfterAi(false);
-            applyDiscovereeGraphMetadataToConfig(discovereeGraph, resolvedGraphTitle, null, restored.curves);
+            applyDiscovereeGraphMetadataToConfig(discovereeGraph, resolvedGraphTitle, null, []);
 
             if (resolvedGraphTitle && !urlParams.graph_title) {
               setGraphConfig((prev) => ({
@@ -5413,72 +5378,12 @@ const GraphCapture = () => {
           }
         }
 
-        // Fallback: Try Netlify deployed backend (same domain)
-        console.log('[DEBUG] DiscoverEE failed or returned no data, trying Netlify fallback...');
-        const localApiCurvesRaw = await fetchAllLocalCurvesByGraphId(apiUrl, graphId);
-        let curve = localApiCurvesRaw[0] || null;
-        if (!curve) {
-          curve = await fetchLocalCurveByDiscovereeId({
-            graphId,
-            discovereeCatId: discovereeCatIdFromUrl,
-          });
-          if (curve) {
-            localApiCurvesRaw.push(curve);
-          }
-        }
-
-        const persistedOnly = getPersistedSavedCurves(graphId);
-        const hasLocalOrPersisted =
-          localApiCurvesRaw.length > 0 || (persistedOnly?.curves?.length || 0) > 0;
-
-        if (hasLocalOrPersisted) {
-          const resolvedLocalImage = await resolveReachableGraphImageUrl(
-            {},
-            [],
-            graphId,
-            {
-              restoredPending: normalizeImageCandidate(restoredPendingImageRef.current),
-              localGraphImage: curve?.graph_image || localApiCurvesRaw[0]?.graph_image || '',
-              persistedGraphImage: getPersistedGraphImage(graphId),
-            }
-          );
-          logGraphImageAvailability(graphId, resolvedLocalImage, 'local-backend-fallback', {
-            localCurveId: curve?.id || localApiCurvesRaw[0]?.id || '',
-            localGraphImagePresent: Boolean(
-              String(curve?.graph_image || localApiCurvesRaw[0]?.graph_image || '').trim()
-            ),
-            restoredPendingImagePresent: Boolean(String(restoredPendingImageRef.current || '').trim()),
-          });
-          const restored = buildRestoredSavedCurves({
-            graphId,
-            companyCurves: [],
-            localApiCurvesRaw,
-            graphImageUrl: resolvedLocalImage,
-          });
-          console.log('[DEBUG] Setting savedCurves from local restore merge:', restored.curves.length);
-          setSavedCurves(restored.curves);
-          setSavedCurvesSource(restored.source);
-          persistSavedCurves(graphId, restored.curves, restored.source);
-
-          if (graphId && resolvedLocalImage) {
-            persistGraphImage(graphId, resolvedLocalImage);
-            setUploadedImageFromExistingGraph(resolvedLocalImage);
-          }
-
-          const firstSavedCurve = restored.curves[0];
-          if (firstSavedCurve?.config?.graphTitle && !urlParams.graph_title) {
-            setGraphConfig((prev) => ({
-              ...prev,
-              graphTitle: firstSavedCurve.config.graphTitle,
-            }));
-          }
-        } else {
-          logGraphImageAvailability(graphId, '', 'all-fallbacks-failed', {
-            discovereeResponse: 'failed-or-empty',
-          });
-          console.log('[DEBUG] No local curve found for graph_id; leaving upload panel empty.');
-          setShouldSkipCaptureChoiceAfterAi(false);
-        }
+        // DiscoverEE graph_id sessions: saved curves come from DiscoverEE only (no Render/local restore).
+        console.log('[DEBUG] DiscoverEE unavailable or incomplete for graph_id; skipping Render/local saved curves.');
+        logGraphImageAvailability(graphId, '', 'discoveree-fallback-skipped', {
+          discovereeResponse: 'failed-or-empty',
+        });
+        setShouldSkipCaptureChoiceAfterAi(false);
       } catch (error) {
         console.error('[DEBUG] Error in fetchGraphById:', error);
       }
