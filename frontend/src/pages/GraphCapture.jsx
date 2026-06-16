@@ -3250,9 +3250,23 @@ const GraphCapture = () => {
   };
 
   const handleUserImageLoaded = ({ preserveGraphContext = false } = {}) => {
-    // A user-uploaded image starts a fresh capture context unless we're in AI-direct capture flow.
-    if (!preserveGraphContext) {
+    const graphIdInUrl = String(
+      new URLSearchParams(window.location.search).get('graph_id') ||
+      activeSessionGraphIdRef.current ||
+      ''
+    ).trim();
+    // DiscoverEE append: keep graph_id on first manual capture when URL already has one.
+    const shouldPreserveGraphContext =
+      preserveGraphContext || (Boolean(graphIdInUrl) && savedCurves.length === 0);
+
+    if (!shouldPreserveGraphContext) {
       clearGraphIdContext();
+    } else if (graphIdInUrl) {
+      activateAppendSession(
+        graphIdInUrl,
+        activeSessionImageKeyRef.current || uploadedImage || '',
+        'manual-capture-preserve-graph-id'
+      );
     }
     setGraphTitleUnlocked(true);
     setUrlParams((prev) => ({
@@ -3274,7 +3288,7 @@ const GraphCapture = () => {
     window.history.replaceState({}, '', currentUrl.toString());
     setAiFlowStatusMessage('');
 
-    if (preserveGraphContext) {
+    if (shouldPreserveGraphContext) {
       setShouldSkipCaptureChoiceAfterAi(false);
     }
 
@@ -4443,7 +4457,9 @@ const GraphCapture = () => {
     if (
       hasActiveAppendSessionRef.current &&
       nextImage &&
-      (!sessionImageKey || nextImage !== sessionImageKey)
+      savedCurves.length > 0 &&
+      sessionImageKey &&
+      nextImage !== sessionImageKey
     ) {
       // console.log('[GRAPH SESSION] resetting after user changed image', {
       //   previousGraphId: activeSessionGraphIdRef.current,
@@ -4453,7 +4469,7 @@ const GraphCapture = () => {
     }
 
     previousUploadedImageRef.current = nextImage;
-  }, [uploadedImage]);
+  }, [uploadedImage, savedCurves.length]);
 
   const pushEditedCurveToApi = async (curve, nextMeta, nextSymbols, newCurveName = '') => {
     const currentSymbolPayload = buildDynamicSymbolPayload(

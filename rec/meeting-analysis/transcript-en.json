@@ -1,0 +1,452 @@
+[
+  {
+    "start": 90.0,
+    "end": 115.0,
+    "text": "Hello, sir."
+  },
+  {
+    "start": 145.0,
+    "end": 174.0,
+    "text": "Now we will go to this page, this is the graph ID, see here, here is the graph ID, so this means the graph title is made to capture the graph, so now if we capture it manually, then the graph ID has been removed from here, then why did it disappear?"
+  },
+  {
+    "start": 175.0,
+    "end": 193.0,
+    "text": "See here, here the graph ID is not here, then you want to know if there is any problem with the flow, right?"
+  },
+  {
+    "start": 193.0,
+    "end": 220.0,
+    "text": "Because I did not get any touch in the manual, and I don't know the event, because this is a separate part of AI, this is the vision part of the call,"
+  },
+  {
+    "start": 220.0,
+    "end": 239.0,
+    "text": "You know this API, VisionAndresport is uploaded, and the other manual was being uploaded, this file was being uploaded, GraphCaptureAPI, so there is no work on this graph capture API,"
+  },
+  {
+    "start": 239.0,
+    "end": 259.0,
+    "text": "When it was running correctly, then why would there be work in it? So this flow is getting messed up somewhere, let's do it now, I mean let's do debug, so tell me what request is going on from here?"
+  },
+  {
+    "start": 259.0,
+    "end": 283.0,
+    "text": "First is the issue of the graph ID, second is that let's paste it, let's do it as it is, there is no problem with it,"
+  },
+  {
+    "start": 283.0,
+    "end": 294.0,
+    "text": "Let's do this, let's see it in the inspector element, it comes in this, right? So now what is the request?"
+  },
+  {
+    "start": 294.0,
+    "end": 310.0,
+    "text": "What request is there? Tell me from here, what request is there? Where is it done in API? Where is it done?"
+  },
+  {
+    "start": 310.0,
+    "end": 326.0,
+    "text": "What request is there? Where is it done? What is the request?"
+  },
+  {
+    "start": 327.0,
+    "end": 338.0,
+    "text": "So this is the issue of the graph ID, second request is there, I am going to the number, I am going to the graph title,"
+  },
+  {
+    "start": 339.0,
+    "end": 355.0,
+    "text": "This is what we have sent, this is the graph title, that is the graph image,"
+  },
+  {
+    "start": 355.0,
+    "end": 373.0,
+    "text": "This is not different from the data point, this is the graph image, where is the data point going?"
+  },
+  {
+    "start": 373.0,
+    "end": 384.0,
+    "text": "Is this change done in the details?"
+  },
+  {
+    "start": 404.0,
+    "end": 430.0,
+    "text": "This is the discovery degree ID, this is the identity file, this is the graph image, this is your edit time,"
+  },
+  {
+    "start": 430.0,
+    "end": 438.0,
+    "text": "If there is an edit time, then there will be an ID, if there is an ID, then there will be an edit time,"
+  },
+  {
+    "start": 438.0,
+    "end": 458.0,
+    "text": "Okay, now you can see the image, now you can see if you get any DF, I don't know if the concept of DF is working or not,"
+  },
+  {
+    "start": 458.0,
+    "end": 486.0,
+    "text": "Now this is GID 0, if there is a problem, then it will come here,"
+  },
+  {
+    "start": 486.0,
+    "end": 502.0,
+    "text": "GID 0 means this will work, this will work, and the check is 0, this is not the first check,"
+  },
+  {
+    "start": 502.0,
+    "end": 525.0,
+    "text": "If there is an error, then this message is coming, if the insert is not happening, then where is the response?"
+  },
+  {
+    "start": 525.0,
+    "end": 543.0,
+    "text": "This is the graph data save, this is the graph ID,"
+  },
+  {
+    "start": 543.0,
+    "end": 565.0,
+    "text": "This is the details, you have XY in the details,"
+  },
+  {
+    "start": 573.0,
+    "end": 591.0,
+    "text": "Now if we do any echo, then it will print,"
+  },
+  {
+    "start": 591.0,
+    "end": 603.0,
+    "text": "This is the update, this is the result,"
+  },
+  {
+    "start": 603.0,
+    "end": 613.0,
+    "text": "This is the print,"
+  },
+  {
+    "start": 633.0,
+    "end": 649.0,
+    "text": "This is the result,"
+  },
+  {
+    "start": 663.0,
+    "end": 687.0,
+    "text": "This is the result,"
+  },
+  {
+    "start": 693.0,
+    "end": 715.0,
+    "text": "This is the response,"
+  },
+  {
+    "start": 715.0,
+    "end": 723.0,
+    "text": "This is the print,"
+  },
+  {
+    "start": 745.0,
+    "end": 768.0,
+    "text": "What is this?"
+  },
+  {
+    "start": 768.0,
+    "end": 776.0,
+    "text": "This is the reference,"
+  },
+  {
+    "start": 776.0,
+    "end": 789.0,
+    "text": "This is the message,"
+  },
+  {
+    "start": 789.0,
+    "end": 799.0,
+    "text": "This is the reference,"
+  },
+  {
+    "start": 799.0,
+    "end": 808.0,
+    "text": "This is the reference,"
+  },
+  {
+    "start": 808.0,
+    "end": 819.0,
+    "text": "This is the reference,"
+  },
+  {
+    "start": 819.0,
+    "end": 827.0,
+    "text": "This is the reference,"
+  },
+  {
+    "start": 827.0,
+    "end": 853.0,
+    "text": "This is the reference,"
+  },
+  {
+    "start": 853.0,
+    "end": 861.0,
+    "text": "This is the reference,"
+  },
+  {
+    "start": 861.0,
+    "end": 873.0,
+    "text": "This is the reference,"
+  },
+  {
+    "start": 873.0,
+    "end": 887.0,
+    "text": "This is the reference,"
+  },
+  {
+    "start": 887.0,
+    "end": 895.0,
+    "text": "This is the reference,"
+  },
+  {
+    "start": 895.0,
+    "end": 903.0,
+    "text": "This is the data details,"
+  },
+  {
+    "start": 903.0,
+    "end": 913.0,
+    "text": "This is the data details,"
+  },
+  {
+    "start": 913.0,
+    "end": 923.0,
+    "text": "This is the data details,"
+  },
+  {
+    "start": 923.0,
+    "end": 942.0,
+    "text": "This is the data details,"
+  },
+  {
+    "start": 942.0,
+    "end": 957.0,
+    "text": "This is the data details,"
+  },
+  {
+    "start": 957.0,
+    "end": 963.0,
+    "text": "This is the data details,"
+  },
+  {
+    "start": 963.0,
+    "end": 970.0,
+    "text": "This is the data details,"
+  },
+  {
+    "start": 970.0,
+    "end": 992.0,
+    "text": "This is the data details,"
+  },
+  {
+    "start": 992.0,
+    "end": 1014.0,
+    "text": "This is the data details,"
+  },
+  {
+    "start": 1014.0,
+    "end": 1021.0,
+    "text": "This is the data details,"
+  },
+  {
+    "start": 1021.0,
+    "end": 1029.0,
+    "text": "This is the data details,"
+  },
+  {
+    "start": 1029.0,
+    "end": 1037.0,
+    "text": "This is the data details,"
+  },
+  {
+    "start": 1037.0,
+    "end": 1050.0,
+    "text": "This is the data details,"
+  },
+  {
+    "start": 1050.0,
+    "end": 1071.0,
+    "text": "This is the data details,"
+  },
+  {
+    "start": 1071.0,
+    "end": 1079.0,
+    "text": "This is the data details,"
+  },
+  {
+    "start": 1079.0,
+    "end": 1086.0,
+    "text": "This is the data details,"
+  },
+  {
+    "start": 1086.0,
+    "end": 1094.0,
+    "text": "This is the data details,"
+  },
+  {
+    "start": 1094.0,
+    "end": 1103.0,
+    "text": "This is the data details,"
+  },
+  {
+    "start": 1103.0,
+    "end": 1113.0,
+    "text": "This is the data details,"
+  },
+  {
+    "start": 1113.0,
+    "end": 1123.0,
+    "text": "This is the data details,"
+  },
+  {
+    "start": 1123.0,
+    "end": 1132.0,
+    "text": "This is the data details,"
+  },
+  {
+    "start": 1132.0,
+    "end": 1142.0,
+    "text": "This is the data details,"
+  },
+  {
+    "start": 1142.0,
+    "end": 1152.0,
+    "text": "This is the data details,"
+  },
+  {
+    "start": 1152.0,
+    "end": 1161.0,
+    "text": "This is the data details,"
+  },
+  {
+    "start": 1161.0,
+    "end": 1171.0,
+    "text": "This is the data details,"
+  },
+  {
+    "start": 1171.0,
+    "end": 1181.0,
+    "text": "This is the data details,"
+  },
+  {
+    "start": 1181.0,
+    "end": 1189.0,
+    "text": "This is the data details,"
+  },
+  {
+    "start": 1189.0,
+    "end": 1199.0,
+    "text": "This is the data details,"
+  },
+  {
+    "start": 1199.0,
+    "end": 1209.0,
+    "text": "This is the data details,"
+  },
+  {
+    "start": 1209.0,
+    "end": 1218.0,
+    "text": "This is the data details,"
+  },
+  {
+    "start": 1218.0,
+    "end": 1228.0,
+    "text": "This is the data details,"
+  },
+  {
+    "start": 1228.0,
+    "end": 1238.0,
+    "text": "This is the data details,"
+  },
+  {
+    "start": 1238.0,
+    "end": 1247.0,
+    "text": "This is the data details,"
+  },
+  {
+    "start": 1247.0,
+    "end": 1257.0,
+    "text": "This is the data details,"
+  },
+  {
+    "start": 1257.0,
+    "end": 1267.0,
+    "text": "This is the data details,"
+  },
+  {
+    "start": 1267.0,
+    "end": 1277.0,
+    "text": "This is the data details,"
+  },
+  {
+    "start": 1277.0,
+    "end": 1287.0,
+    "text": "This is the data details,"
+  },
+  {
+    "start": 1287.0,
+    "end": 1296.0,
+    "text": "This is the data details,"
+  },
+  {
+    "start": 1296.0,
+    "end": 1306.0,
+    "text": "This is the data details,"
+  },
+  {
+    "start": 1306.0,
+    "end": 1316.0,
+    "text": "This is the data details,"
+  },
+  {
+    "start": 1316.0,
+    "end": 1325.0,
+    "text": "This is the data details,"
+  },
+  {
+    "start": 1325.0,
+    "end": 1335.0,
+    "text": "This is the data details,"
+  },
+  {
+    "start": 1335.0,
+    "end": 1345.0,
+    "text": "This is the data details,"
+  },
+  {
+    "start": 1345.0,
+    "end": 1354.0,
+    "text": "This is the data details,"
+  },
+  {
+    "start": 1354.0,
+    "end": 1364.0,
+    "text": "This is the data details,"
+  },
+  {
+    "start": 1364.0,
+    "end": 1374.0,
+    "text": "This is the data details,"
+  },
+  {
+    "start": 1374.0,
+    "end": 1384.0,
+    "text": "This is the data details,"
+  },
+  {
+    "start": 1384.0,
+    "end": 1394.0,
+    "text": "This is the data details,"
+  },
+  {
+    "start": 1394.0,
+    "end": 1403.0,
+    "text": "This is the data details,"
+  }
+]
