@@ -308,8 +308,6 @@ const collectGraphImageCandidates = ({
   };
 
   push(restoredPending);
-  push(localGraphImage);
-  push(persistedGraphImage);
 
   const graphFields = [
     graph?.graph_image,
@@ -333,6 +331,8 @@ const collectGraphImageCandidates = ({
   ]);
 
   [...graphFields, ...detailFields].forEach(push);
+  push(persistedGraphImage);
+  push(localGraphImage);
 
   return ordered;
 };
@@ -770,6 +770,13 @@ const readPersistedGraphImageKey = (graphId) => {
   }
 };
 
+/** Same-browser cache only: embedded images keyed by graph_id (skip stale filename tokens). */
+const getValidatedPersistedGraphImage = (graphId) => {
+  const normalized = normalizeImageCandidate(readPersistedGraphImageKey(graphId));
+  if (!normalized || !isEmbeddedGraphImage(normalized)) return '';
+  return normalized;
+};
+
 const resolveAxisValueForPersist = (...values) => {
   for (const candidate of values) {
     if (isValidSymbolValue(candidate)) {
@@ -915,7 +922,7 @@ const clearPersistedGraphSessionArtifacts = (graphId) => {
 };
 
 const hydrateStoredCurves = (curves, graphId) => {
-  const fallbackImage = readPersistedGraphImageKey(graphId);
+  const fallbackImage = getValidatedPersistedGraphImage(graphId);
   return (Array.isArray(curves) ? curves : []).map((curve) => {
     const graphImageUrl =
       curve?.graphImageUrl ||
@@ -3893,7 +3900,7 @@ const GraphCapture = () => {
       details,
       graphId,
       restoredPending: restoredPendingImageRef.current,
-      persistedGraphImage: getPersistedGraphImage(graphId),
+      persistedGraphImage: getValidatedPersistedGraphImage(graphId),
     });
 
     for (const candidate of candidates) {
@@ -3916,7 +3923,7 @@ const GraphCapture = () => {
       graphId,
       restoredPending: extras.restoredPending ?? restoredPendingImageRef.current,
       localGraphImage: extras.localGraphImage ?? '',
-      persistedGraphImage: extras.persistedGraphImage ?? getPersistedGraphImage(graphId),
+      persistedGraphImage: extras.persistedGraphImage ?? getValidatedPersistedGraphImage(graphId),
     });
 
     return resolveFirstReachableImageUrl(candidates);
@@ -4291,9 +4298,12 @@ const GraphCapture = () => {
     }
 
     const nextGraphId = String(graphId);
+    const previousGraphId = String(activeSessionGraphIdRef.current || '');
     hasActiveAppendSessionRef.current = true;
     activeSessionGraphIdRef.current = nextGraphId;
-    activeSessionImageKeyRef.current = String(imageUrl || uploadedImage || activeSessionImageKeyRef.current || '');
+    activeSessionImageKeyRef.current = String(
+      imageUrl || (previousGraphId === nextGraphId ? activeSessionImageKeyRef.current : '') || ''
+    );
 
     // console.log('[GRAPH SESSION] activated', {
     //   reason,
@@ -5194,6 +5204,13 @@ const GraphCapture = () => {
     console.log('[DEBUG] Fetching graph_id:', graphId);
     const fetchGraphById = async () => {
       try {
+        setSavedCurves([]);
+        setSavedCurvesSource('company');
+        setUploadedImage(null);
+        clearDataPoints();
+        activeSessionImageKeyRef.current = '';
+        autoLoadedGraphIdRef.current = '';
+
         // Try DiscovereE API first
         console.log('[DEBUG] Attempting DiscovereE API fetch...');
         const discovereeResponse = await fetch(
@@ -5212,30 +5229,22 @@ const GraphCapture = () => {
             setGraphLoadNotice('');
             console.log('[DEBUG] Successfully parsed DiscoverEE data, details count:', discovereeDetails.length);
             console.log('[DEBUG] discovereeGraph all fields:', JSON.stringify(discovereeGraph, null, 2));
-            const localFallbackCurve = await fetchLocalCurveByDiscovereeId({
-              graphId,
-              discovereeCatId: discovereeGraph?.discoveree_cat_id || result?.discoveree_cat_id || discovereeCatIdFromUrl,
-            });
-            const restoredPendingImage = normalizeImageCandidate(restoredPendingImageRef.current);
+            const resolvedGraphId = String(discovereeGraph.graph_id || graphId).trim();
             const graphImageUrl = await resolveReachableGraphImageUrl(
               discovereeGraph,
               discovereeDetails,
-              graphId,
-              {
-                restoredPending: restoredPendingImage,
-                localGraphImage: localFallbackCurve?.graph_image || '',
-              }
+              resolvedGraphId,
+              { restoredPending: '' }
             );
-            logGraphImageAvailability(discovereeGraph.graph_id || graphId, graphImageUrl, 'discoveree-success-with-details', {
+            logGraphImageAvailability(resolvedGraphId, graphImageUrl, 'discoveree-success-with-details', {
               detailsCount: discovereeDetails.length,
               companyGraphImgPresent: Boolean(String(discovereeGraph?.graph_img || '').trim()),
-              localFallbackImagePresent: Boolean(String(localFallbackCurve?.graph_image || '').trim()),
             });
             const graphGroupId = buildGraphGroupId(graphImageUrl || String(discovereeGraph.graph_id));
             const resolvedGraphTitle = resolveGraphTitle(discovereeGraph, discovereeDetails);
 
-            if (graphImageUrl) {
-              persistGraphImage(discovereeGraph.graph_id || graphId, graphImageUrl);
+            if (graphImageUrl && isEmbeddedGraphImage(graphImageUrl)) {
+              persistGraphImage(resolvedGraphId, graphImageUrl);
             }
             const preferredSymbolKeySet = new Set((Array.isArray(hydratedSymbolNames) ? hydratedSymbolNames : []).map((key) => String(key).toLowerCase()));
             const graphLevelSymbolValues = hydratedSymbolNames.reduce((accumulator, key) => {
@@ -5416,7 +5425,7 @@ const GraphCapture = () => {
         firstCurve.graph_img,
         savedCurves.find((curve) => curve?.graphImageUrl || curve?.graph_img)?.graphImageUrl,
         savedCurves.find((curve) => curve?.graphImageUrl || curve?.graph_img)?.graph_img,
-        getPersistedGraphImage(graphId),
+        getValidatedPersistedGraphImage(graphId),
       ].filter(Boolean);
 
       (async () => {
@@ -5604,7 +5613,7 @@ const GraphCapture = () => {
         previousUploadedImageRef.current ||
         restoredPendingImageRef.current ||
         restoredPendingCapture?.imageBase64 ||
-        (graphId ? getPersistedGraphImage(graphId) : '') ||
+        (graphId ? getValidatedPersistedGraphImage(graphId) : '') ||
         selectedCurve?.graphImageUrl ||
         selectedCurve?.graph_img ||
         existingCurveForGraphId?.graphImageUrl ||
