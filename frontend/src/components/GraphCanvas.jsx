@@ -984,12 +984,19 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     const isHandleClick = clickedOnHandleRef.current;
     clickedOnHandleRef.current = false; // Reset flag
 
-    // Only skip point capture if we were actually resizing or drawing a box (but allow handle clicks)
-    if (!isHandleClick && (isResizing || justFinishedResizingRef.current || (isSelecting && dragDistance > DRAG_THRESHOLD))) {
+    // Skip point capture after resize/box draw (even when the interaction started on a handle).
+    if (justFinishedResizingRef.current || isResizing) {
       setDragDistance(0);
-      if (justFinishedResizingRef.current) {
-        justFinishedResizingRef.current = false;
-      }
+      justFinishedResizingRef.current = false;
+      return;
+    }
+
+    if (isSelecting && dragDistance > DRAG_THRESHOLD) {
+      setDragDistance(0);
+      return;
+    }
+
+    if (isHandleClick) {
       return;
     }
 
