@@ -4744,7 +4744,11 @@ const GraphCapture = () => {
       payload.graph[key] = value;
     });
 
-    const companyUrl = `https://www.discoveree.io/graph_capture_api.php?graph_id=${encodeURIComponent(companyGraphId)}`;
+    const editQuery = new URLSearchParams({
+      action: 'edit',
+      graph_id: String(companyGraphId),
+    });
+    const companyUrl = `https://www.discoveree.io/graph_capture_api.php?${editQuery.toString()}`;
     console.log('=== EDIT API REQUEST ===', {
       source: 'company',
       targetGraphId: companyGraphId,
