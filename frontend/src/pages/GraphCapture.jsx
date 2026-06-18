@@ -1432,6 +1432,40 @@ const parseCompanyApiDetails = (result) => {
 const normalizeCompanyXyString = (xy) =>
   String(xy || '').replace(/\s/g, '').toLowerCase();
 
+const buildCompanyXyString = (points = []) =>
+  points.map((point) => `{x:${point.x},y:${point.y}}`).join(',');
+
+const parseCompanyAxisNumber = (value) => {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
+
+const appendCompanyDetailAxisBounds = (detailPayload, axisConfig = {}) => {
+  const xMin = parseCompanyAxisNumber(axisConfig.xMin);
+  const xMax = parseCompanyAxisNumber(axisConfig.xMax);
+  const yMin = parseCompanyAxisNumber(axisConfig.yMin);
+  const yMax = parseCompanyAxisNumber(axisConfig.yMax);
+
+  if (xMin !== undefined) {
+    detailPayload.x_min = xMin;
+    detailPayload.xmin = xMin;
+  }
+  if (xMax !== undefined) {
+    detailPayload.x_max = xMax;
+    detailPayload.xmax = xMax;
+  }
+  if (yMin !== undefined) {
+    detailPayload.y_min = yMin;
+    detailPayload.ymin = yMin;
+  }
+  if (yMax !== undefined) {
+    detailPayload.y_max = yMax;
+    detailPayload.ymax = yMax;
+  }
+
+  return detailPayload;
+};
+
 const findCompanyDetailByIdOrXy = (details = [], { detailId = '', xy = '' } = {}) => {
   const list = Array.isArray(details) ? details : [];
   const normalizedDetailId = String(detailId || '').trim();
@@ -4234,9 +4268,6 @@ const GraphCapture = () => {
     });
   };
 
-  const buildCompanyXyString = (points = []) =>
-    points.map((point) => `{x:${point.x},y:${point.y}}`).join(',');
-
   const setUploadedImageFromExistingGraph = (nextImage) => {
     if (!nextImage) return;
     suppressNextImageSessionResetRef.current = true;
@@ -4651,16 +4682,37 @@ const GraphCapture = () => {
     const resolvedGraphImageForEdit = normalizeImageCandidate(
       curve?.graphImageUrl || curve?.graph_img || uploadedImage || ''
     );
+    const resolvedEditMeta = {
+      xScale: nextMeta.xScale || currentMeta.xScale || 'Linear',
+      yScale: nextMeta.yScale || currentMeta.yScale || 'Linear',
+      xUnitPrefix: nextMeta.xUnitPrefix || currentMeta.xUnitPrefix || '1',
+      yUnitPrefix: nextMeta.yUnitPrefix || currentMeta.yUnitPrefix || '1',
+    };
+    const resolvedEditAxis = {
+      xMin: graphConfig.xMin ?? curve.config?.xMin ?? curve.x_min ?? '',
+      xMax: graphConfig.xMax ?? curve.config?.xMax ?? curve.x_max ?? '',
+      yMin: graphConfig.yMin ?? curve.config?.yMin ?? curve.y_min ?? '',
+      yMax: graphConfig.yMax ?? curve.config?.yMax ?? curve.y_max ?? '',
+    };
+    const resolvedEditIdentifier = normalizeSessionIdentifier(
+      activeSessionIdentifierRef.current ||
+      curve?.identifier ||
+      urlParams.identifier ||
+      ''
+    );
+    const resolvedDetailId = getDetailIdForCurve(curve);
+
     const detailPayload = {
       curve_title: resolvedNewCurveName,
+      xscale: resolvedEditMeta.xScale,
+      yscale: resolvedEditMeta.yScale,
+      xunit: resolvedEditMeta.xUnitPrefix,
+      yunit: resolvedEditMeta.yUnitPrefix,
     };
-    const resolvedDetailId = getDetailIdForCurve(curve);
     if (resolvedDetailId) detailPayload.id = String(resolvedDetailId);
-    if (currentMeta.xScale !== nextMeta.xScale) detailPayload.xscale = nextMeta.xScale || 'Linear';
-    if (currentMeta.yScale !== nextMeta.yScale) detailPayload.yscale = nextMeta.yScale || 'Linear';
-    if (currentMeta.xUnitPrefix !== nextMeta.xUnitPrefix) detailPayload.xunit = nextMeta.xUnitPrefix || '1';
-    if (currentMeta.yUnitPrefix !== nextMeta.yUnitPrefix) detailPayload.yunit = nextMeta.yUnitPrefix || '1';
-    if (hasXyChanges) {
+    appendCompanyDetailAxisBounds(detailPayload, resolvedEditAxis);
+
+    if (hasXyChanges && nextPoints.length > 0) {
       detailPayload.xy = buildCompanyXyString(nextPoints);
       detailPayload.changed_points = changedPoints;
     }
@@ -4669,9 +4721,19 @@ const GraphCapture = () => {
       graph: {
         graph_id: String(companyGraphId),
         discoveree_cat_id: String(curve?.discoveree_cat_id || urlParams.discoveree_cat_id || ''),
-        identifier: String(curve?.identifier || urlParams.identifier || companyGraphId || ''),
+        identifier: resolvedEditIdentifier,
+        partno: urlParams.partno || graphConfig.partNumber || curve.config?.partNumber || '',
+        manf: urlParams.manf || urlParams.manufacturer || graphConfig.manufacturer || '',
+        manufacturer: urlParams.manufacturer || graphConfig.manufacturer || '',
+        graph_title: graphConfig.graphTitle || urlParams.graph_title || curve.config?.graphTitle || '',
         curve_title: resolvedNewCurveName,
+        x_title: graphConfig.xLabel || urlParams.x_label || curve.config?.xLabel || '',
+        y_title: graphConfig.yLabel || urlParams.y_label || curve.config?.yLabel || '',
         ...(resolvedGraphImageForEdit ? { graph_img: resolvedGraphImageForEdit } : {}),
+        mark_review: '1',
+        testuser_id: String(curve?.testuser_id || urlParams.testuser_id || ''),
+        uname: urlParams.username || graphConfig.username || '',
+        username: urlParams.username || graphConfig.username || '',
         ...(hasCurveNameChange ? { old_curve_name: resolvedOldCurveName, new_curve_name: resolvedNewCurveName } : {}),
       },
       details: [detailPayload],
