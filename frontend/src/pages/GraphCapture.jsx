@@ -1429,6 +1429,26 @@ const parseCompanyApiDetails = (result) => {
   return [];
 };
 
+const normalizeCompanyXyString = (xy) =>
+  String(xy || '').replace(/\s/g, '').toLowerCase();
+
+const findCompanyDetailByIdOrXy = (details = [], { detailId = '', xy = '' } = {}) => {
+  const list = Array.isArray(details) ? details : [];
+  const normalizedDetailId = String(detailId || '').trim();
+  if (normalizedDetailId) {
+    const byId = list.find((detail) => String(detail?.id || '') === normalizedDetailId);
+    if (byId) return byId;
+  }
+
+  const normalizedXy = normalizeCompanyXyString(xy);
+  if (normalizedXy) {
+    const byXy = list.find((detail) => normalizeCompanyXyString(detail?.xy) === normalizedXy);
+    if (byXy) return byXy;
+  }
+
+  return list.length > 0 ? list[list.length - 1] : null;
+};
+
 const fetchCompanyGraphDetailsWithRetry = async (graphId, { attempts = 4, delayMs = 750 } = {}) => {
   const normalizedGraphId = String(graphId || '').trim();
   if (!normalizedGraphId) {
@@ -4715,7 +4735,41 @@ const GraphCapture = () => {
       throw new Error(result?.msg || 'Company API returned non-success status');
     }
 
-    return String(companyGraphId);
+    if (hasXyChanges && detailPayload.xy) {
+      const sentXy = normalizeCompanyXyString(detailPayload.xy);
+      const { details: verifyDetails } = await fetchCompanyGraphDetailsWithRetry(companyGraphId);
+      const verifiedDetail = findCompanyDetailByIdOrXy(verifyDetails, {
+        detailId: resolvedDetailId,
+        xy: detailPayload.xy,
+      });
+      const verifiedXy = normalizeCompanyXyString(verifiedDetail?.xy);
+      const xyConfirmedOnDiscoveree = Boolean(verifiedXy && sentXy && verifiedXy === sentXy);
+
+      console.log('[EDIT VERIFY]', {
+        graphId: String(companyGraphId),
+        detailId: resolvedDetailId || '',
+        sentPointCount: nextPoints.length,
+        sentXyLength: sentXy.length,
+        verifiedXyLength: verifiedXy.length,
+        xyConfirmedOnDiscoveree,
+      });
+
+      if (!xyConfirmedOnDiscoveree) {
+        console.warn(
+          '[EDIT VERIFY] DiscoverEE GET did not yet return the edited xy; locallyModified cache will be used on refresh.'
+        );
+      }
+
+      return {
+        graphId: String(companyGraphId),
+        xyConfirmedOnDiscoveree,
+      };
+    }
+
+    return {
+      graphId: String(companyGraphId),
+      xyConfirmedOnDiscoveree: true,
+    };
   };
 
   const handleEditCurveUpdate = async (curveId) => {
@@ -4732,7 +4786,8 @@ const GraphCapture = () => {
 
     setIsUpdatingCurveId(curveId);
     try {
-      await pushEditedCurveToApi(targetCurve, editCurveMeta, editCurveSymbolValues, editCurveName);
+      const editResult = await pushEditedCurveToApi(targetCurve, editCurveMeta, editCurveSymbolValues, editCurveName);
+      const xyConfirmedOnDiscoveree = editResult?.xyConfirmedOnDiscoveree !== false;
       syncGraphIdContext(targetCurve.graphId || getGraphIdForCurve(targetCurve));
 
       setSavedCurves((prev) => {
@@ -4760,7 +4815,7 @@ const GraphCapture = () => {
             x_unit: editCurveMeta.xUnitPrefix,
             y_unit: editCurveMeta.yUnitPrefix,
             updatedAt: Date.now(),
-            locallyModified: true,
+            locallyModified: !xyConfirmedOnDiscoveree,
           };
         });
         const updatedGraphId = String(
@@ -5329,13 +5384,21 @@ const GraphCapture = () => {
             const dedupedFetched = dedupeCurves(fetched);
             console.log('[DEBUG] Total fetched curves:', fetched.length, 'after dedupe:', dedupedFetched.length);
             if (dedupedFetched.length > 0) {
-              console.log('[DEBUG] Setting savedCurves from DiscoverEE details:', dedupedFetched.length);
-              setSavedCurves(dedupedFetched);
-              setSavedCurvesSource('company');
+              const resolvedGraphIdForCurves = String(discovereeGraph.graph_id || graphId).trim();
+              const restoredBundle = buildRestoredSavedCurves({
+                graphId: resolvedGraphIdForCurves,
+                companyCurves: dedupedFetched,
+                graphImageUrl: graphImageUrl || '',
+              });
+              const curvesToUse = restoredBundle.curves;
+
+              console.log('[DEBUG] Setting savedCurves from DiscoverEE + persisted merge:', curvesToUse.length);
+              setSavedCurves(curvesToUse);
+              setSavedCurvesSource(restoredBundle.source);
               persistSavedCurves(
-                discovereeGraph.graph_id || graphId,
-                dedupedFetched,
-                'company'
+                resolvedGraphIdForCurves,
+                curvesToUse,
+                restoredBundle.source
               );
               activateAppendSession(discovereeGraph.graph_id, graphImageUrl, 'fetchGraphById');
 
@@ -5343,7 +5406,7 @@ const GraphCapture = () => {
                 setUploadedImageFromExistingGraph(graphImageUrl);
               }
 
-              applyDiscovereeGraphMetadataToConfig(discovereeGraph, resolvedGraphTitle, discovereeDetails[0], dedupedFetched);
+              applyDiscovereeGraphMetadataToConfig(discovereeGraph, resolvedGraphTitle, discovereeDetails[0], curvesToUse);
               return;
             }
           }
