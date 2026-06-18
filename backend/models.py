@@ -60,6 +60,14 @@ class Curve(Base):
         }
 
 
+class GraphImageMirror(Base):
+    __tablename__ = "graph_image_mirrors"
+
+    discoveree_graph_id = Column(String(64), primary_key=True, index=True)
+    graph_image = Column(Text().with_variant(mysql.LONGTEXT, "mysql"), nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class DataPoint(Base):
     __tablename__ = "data_points"
 

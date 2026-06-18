@@ -297,6 +297,7 @@ const collectGraphImageCandidates = ({
   restoredPending = '',
   localGraphImage = '',
   persistedGraphImage = '',
+  backendMirroredImage = '',
 } = {}) => {
   const ordered = [];
   const push = (value) => {
@@ -308,6 +309,7 @@ const collectGraphImageCandidates = ({
   };
 
   push(restoredPending);
+  push(backendMirroredImage);
 
   const graphFields = [
     graph?.graph_image,
@@ -985,6 +987,56 @@ const fetchAllLocalCurvesByGraphId = async (apiUrl, graphId) => {
   } catch (error) {
     console.warn('[DEBUG] Failed to fetch all local curves by graph:', error);
     return [];
+  }
+};
+
+const fetchMirroredGraphImageFromBackend = async (apiUrl, graphId) => {
+  const normalizedGraphId = String(graphId || '').trim();
+  if (!normalizedGraphId || !apiUrl) return '';
+
+  try {
+    const response = await fetch(
+      `${apiUrl}/api/graphs/${encodeURIComponent(normalizedGraphId)}/graph-image`
+    );
+    if (!response.ok) return '';
+    const data = await response.json().catch(() => ({}));
+    const normalized = normalizeImageCandidate(data?.graph_image || '');
+    return isEmbeddedGraphImage(normalized) ? normalized : '';
+  } catch (error) {
+    console.warn('[GRAPH_IMG_MIRROR] Failed to fetch mirrored graph image:', error);
+    return '';
+  }
+};
+
+const mirrorGraphImageToBackend = async (apiUrl, graphId, imageUrl, { localCurveId = null } = {}) => {
+  const normalizedGraphId = String(graphId || '').trim();
+  const normalizedImage = normalizeImageCandidate(imageUrl);
+  if (!apiUrl || !normalizedGraphId || !isEmbeddedGraphImage(normalizedImage)) return false;
+  if (normalizedImage.length > MAX_PERSISTED_GRAPH_IMAGE_CHARS) {
+    console.warn('[GRAPH_IMG_MIRROR] Skipping mirror — image exceeds size limit for graph_id:', normalizedGraphId);
+    return false;
+  }
+
+  try {
+    const response = await fetch(
+      `${apiUrl}/api/graphs/${encodeURIComponent(normalizedGraphId)}/graph-image`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          graph_image: normalizedImage,
+          ...(localCurveId ? { local_curve_id: Number(localCurveId) } : {}),
+        }),
+      }
+    );
+    if (!response.ok) {
+      console.warn('[GRAPH_IMG_MIRROR] Mirror PUT failed:', normalizedGraphId, response.status);
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.warn('[GRAPH_IMG_MIRROR] Mirror PUT error:', error);
+    return false;
   }
 };
 
@@ -3971,6 +4023,12 @@ const GraphCapture = () => {
   };
 
   const resolveReachableGraphImageUrl = async (graph = {}, details = [], graphId = '', extras = {}) => {
+    const backendMirroredImage =
+      extras.backendMirroredImage ??
+      (extras.fetchBackendMirror === false
+        ? ''
+        : await fetchMirroredGraphImageFromBackend(extras.apiUrl || '', graphId));
+
     const candidates = collectGraphImageCandidates({
       graph,
       details,
@@ -3978,6 +4036,7 @@ const GraphCapture = () => {
       restoredPending: extras.restoredPending ?? restoredPendingImageRef.current,
       localGraphImage: extras.localGraphImage ?? '',
       persistedGraphImage: extras.persistedGraphImage ?? getValidatedPersistedGraphImage(graphId),
+      backendMirroredImage,
     });
 
     return resolveFirstReachableImageUrl(candidates);
@@ -4801,6 +4860,12 @@ const GraphCapture = () => {
       throw new Error(result?.msg || 'Company API returned non-success status');
     }
 
+    void mirrorGraphImageToBackend(
+      apiUrl,
+      String(companyGraphId),
+      resolvedGraphImageForEdit || uploadedImage
+    );
+
     if (hasXyChanges && detailPayload.xy) {
       const sentXy = normalizeCompanyXyString(detailPayload.xy);
       const { details: verifyDetails } = await fetchCompanyGraphDetailsWithRetry(companyGraphId);
@@ -5355,7 +5420,7 @@ const GraphCapture = () => {
               discovereeGraph,
               discovereeDetails,
               resolvedGraphId,
-              { restoredPending: '' }
+              { restoredPending: '', apiUrl }
             );
             logGraphImageAvailability(resolvedGraphId, graphImageUrl, 'discoveree-success-with-details', {
               detailsCount: discovereeDetails.length,
@@ -5490,7 +5555,20 @@ const GraphCapture = () => {
             setGraphArea({ x: 0, y: 0, width: 0, height: 0 });
             setIsAxisMappingConfirmed(false);
             setFrozenGraphConfig(null);
-            activateAppendSession(resolvedGraphId, '', 'fetchGraphById-emptyDetails');
+
+            const emptyDetailsImageUrl = await resolveReachableGraphImageUrl(
+              discovereeGraph,
+              [],
+              String(resolvedGraphId),
+              { restoredPending: '', apiUrl }
+            );
+            activateAppendSession(resolvedGraphId, emptyDetailsImageUrl, 'fetchGraphById-emptyDetails');
+            if (emptyDetailsImageUrl) {
+              setUploadedImageFromExistingGraph(emptyDetailsImageUrl);
+              if (isEmbeddedGraphImage(emptyDetailsImageUrl)) {
+                persistGraphImage(String(resolvedGraphId), emptyDetailsImageUrl);
+              }
+            }
             setGraphLoadNotice('');
             setShouldSkipCaptureChoiceAfterAi(false);
 
@@ -5558,7 +5636,10 @@ const GraphCapture = () => {
       ].filter(Boolean);
 
       (async () => {
-        const resolvedSavedImage = await resolveFirstReachableImageUrl(autoLoadCandidates);
+        const backendMirroredImage = await fetchMirroredGraphImageFromBackend(apiUrl, graphId);
+        const resolvedSavedImage = await resolveFirstReachableImageUrl(
+          backendMirroredImage ? [backendMirroredImage, ...autoLoadCandidates] : autoLoadCandidates
+        );
 
         logGraphImageAvailability(graphId || firstCurve.graphId || getGraphIdForCurve(firstCurve), resolvedSavedImage, 'auto-load-graph-context', {
           firstCurveId: firstCurve.id,
@@ -6456,6 +6537,12 @@ const GraphCapture = () => {
         } else if (effectiveGraphImageUrl && isEmbeddedGraphImage(effectiveGraphImageUrl)) {
           persistGraphImage(companyGraphId, effectiveGraphImageUrl);
         }
+        void mirrorGraphImageToBackend(
+          apiUrl,
+          String(companyGraphId),
+          effectiveGraphImageUrl || uploadedImage,
+          { localCurveId: graphId }
+        );
       }
       console.log('Company Detail ID from API:', companyDetailId);
       console.log('=== GRAPH ID CONSISTENCY CHECK (SAVE) ===', {

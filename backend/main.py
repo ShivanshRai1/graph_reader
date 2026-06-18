@@ -4,8 +4,16 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from database import engine, get_db, Base
-from models import Curve, DataPoint
-from schemas import CurveCreate, CurveResponse, CurveUpdate, DataPointCreate, DataPointResponse
+from models import Curve, DataPoint, GraphImageMirror
+from schemas import (
+    CurveCreate,
+    CurveResponse,
+    CurveUpdate,
+    DataPointCreate,
+    DataPointResponse,
+    GraphImageMirrorUpsert,
+    GraphImageMirrorResponse,
+)
 import json
 import os
 import re
@@ -46,6 +54,60 @@ def ensure_optional_curve_columns():
 
 
 ensure_optional_curve_columns()
+
+MAX_GRAPH_IMAGE_MIRROR_CHARS = 1_500_000
+
+
+def normalize_mirror_graph_image(value: Optional[str]) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    lower = raw.lower()
+    if lower.startswith("data:") or lower.startswith("blob:"):
+        return raw
+    compact = raw.replace("\n", "").replace("\r", "").replace(" ", "")
+    if len(compact) > 200 and re.fullmatch(r"[A-Za-z0-9+/=]+", compact):
+        payload = compact.replace("data:image/png;base64,", "")
+        return f"data:image/png;base64,{payload}"
+    return ""
+
+
+def upsert_graph_image_mirror_record(db: Session, graph_id: str, graph_image: str) -> GraphImageMirror:
+    normalized_graph_id = str(graph_id or "").strip()
+    normalized_image = normalize_mirror_graph_image(graph_image)
+    if not normalized_graph_id or not normalized_image:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="graph_id and embeddable graph_image are required",
+        )
+    if len(normalized_image) > MAX_GRAPH_IMAGE_MIRROR_CHARS:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="graph_image exceeds mirror size limit",
+        )
+
+    mirror = (
+        db.query(GraphImageMirror)
+        .filter(GraphImageMirror.discoveree_graph_id == normalized_graph_id)
+        .first()
+    )
+    if mirror:
+        mirror.graph_image = normalized_image
+    else:
+        mirror = GraphImageMirror(
+            discoveree_graph_id=normalized_graph_id,
+            graph_image=normalized_image,
+        )
+        db.add(mirror)
+
+    db.query(Curve).filter(Curve.discoveree_graph_id == normalized_graph_id).update(
+        {Curve.graph_image: normalized_image},
+        synchronize_session=False,
+    )
+    db.commit()
+    db.refresh(mirror)
+    return mirror
+
 
 app = FastAPI(
     title="Graph Data Capture API",
@@ -446,6 +508,92 @@ def get_all_curves_by_graph_id(graph_id: str, db: Session = Depends(get_db)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error fetching curves: {str(e)}"
         )
+
+@app.get("/api/graphs/{graph_id}/graph-image", response_model=GraphImageMirrorResponse)
+def get_graph_image_mirror(graph_id: str, db: Session = Depends(get_db)):
+    """Return mirrored graph image for a DiscoverEE graph_id (cross-browser reload fallback)."""
+    normalized_graph_id = str(graph_id or "").strip()
+    if not normalized_graph_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="graph_id is required")
+
+    try:
+        mirror = (
+            db.query(GraphImageMirror)
+            .filter(GraphImageMirror.discoveree_graph_id == normalized_graph_id)
+            .first()
+        )
+        if mirror and normalize_mirror_graph_image(mirror.graph_image):
+            return GraphImageMirrorResponse(
+                graph_id=normalized_graph_id,
+                graph_image=normalize_mirror_graph_image(mirror.graph_image),
+                updated_at=mirror.updated_at,
+            )
+
+        curve = (
+            db.query(Curve)
+            .filter(Curve.discoveree_graph_id == normalized_graph_id)
+            .order_by(Curve.updated_at.desc(), Curve.id.desc())
+            .first()
+        )
+        normalized_image = normalize_mirror_graph_image(curve.graph_image if curve else "")
+        if normalized_image:
+            return GraphImageMirrorResponse(
+                graph_id=normalized_graph_id,
+                graph_image=normalized_image,
+                updated_at=curve.updated_at if curve else None,
+            )
+
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Mirrored graph image not found")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching mirrored graph image: {str(e)}",
+        )
+
+
+@app.put("/api/graphs/{graph_id}/graph-image", response_model=GraphImageMirrorResponse)
+def put_graph_image_mirror(
+    graph_id: str,
+    payload: GraphImageMirrorUpsert,
+    db: Session = Depends(get_db),
+):
+    """Store graph image keyed by DiscoverEE graph_id for reliable reload in any browser."""
+    normalized_graph_id = str(graph_id or "").strip()
+    if not normalized_graph_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="graph_id is required")
+
+    try:
+        mirror = upsert_graph_image_mirror_record(
+            db,
+            normalized_graph_id,
+            payload.graph_image,
+        )
+
+        local_curve_id = payload.local_curve_id
+        if local_curve_id:
+            curve = db.query(Curve).filter(Curve.id == local_curve_id).first()
+            if curve:
+                curve.discoveree_graph_id = normalized_graph_id
+                curve.graph_image = mirror.graph_image
+                db.commit()
+                db.refresh(mirror)
+
+        return GraphImageMirrorResponse(
+            graph_id=normalized_graph_id,
+            graph_image=mirror.graph_image,
+            updated_at=mirror.updated_at,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Error saving mirrored graph image: {str(e)}",
+        )
+
 
 @app.put("/api/curves/{curve_id}", response_model=CurveResponse)
 def update_curve(curve_id: int, curve_update: CurveUpdate, db: Session = Depends(get_db)):

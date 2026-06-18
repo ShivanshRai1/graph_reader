@@ -88,3 +88,15 @@ class CurveResponse(BaseModel):
 
 class CurveDetailResponse(CurveResponse):
     pass
+
+class GraphImageMirrorUpsert(BaseModel):
+    graph_image: str
+    local_curve_id: Optional[int] = None
+
+class GraphImageMirrorResponse(BaseModel):
+    graph_id: str
+    graph_image: str
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
