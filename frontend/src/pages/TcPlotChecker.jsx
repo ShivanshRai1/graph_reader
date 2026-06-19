@@ -5,11 +5,11 @@ import {
   downloadHtmlFragmentAsPng,
   downloadPanelAsPng,
 } from '../utils/downloadPng';
+import { readComparisonCurveFile } from '../utils/curveComparisonImport';
 import {
   compareTypicalCurveFiles,
   computeDiscoverEeAnalogRms,
   prefixTypicalCurveCurves,
-  readTypicalCurveFile,
 } from '../utils/tcImport';
 
 const PNG_EXPORT_SCALE = 2;
@@ -55,8 +55,9 @@ const SHOW_ACCURACY_TABLE = false;
 const SHOW_LAYOUT_OPTIONS = false;
 
 const LABEL_GRAPH_IMAGE = 'graph image from datasheet';
-const LABEL_ANALOG_REFERENCE = 'Analog reference.tc';
-const LABEL_DISCOVEREE = 'DiscoverEE Approach.tc';
+const LABEL_REFERENCE = 'Reference export (optional)';
+const LABEL_CAPTURED = 'Captured export (.tc, .csv, .json, .jsonld)';
+const COMPARISON_FILE_ACCEPT = '.tc,.csv,.json,.jsonld,application/json,text/csv';
 
 const imagePanelStyle = {
   flex: '0 1 520px',
@@ -94,6 +95,7 @@ const TcPlotChecker = () => {
   const [layoutMode, setLayoutMode] = useState(LAYOUT_TRIPLE);
   const [pasteZoneFocused, setPasteZoneFocused] = useState(false);
   const [pasteZoneHovered, setPasteZoneHovered] = useState(false);
+  const [pendingPlotPick, setPendingPlotPick] = useState(null);
   const imageUrlRef = useRef(null);
   const pasteZoneRef = useRef(null);
   const comparisonWorkspaceRef = useRef(null);
@@ -127,16 +129,39 @@ const TcPlotChecker = () => {
 
   useEffect(() => () => revokeImageUrl(), [revokeImageUrl]);
 
-  const loadFile = async (file, slot) => {
+  const applyParsedFile = (slot, fileName, parsed) => {
+    const payload = { name: fileName, parsed };
+    if (slot === 'reference') setReference(payload);
+    else setCandidate(payload);
+  };
+
+  const loadFile = async (file, slot, selectedPlotId = null) => {
     if (!file) return;
     setError('');
     try {
-      const parsed = await readTypicalCurveFile(file);
-      if (slot === 'reference') setReference({ name: file.name, parsed });
-      else setCandidate({ name: file.name, parsed });
+      const result = await readComparisonCurveFile(file, selectedPlotId);
+      if (result.type === 'plotSelection') {
+        setPendingPlotPick({
+          slot,
+          fileName: file.name,
+          plots: result.plots,
+        });
+        return;
+      }
+      setPendingPlotPick(null);
+      applyParsedFile(slot, file.name, result.parsed);
     } catch (err) {
-      setError(err.message || 'Failed to parse .tc file.');
+      setError(err.message || 'Failed to parse file.');
     }
+  };
+
+  const handlePlotSelection = (plotId) => {
+    if (!pendingPlotPick || !plotId) return;
+    const selected = pendingPlotPick.plots.find((plot) => plot.id === plotId);
+    if (!selected) return;
+    setError('');
+    applyParsedFile(pendingPlotPick.slot, pendingPlotPick.fileName, selected.parsed);
+    setPendingPlotPick(null);
   };
 
   const loadImageFile = (file) => {
@@ -183,10 +208,10 @@ const TcPlotChecker = () => {
   const overlayCurves = useMemo(() => {
     const curves = [];
     if (reference?.parsed) {
-      curves.push(...prefixTypicalCurveCurves(reference.parsed, 'Analog reference'));
+      curves.push(...prefixTypicalCurveCurves(reference.parsed, 'Reference'));
     }
     if (candidate?.parsed) {
-      curves.push(...prefixTypicalCurveCurves(candidate.parsed, 'DiscoverEE Approach'));
+      curves.push(...prefixTypicalCurveCurves(candidate.parsed, 'Captured'));
     }
     return curves;
   }, [reference, candidate]);
@@ -207,7 +232,7 @@ const TcPlotChecker = () => {
     if (!reference?.parsed?.config) return null;
     return {
       ...reference.parsed.config,
-      graphTitle: reference.parsed.config.graphTitle || LABEL_ANALOG_REFERENCE,
+      graphTitle: reference.parsed.config.graphTitle || LABEL_REFERENCE,
     };
   }, [reference]);
 
@@ -215,7 +240,7 @@ const TcPlotChecker = () => {
     if (!candidate?.parsed?.config) return null;
     return {
       ...candidate.parsed.config,
-      graphTitle: candidate.parsed.config.graphTitle || LABEL_DISCOVEREE,
+      graphTitle: candidate.parsed.config.graphTitle || LABEL_CAPTURED,
     };
   }, [candidate]);
 
@@ -285,13 +310,13 @@ const TcPlotChecker = () => {
       }
       options.push({
         id: LAYOUT_IMAGE_OVERLAY,
-        label: canComparePlots ? 'Original + overlaid .tc' : 'Original + .tc chart',
+        label: canComparePlots ? 'Original + overlaid plots' : 'Original + captured plot',
       });
       if (canComparePlots) {
-        options.push({ id: LAYOUT_IMAGE_TC_SPLIT, label: 'Original + .tc side by side' });
+        options.push({ id: LAYOUT_IMAGE_TC_SPLIT, label: 'Original + plots side by side' });
       }
     } else if (canComparePlots) {
-      options.push({ id: LAYOUT_OVERLAY, label: 'Overlaid .tc only' });
+      options.push({ id: LAYOUT_OVERLAY, label: 'Overlaid plots only' });
       options.push({ id: LAYOUT_TC_SPLIT, label: 'Reference | export only' });
     }
     return options;
@@ -395,8 +420,8 @@ const TcPlotChecker = () => {
       {candidate?.parsed && candidatePlotConfig && (
         <div ref={withExport ? panelDiscovereeRef : null}>
           {renderPanelHeader(
-            LABEL_DISCOVEREE,
-            withExport ? () => handlePanelPngDownload(panelDiscovereeRef, 'discoveree') : null
+            LABEL_CAPTURED,
+            withExport ? () => handlePanelPngDownload(panelDiscovereeRef, 'captured') : null
           )}
           <SavedGraphCombinedPreview
             curves={candidate.parsed.curves}
@@ -410,8 +435,8 @@ const TcPlotChecker = () => {
       {reference?.parsed && referencePlotConfig && (
         <div ref={withExport ? panelAnalogRef : null}>
           {renderPanelHeader(
-            LABEL_ANALOG_REFERENCE,
-            withExport ? () => handlePanelPngDownload(panelAnalogRef, 'analog-reference') : null
+            LABEL_REFERENCE,
+            withExport ? () => handlePanelPngDownload(panelAnalogRef, 'reference') : null
           )}
           <SavedGraphCombinedPreview
             curves={reference.parsed.curves}
@@ -428,6 +453,35 @@ const TcPlotChecker = () => {
   const renderComparisonWorkspace = () => {
     if (!hasPlot && !hasImage) return null;
 
+    if (hasImage && candidate?.parsed && !canComparePlots) {
+      return (
+        <div
+          ref={comparisonWorkspaceRef}
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(2, minmax(320px, 1fr))',
+            gap: 20,
+            width: '100%',
+            alignItems: 'start',
+          }}
+        >
+          {renderOriginalImage(true)}
+          <div ref={panelDiscovereeRef}>
+            {renderPanelHeader(LABEL_CAPTURED, () =>
+              handlePanelPngDownload(panelDiscovereeRef, 'captured')
+            )}
+            <SavedGraphCombinedPreview
+              curves={candidate.parsed.curves}
+              config={candidatePlotConfig}
+              width={chartWidth}
+              height={chartHeight}
+              sortByX={sortByX}
+            />
+          </div>
+        </div>
+      );
+    }
+
     if (hasImage && canComparePlots) {
       return (
         <div
@@ -443,8 +497,8 @@ const TcPlotChecker = () => {
           {renderOriginalImage(true)}
           {candidate?.parsed && candidatePlotConfig && (
             <div ref={panelDiscovereeRef}>
-              {renderPanelHeader(LABEL_DISCOVEREE, () =>
-                handlePanelPngDownload(panelDiscovereeRef, 'discoveree')
+              {renderPanelHeader(LABEL_CAPTURED, () =>
+                handlePanelPngDownload(panelDiscovereeRef, 'captured')
               )}
               <SavedGraphCombinedPreview
                 curves={candidate.parsed.curves}
@@ -457,8 +511,8 @@ const TcPlotChecker = () => {
           )}
           {reference?.parsed && referencePlotConfig && (
             <div ref={panelAnalogRef}>
-              {renderPanelHeader(LABEL_ANALOG_REFERENCE, () =>
-                handlePanelPngDownload(panelAnalogRef, 'analog-reference')
+              {renderPanelHeader(LABEL_REFERENCE, () =>
+                handlePanelPngDownload(panelAnalogRef, 'reference')
               )}
               <SavedGraphCombinedPreview
                 curves={reference.parsed.curves}
@@ -541,10 +595,10 @@ const TcPlotChecker = () => {
     <div className="w-full min-h-screen" style={{ backgroundColor: '#f8fafc' }}>
       <div style={panelStyle}>
         <header style={{ marginBottom: 20 }}>
-          <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>.tc plot checker</h1>
+          <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>Plot checker</h1>
           <p style={{ marginTop: 8, color: '#475569', lineHeight: 1.5 }}>
-            Compare the original datasheet figure with reference and exported .tc files.
-            Open this page with{' '}
+            Cross-check captured graph data against the original datasheet figure.
+            Supports .tc, .csv, .json, and .jsonld files. Open this page with{' '}
             <code style={{ fontSize: 13 }}>?view=tc-checker</code>
             {' '}on your Graph Capture URL.
           </p>
@@ -598,10 +652,10 @@ const TcPlotChecker = () => {
           </label>
 
           <label style={cardStyle}>
-            <strong>{LABEL_DISCOVEREE}</strong>
+            <strong>{LABEL_CAPTURED}</strong>
             <input
               type="file"
-              accept=".tc,application/json"
+              accept={COMPARISON_FILE_ACCEPT}
               style={fileInputStyle}
               onChange={(event) => {
                 const file = event.target.files?.[0];
@@ -617,10 +671,10 @@ const TcPlotChecker = () => {
           </label>
 
           <label style={cardStyle}>
-            <strong>{LABEL_ANALOG_REFERENCE}</strong> (optional)
+            <strong>{LABEL_REFERENCE}</strong>
             <input
               type="file"
-              accept=".tc,application/json"
+              accept={COMPARISON_FILE_ACCEPT}
               style={fileInputStyle}
               onChange={(event) => {
                 const file = event.target.files?.[0];
@@ -635,6 +689,46 @@ const TcPlotChecker = () => {
             )}
           </label>
         </div>
+
+        {pendingPlotPick && (
+          <div style={{ ...cardStyle, marginBottom: 16 }}>
+            <p style={{ margin: '0 0 8px', fontSize: 14, color: '#334155' }}>
+              <strong>{pendingPlotPick.fileName}</strong> contains multiple plots. Choose one for{' '}
+              {pendingPlotPick.slot === 'reference' ? 'reference' : 'captured'} export:
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
+              <select
+                id="jsonld-plot-picker"
+                defaultValue=""
+                style={{ minWidth: 280, fontSize: 14, padding: '6px 8px' }}
+                onChange={(event) => handlePlotSelection(event.target.value)}
+              >
+                <option value="" disabled>
+                  Select a plot…
+                </option>
+                {pendingPlotPick.plots.map((plot) => (
+                  <option key={plot.id} value={plot.id}>
+                    {plot.label}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setPendingPlotPick(null)}
+                style={{
+                  border: 'none',
+                  background: 'none',
+                  color: '#2563eb',
+                  cursor: 'pointer',
+                  fontSize: 13,
+                  padding: 0,
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
 
         <div
           ref={pasteZoneRef}
@@ -771,7 +865,7 @@ const TcPlotChecker = () => {
               }}
             >
               <h2 style={{ fontSize: 16, margin: 0 }}>
-                RMS — DiscoverEE Approach vs Analog reference
+                RMS — captured vs reference
               </h2>
               <button type="button" style={downloadBtnStyle} onClick={handleRmsPngDownload}>
                 Download RMS PNG
@@ -870,7 +964,9 @@ const TcPlotChecker = () => {
         )}
 
         {!hasPlot && !hasImage && !error && (
-          <p style={{ color: '#64748b' }}>Upload an image and/or at least one .tc file to begin.</p>
+          <p style={{ color: '#64748b' }}>
+            Upload an image and/or at least one captured file (.tc, .csv, .json, .jsonld) to begin.
+          </p>
         )}
       </div>
     </div>
