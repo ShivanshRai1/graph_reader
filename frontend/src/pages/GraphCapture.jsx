@@ -800,6 +800,33 @@ const getCurveMergeKey = (curve) => {
   return `n:${graphId}:${name}`;
 };
 
+const normalizeCurveTitleKey = (title = '') =>
+  String(title || '').trim().toLowerCase().replace(/\s+/g, '');
+
+const getCurveDetailIdNumber = (curve) =>
+  Number(String(curve?.detailId || curve?.detail_id || '').trim() || 0);
+
+const dedupeCompanyApiDetailsByTitle = (details = []) => {
+  const bestByTitle = new Map();
+  const withoutTitle = [];
+
+  (Array.isArray(details) ? details : []).forEach((detail) => {
+    const titleKey = normalizeCurveTitleKey(detail?.curve_title);
+    if (!titleKey) {
+      withoutTitle.push(detail);
+      return;
+    }
+    const existing = bestByTitle.get(titleKey);
+    const existingId = Number(existing?.id || 0);
+    const candidateId = Number(detail?.id || 0);
+    if (!existing || candidateId >= existingId) {
+      bestByTitle.set(titleKey, detail);
+    }
+  });
+
+  return [...withoutTitle, ...Array.from(bestByTitle.values())];
+};
+
 const shouldReplaceMergedCurve = (existing, candidate) => {
   if (!existing) return true;
   if (candidate?.locallyModified && !existing?.locallyModified) return true;
@@ -809,6 +836,11 @@ const shouldReplaceMergedCurve = (existing, candidate) => {
   const candidateTs = Number(candidate?.updatedAt || 0);
   if (candidateTs > existingTs) return true;
   if (candidateTs < existingTs) return false;
+
+  const existingDetailId = getCurveDetailIdNumber(existing);
+  const candidateDetailId = getCurveDetailIdNumber(candidate);
+  if (candidateDetailId > existingDetailId) return true;
+  if (candidateDetailId < existingDetailId) return false;
 
   if (candidate?.locallyModified) return true;
 
@@ -4441,6 +4473,26 @@ const GraphCapture = () => {
       }))
       .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
 
+  const getEditCurveDataPoints = (curve, points = dataPoints) => {
+    const curveKeys = new Set(
+      [curve?.id, curve?.detailId, curve?.detail_id]
+        .map((value) => String(value || '').trim())
+        .filter(Boolean)
+    );
+    const allPoints = Array.isArray(points) ? points : [];
+    if (curveKeys.size === 0) {
+      return allPoints;
+    }
+    const hasOverlayIds = allPoints.some((point) => point?.overlayCurveId);
+    if (!hasOverlayIds) {
+      return allPoints;
+    }
+    return allPoints.filter((point) => {
+      const overlayId = String(point?.overlayCurveId || '').trim();
+      return !overlayId || curveKeys.has(overlayId);
+    });
+  };
+
   const havePointsChanged = (originalPoints = [], nextPoints = []) => {
     if (originalPoints.length !== nextPoints.length) {
       return true;
@@ -4746,7 +4798,7 @@ const GraphCapture = () => {
     );
     const tctjValue = nextSymbolPayload.legacyTctjValue;
     const currentPoints = normalizePointsForComparison(curve?.points);
-    const nextPoints = normalizePointsForComparison(dataPoints);
+    const nextPoints = normalizePointsForComparison(getEditCurveDataPoints(curve, dataPoints));
     const currentMeta = {
       xScale: curve.config?.xScale || curve.x_scale || 'Linear',
       yScale: curve.config?.yScale || curve.y_scale || 'Linear',
@@ -4926,19 +4978,32 @@ const GraphCapture = () => {
       appendPayload.graph[key] = value;
     });
 
+    const { details: preRemoveDetails } = await fetchCompanyGraphDetailsWithRetry(companyGraphId);
+    const titleKey = normalizeCurveTitleKey(resolvedNewCurveName);
+    const detailIdsToRemove = new Set([resolvedDetailId]);
+    if (titleKey) {
+      preRemoveDetails.forEach((detail) => {
+        if (normalizeCurveTitleKey(detail?.curve_title) === titleKey && detail?.id) {
+          detailIdsToRemove.add(String(detail.id));
+        }
+      });
+    }
+
     console.log('=== EDIT REMOVE-AND-RESAVE ===', {
       step: 'remove',
       graphId: companyGraphId,
-      detailId: resolvedDetailId,
+      detailIdsToRemove: Array.from(detailIdsToRemove),
     });
     try {
-      await removeCompanyDetailFromDiscoveree({
-        graphId: companyGraphId,
-        detailId: resolvedDetailId,
-        discovereeCatId: String(curve?.discoveree_cat_id || urlParams.discoveree_cat_id || ''),
-        testuserId: String(curve?.testuser_id || urlParams.testuser_id || ''),
-        corsFallback: triggerGetWithoutCors,
-      });
+      for (const detailIdToRemove of detailIdsToRemove) {
+        await removeCompanyDetailFromDiscoveree({
+          graphId: companyGraphId,
+          detailId: detailIdToRemove,
+          discovereeCatId: String(curve?.discoveree_cat_id || urlParams.discoveree_cat_id || ''),
+          testuserId: String(curve?.testuser_id || urlParams.testuser_id || ''),
+          corsFallback: triggerGetWithoutCors,
+        });
+      }
     } catch (removeError) {
       throw new Error(`Failed to remove old curve before save: ${removeError.message}`);
     }
@@ -5038,7 +5103,7 @@ const GraphCapture = () => {
                 }
               : {}),
             name: updatedName,
-            points: normalizePointsForComparison(dataPoints).map((point) => ({
+            points: normalizePointsForComparison(getEditCurveDataPoints(targetCurve, dataPoints)).map((point) => ({
               x_value: point.x,
               y_value: point.y,
             })),
@@ -5466,7 +5531,7 @@ const GraphCapture = () => {
           console.log('[DEBUG] DiscoverEE response:', result);
 
           const discovereeGraph = result?.graph && !Array.isArray(result.graph) ? result.graph : null;
-          const discovereeDetails = parseCompanyApiDetails(result);
+          const discovereeDetails = dedupeCompanyApiDetailsByTitle(parseCompanyApiDetails(result));
 
           if (result.status === 'success' && discovereeGraph && discovereeDetails.length > 0) {
             setGraphLoadNotice('');
@@ -5543,6 +5608,9 @@ const GraphCapture = () => {
                 testuser_id: searchParams.get('testuser_id') || '',
                 name: resolvedCurveTitle || resolvedGraphTitle || `Curve ${i + 1}`,
                 points,
+                updatedAt: detail.ins_date
+                  ? Date.parse(String(detail.ins_date).replace(' ', 'T'))
+                  : Number(detail.id || 0),
                 x_min: resolvedXMin,
                 x_max: resolvedXMax,
                 y_min: resolvedYMin,
@@ -7179,7 +7247,10 @@ const GraphCapture = () => {
                                 {curve.config?.curveName || curve.curve_name || curve.name || `Curve #${curve.id}`}
                               </div>
                               <div className="text-xs mb-1">
-                                Points: {curve.points?.length ?? curve.data_points?.length ?? 0}
+                                Points:{' '}
+                                {editingCurveId === curve.id
+                                  ? normalizePointsForComparison(getEditCurveDataPoints(curve, dataPoints)).length
+                                  : (curve.points?.length ?? curve.data_points?.length ?? 0)}
                               </div>
                               <div className="text-xs mb-2 text-gray-700">
                                 X unit: {getUnitLabel(curve.config?.xUnitPrefix || curve.x_unit) || '-'} | Y unit: {getUnitLabel(curve.config?.yUnitPrefix || curve.y_unit) || '-'}<br />
