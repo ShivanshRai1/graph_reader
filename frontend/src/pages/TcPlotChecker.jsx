@@ -409,6 +409,7 @@ const TcPlotChecker = () => {
       width={chartWidth}
       height={chartHeight}
       sortByX={sortByX}
+      fullLegendLabels
     />
   );
 
@@ -547,7 +548,7 @@ const TcPlotChecker = () => {
           <div style={{ flex: '1 1 640px', minWidth: 360 }}>
             {isOverlayLayout && (
               <div ref={panelDiscovereeRef}>
-                {renderPanelHeader('Reference + export (overlaid)', () =>
+                {renderPanelHeader('Reference + captured', () =>
                   handlePanelPngDownload(panelDiscovereeRef, 'overlay')
                 )}
                 {renderOverlayChart()}
@@ -579,7 +580,7 @@ const TcPlotChecker = () => {
             </p>
           )}
           <div ref={panelDiscovereeRef}>
-            {renderPanelHeader('Reference + export (overlaid)', () =>
+            {renderPanelHeader('Reference + captured', () =>
               handlePanelPngDownload(panelDiscovereeRef, 'overlay')
             )}
             {renderOverlayChart()}

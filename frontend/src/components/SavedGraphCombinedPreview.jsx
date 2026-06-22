@@ -139,13 +139,16 @@ const LEGEND_ROW_HEIGHT = 17;
 const LEGEND_SWATCH_WIDTH = 22;
 const LEGEND_TEXT_OFFSET = 28;
 
-const buildLegendLayout = (curves, plotRight, plotBottom) => {
+const buildLegendLayout = (curves, plotRight, plotBottom, fullLegendLabels = false) => {
   const entries = curves.map((curve) => ({
     id: curve.id,
     curveName: curve.curveName,
     curveLabel: curve.label,
     color: curve.color,
-    label: shortCurveLabel(curve.curveName || curve.label),
+    lineDash: curve.lineDash,
+    label: fullLegendLabels
+      ? String(curve.curveName || curve.label || '-').trim()
+      : shortCurveLabel(curve.curveName || curve.label),
   }));
   const maxLabelWidth = Math.max(
     ...entries.map((entry) => entry.label.length * 5.8),
@@ -158,7 +161,7 @@ const buildLegendLayout = (curves, plotRight, plotBottom) => {
   return { entries, boxX, boxY, boxWidth, boxHeight };
 };
 
-const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260, sortByX = false }) => {
+const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260, sortByX = false, fullLegendLabels = false }) => {
   const [hoveredPoint, setHoveredPoint] = useState(null);
   const polylineRefs = useRef([]);
   const [pathLengths, setPathLengths] = useState([]);
@@ -251,6 +254,7 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260, 
         xLabel: curveXLabel,
         yLabel: curveYLabel,
         color: palette[curveIndex % palette.length],
+        lineDash: curve?.lineDash,
         logModeX: curveLogModeX,
         logModeY: curveLogModeY,
         points: plottedPoints,
@@ -389,8 +393,8 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260, 
     if (curveSvgData.length < 2) return null;
     const plotRight = padding.left + drawableWidth;
     const plotBottom = padding.top + drawableHeight;
-    return buildLegendLayout(curveSvgData, plotRight, plotBottom);
-  }, [curveSvgData, padding, drawableWidth, drawableHeight]);
+    return buildLegendLayout(curveSvgData, plotRight, plotBottom, fullLegendLabels);
+  }, [curveSvgData, padding, drawableWidth, drawableHeight, fullLegendLabels]);
 
   const tooltipLayout = useMemo(() => {
     if (!hoveredPoint) return null;
@@ -541,14 +545,17 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260, 
           fill="none"
           stroke={curve.color}
           strokeWidth="2"
+          strokeDasharray={curve.lineDash || undefined}
           style={
-            pathLengths[index]
-              ? {
-                  strokeDasharray: pathLengths[index],
-                  strokeDashoffset: pathLengths[index],
-                  animation: 'savedGraphLine 1s ease forwards',
-                }
-              : undefined
+            curve.lineDash
+              ? undefined
+              : pathLengths[index]
+                ? {
+                    strokeDasharray: pathLengths[index],
+                    strokeDashoffset: pathLengths[index],
+                    animation: 'savedGraphLine 1s ease forwards',
+                  }
+                : undefined
           }
         />
       ))}
@@ -557,7 +564,15 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260, 
         curve.points.map((point) => (
           <g key={`${curve.id}-${point.x}-${point.y}`}>
             <circle cx={point.svgX} cy={point.svgY} r={7} fill="transparent" pointerEvents="none" />
-            <circle cx={point.svgX} cy={point.svgY} r={3} fill={curve.color} pointerEvents="none" />
+            <circle
+              cx={point.svgX}
+              cy={point.svgY}
+              r={curve.lineDash ? 3.5 : 3}
+              fill={curve.lineDash ? '#ffffff' : curve.color}
+              stroke={curve.color}
+              strokeWidth={curve.lineDash ? 2 : 0}
+              pointerEvents="none"
+            />
           </g>
         ))
       )}
@@ -589,6 +604,7 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260, 
                   stroke={entry.color}
                   strokeWidth={isActive ? 3 : 2}
                   strokeLinecap="round"
+                  strokeDasharray={entry.lineDash || undefined}
                 />
                 <text
                   x={legendLayout.boxX + LEGEND_TEXT_OFFSET}

@@ -7608,7 +7608,7 @@ const GraphCapture = () => {
                       }}
                       title="DiscoverEE Approach and Analog Reference"
                     >
-                      Check .tc
+                      Check
                     </a>
                   </div>
                   <div className="flex flex-col gap-4 max-h-80 overflow-y-auto pr-2">

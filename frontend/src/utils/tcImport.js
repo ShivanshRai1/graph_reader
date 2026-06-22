@@ -354,6 +354,7 @@ export const prefixTypicalCurveCurves = (parsed, prefix) =>
     ...curve,
     id: `${prefix}-${curve.id ?? index}`,
     name: `${prefix}: ${curve.name}`,
+    lineDash: prefix === 'Reference' ? '10,6' : undefined,
     config: {
       ...curve.config,
       curveName: `${prefix}: ${curve.name}`,
