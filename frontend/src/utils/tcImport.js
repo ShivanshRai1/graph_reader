@@ -294,8 +294,8 @@ const formatRmsSeriesLabel = (candidateName, referenceName) => {
 };
 
 /**
- * RMS per supervisor spec: sqrt( sum(y²_discoveree - y²_analog) / (xmax - xmin) )
- * at each reference X where DiscoverEE Y can be interpolated.
+ * RMS per series: sqrt( sum(y²_captured - y²_reference) / (xmax - xmin) )
+ * at each reference X where captured Y can be interpolated.
  */
 export const computeDiscoverEeAnalogRms = (referenceParsed, candidateParsed) => {
   const { pairs, usedRef, usedCand, refCurves, candCurves } = pairCurvesForRms(

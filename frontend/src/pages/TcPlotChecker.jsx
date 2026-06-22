@@ -52,7 +52,7 @@ const LAYOUT_TRIPLE = 'triple';
 const SHOW_ACCURACY_TABLE = false;
 
 /** Set true to show layout radio buttons (default layout stays LAYOUT_TRIPLE) */
-const SHOW_LAYOUT_OPTIONS = false;
+const SHOW_LAYOUT_OPTIONS = true;
 
 const LABEL_GRAPH_IMAGE = 'graph image from datasheet';
 const LABEL_REFERENCE = 'Reference export (optional)';
@@ -306,18 +306,15 @@ const TcPlotChecker = () => {
     const options = [];
     if (hasImage && hasPlot) {
       if (canComparePlots) {
-        options.push({ id: LAYOUT_TRIPLE, label: 'All three side by side' });
-      }
-      options.push({
-        id: LAYOUT_IMAGE_OVERLAY,
-        label: canComparePlots ? 'Original + overlaid plots' : 'Original + captured plot',
-      });
-      if (canComparePlots) {
-        options.push({ id: LAYOUT_IMAGE_TC_SPLIT, label: 'Original + plots side by side' });
+        options.push({ id: LAYOUT_TRIPLE, label: 'Side by side (image | captured | reference)' });
+        options.push({ id: LAYOUT_IMAGE_OVERLAY, label: 'Overlay (image + captured & reference on one plot)' });
+        options.push({ id: LAYOUT_IMAGE_TC_SPLIT, label: 'Image + captured | reference' });
+      } else {
+        options.push({ id: LAYOUT_IMAGE_OVERLAY, label: 'Side by side (image | captured)' });
       }
     } else if (canComparePlots) {
-      options.push({ id: LAYOUT_OVERLAY, label: 'Overlaid plots only' });
-      options.push({ id: LAYOUT_TC_SPLIT, label: 'Reference | export only' });
+      options.push({ id: LAYOUT_TC_SPLIT, label: 'Side by side (captured | reference)' });
+      options.push({ id: LAYOUT_OVERLAY, label: 'Overlay (captured & reference on one plot)' });
     }
     return options;
   }, [hasImage, hasPlot, canComparePlots]);
@@ -329,13 +326,6 @@ const TcPlotChecker = () => {
       setLayoutMode(layoutOptions[0].id);
     }
   }, [layoutOptions, layoutMode]);
-
-  // Always use three-panel view when image + both .tc files are loaded (layout radios hidden).
-  useEffect(() => {
-    if (hasImage && canComparePlots) {
-      setLayoutMode(LAYOUT_TRIPLE);
-    }
-  }, [hasImage, canComparePlots]);
 
   const showImageInComparison = hasImage && (
     layoutMode === LAYOUT_IMAGE_OVERLAY ||
@@ -482,7 +472,7 @@ const TcPlotChecker = () => {
       );
     }
 
-    if (hasImage && canComparePlots) {
+    if (hasImage && canComparePlots && layoutMode === LAYOUT_TRIPLE) {
       return (
         <div
           ref={comparisonWorkspaceRef}
@@ -873,7 +863,7 @@ const TcPlotChecker = () => {
             </div>
             <div ref={rmsExportRef}>
               <p style={{ margin: '0 0 12px', fontSize: 13, color: '#64748b' }}>
-                Per series at reference X: sqrt( sum(y² DiscoverEE − y² Analog) / (xmax − xmin) )
+                Per series at reference X: sqrt( sum(y²<sub>captured</sub> − y²<sub>reference</sub>) / (xmax − xmin) )
               </p>
               {Number.isFinite(rmsComparison.overallRms) && (
                 <p style={{ margin: '0 0 12px', fontSize: 14 }}>
