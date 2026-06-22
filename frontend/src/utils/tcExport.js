@@ -633,3 +633,138 @@ export const downloadTypicalCurveFile = (filename, tcObject) => {
   window.URL.revokeObjectURL(url);
   document.body.removeChild(anchor);
 };
+
+const formatSavedCurveExportValue = (value) => {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return '';
+  if (Math.abs(num) > 0 && Math.abs(num) < 0.0001) {
+    return num.toExponential(4);
+  }
+  return String(num);
+};
+
+const getSavedCurveExportPoints = (curve = {}) =>
+  (Array.isArray(curve?.points) ? curve.points : Array.isArray(curve?.data_points) ? curve.data_points : [])
+    .map((point) => ({
+      x: Number(point?.x_value ?? point?.x),
+      y: Number(point?.y_value ?? point?.y),
+    }))
+    .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
+
+const buildSavedCurveExportMetadata = (curve, graphConfig = {}, options = {}) => {
+  const exportConfig = resolveExportGraphConfig([curve], graphConfig, options);
+  return {
+    graphTitle: exportConfig.graphTitle || '',
+    curveName: exportConfig.curveName || '',
+    xScale: exportConfig.xScale || 'Linear',
+    yScale: exportConfig.yScale || 'Linear',
+    xUnitPrefix: exportConfig.xUnitPrefix || '1',
+    yUnitPrefix: exportConfig.yUnitPrefix || '1',
+    xMin: formatSavedCurveExportValue(exportConfig.xMin),
+    xMax: formatSavedCurveExportValue(exportConfig.xMax),
+    yMin: formatSavedCurveExportValue(exportConfig.yMin),
+    yMax: formatSavedCurveExportValue(exportConfig.yMax),
+    temperature: exportConfig.temperature || '',
+    exportedAt: new Date().toISOString(),
+  };
+};
+
+export const buildSavedCurveCsvExport = (curve, graphConfig = {}, options = {}) => {
+  const points = getSavedCurveExportPoints(curve);
+  if (points.length === 0) {
+    throw new Error('No points to export.');
+  }
+
+  const meta = buildSavedCurveExportMetadata(curve, graphConfig, options);
+  const metaRows = [
+    ['# Graph Title', meta.graphTitle],
+    ['# Curve Name', meta.curveName],
+    ['# X Scale', meta.xScale],
+    ['# Y Scale', meta.yScale],
+    ['# X Unit Prefix', meta.xUnitPrefix],
+    ['# Y Unit Prefix', meta.yUnitPrefix],
+    ['# X Min', meta.xMin],
+    ['# X Max', meta.xMax],
+    ['# Y Min', meta.yMin],
+    ['# Y Max', meta.yMax],
+    ['# Temperature', meta.temperature],
+    ['# Exported At', meta.exportedAt],
+    [''],
+  ];
+  const header = ['#', 'X', 'Y'];
+  const rows = points.map((point, index) => [
+    String(index + 1),
+    formatSavedCurveExportValue(point.x),
+    formatSavedCurveExportValue(point.y),
+  ]);
+
+  return [...metaRows, header, ...rows].map((row) => row.join(',')).join('\n');
+};
+
+export const buildSavedCurveJsonExport = (curve, graphConfig = {}, options = {}) => {
+  const points = getSavedCurveExportPoints(curve);
+  if (points.length === 0) {
+    throw new Error('No points to export.');
+  }
+
+  const metadata = buildSavedCurveExportMetadata(curve, graphConfig, options);
+  return JSON.stringify(
+    {
+      metadata,
+      points: points.map((point, index) => ({
+        index: index + 1,
+        x: formatSavedCurveExportValue(point.x),
+        y: formatSavedCurveExportValue(point.y),
+      })),
+    },
+    null,
+    2
+  );
+};
+
+export const buildSavedCurveComparisonFilename = (curve, graphConfig = {}, options = {}, extension = 'csv') => {
+  const exportConfig = resolveExportGraphConfig([curve], graphConfig, options);
+  const graphName = sanitizeFilenamePart(exportConfig.graphTitle || 'graph');
+  const curveName = sanitizeFilenamePart(exportConfig.curveName || 'curve');
+  const safeExtension = String(extension || 'csv').replace(/^\./, '');
+  return `${graphName}-${curveName}.${safeExtension}`;
+};
+
+export const downloadTextExportFile = (filename, content, mimeType = 'text/plain;charset=utf-8;') => {
+  const blob = new Blob([content], { type: mimeType });
+  const url = window.URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.style.visibility = 'hidden';
+  document.body.appendChild(anchor);
+  anchor.click();
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(anchor);
+};
+
+export const exportSavedCurvesToCsv = (curves = [], graphConfig = {}, options = {}) => {
+  const curveList = Array.isArray(curves) ? curves.filter(Boolean) : [];
+  if (curveList.length === 0) {
+    throw new Error('No saved curves to export.');
+  }
+
+  curveList.forEach((curve) => {
+    const csvContent = buildSavedCurveCsvExport(curve, graphConfig, options);
+    const filename = buildSavedCurveComparisonFilename(curve, graphConfig, options, 'csv');
+    downloadTextExportFile(filename, csvContent, 'text/csv;charset=utf-8;');
+  });
+};
+
+export const exportSavedCurvesToJson = (curves = [], graphConfig = {}, options = {}) => {
+  const curveList = Array.isArray(curves) ? curves.filter(Boolean) : [];
+  if (curveList.length === 0) {
+    throw new Error('No saved curves to export.');
+  }
+
+  curveList.forEach((curve) => {
+    const jsonContent = buildSavedCurveJsonExport(curve, graphConfig, options);
+    const filename = buildSavedCurveComparisonFilename(curve, graphConfig, options, 'json');
+    downloadTextExportFile(filename, jsonContent, 'application/json;charset=utf-8;');
+  });
+};

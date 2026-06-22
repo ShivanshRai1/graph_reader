@@ -10,6 +10,8 @@ import {
   buildTypicalCurveExportFromSavedCurves,
   buildTypicalCurveFilenameForGraph,
   downloadTypicalCurveFile,
+  exportSavedCurvesToCsv,
+  exportSavedCurvesToJson,
   inferTypicalCurveExportSourceFromCurves,
   isSavedCurvesExportReady,
   resolveGraphConfigForSavedCurvesExport,
@@ -4411,6 +4413,97 @@ const GraphCapture = () => {
     readyGroups.forEach((group) => handleExportGroupToTC(group));
   };
 
+  const getSavedCurvesExportOptions = () => {
+    const graphId = String(urlParams.graph_id || activeSessionGraphIdRef.current || '').trim();
+    return { persistedAxis: getPersistedGraphContext(graphId)?.axis || null };
+  };
+
+  const handleExportGroupToCSV = (group) => {
+    const curves = Array.isArray(group?.curves) ? group.curves.filter(Boolean) : [];
+    if (curves.length === 0) {
+      alert('No saved curves to export.');
+      return;
+    }
+
+    const exportOptions = getSavedCurvesExportOptions();
+    if (!isSavedCurvesExportReady(curves, graphConfig, exportOptions)) {
+      alert('Setup required before exporting CSV: confirm axis mapping with X/Y min, max, scale, and unit in Graph Setup.');
+      return;
+    }
+
+    try {
+      exportSavedCurvesToCsv(curves, graphConfig, exportOptions);
+    } catch (error) {
+      console.error('Failed to export saved curves to CSV:', error);
+      alert(`Failed to export CSV file: ${error.message}`);
+    }
+  };
+
+  const handleExportGroupToJSON = (group) => {
+    const curves = Array.isArray(group?.curves) ? group.curves.filter(Boolean) : [];
+    if (curves.length === 0) {
+      alert('No saved curves to export.');
+      return;
+    }
+
+    const exportOptions = getSavedCurvesExportOptions();
+    if (!isSavedCurvesExportReady(curves, graphConfig, exportOptions)) {
+      alert('Setup required before exporting JSON: confirm axis mapping with X/Y min, max, scale, and unit in Graph Setup.');
+      return;
+    }
+
+    try {
+      exportSavedCurvesToJson(curves, graphConfig, exportOptions);
+    } catch (error) {
+      console.error('Failed to export saved curves to JSON:', error);
+      alert(`Failed to export JSON file: ${error.message}`);
+    }
+  };
+
+  const handleExportAllSavedCurvesToCSV = () => {
+    if (uniqueSavedCurves.length === 0) {
+      alert('No saved curves to export.');
+      return;
+    }
+    if (groupedCurves.length === 1) {
+      handleExportGroupToCSV(groupedCurves[0]);
+      return;
+    }
+
+    const exportOptions = getSavedCurvesExportOptions();
+    const readyGroups = groupedCurves.filter((group) =>
+      isSavedCurvesExportReady(group.curves, graphConfig, exportOptions)
+    );
+    if (readyGroups.length === 0) {
+      alert('Setup required before exporting CSV: confirm axis mapping with X/Y min, max, scale, and unit in Graph Setup.');
+      return;
+    }
+
+    readyGroups.forEach((group) => handleExportGroupToCSV(group));
+  };
+
+  const handleExportAllSavedCurvesToJSON = () => {
+    if (uniqueSavedCurves.length === 0) {
+      alert('No saved curves to export.');
+      return;
+    }
+    if (groupedCurves.length === 1) {
+      handleExportGroupToJSON(groupedCurves[0]);
+      return;
+    }
+
+    const exportOptions = getSavedCurvesExportOptions();
+    const readyGroups = groupedCurves.filter((group) =>
+      isSavedCurvesExportReady(group.curves, graphConfig, exportOptions)
+    );
+    if (readyGroups.length === 0) {
+      alert('Setup required before exporting JSON: confirm axis mapping with X/Y min, max, scale, and unit in Graph Setup.');
+      return;
+    }
+
+    readyGroups.forEach((group) => handleExportGroupToJSON(group));
+  };
+
   const handleViewAllCombinedGraphs = () => {
     setSelectedCurveId('');
     setCombinedGroupId('');
@@ -7488,6 +7581,20 @@ const GraphCapture = () => {
                     >
                       Export all .tc
                     </button>
+                    <button
+                      className="px-3 py-1 rounded bg-gray-700 text-white text-xs"
+                      onClick={handleExportAllSavedCurvesToCSV}
+                      title="Export all saved curves as Graph Capture CSV file(s) for the check page"
+                    >
+                      Export all CSV
+                    </button>
+                    <button
+                      className="px-3 py-1 rounded bg-gray-700 text-white text-xs"
+                      onClick={handleExportAllSavedCurvesToJSON}
+                      title="Export all saved curves as Graph Capture JSON file(s) for the check page"
+                    >
+                      Export all JSON
+                    </button>
                     <a
                       href={buildTcCheckerUrl()}
                       target="_blank"
@@ -7524,6 +7631,20 @@ const GraphCapture = () => {
                               title="Export all curves in this graph to one HPPeval .tc file"
                             >
                               Export .tc
+                            </button>
+                            <button
+                              className="px-3 py-1 rounded bg-gray-700 text-white text-xs"
+                              onClick={() => handleExportGroupToCSV(group)}
+                              title="Export curves in this graph as Graph Capture CSV file(s) for the check page"
+                            >
+                              Export CSV
+                            </button>
+                            <button
+                              className="px-3 py-1 rounded bg-gray-700 text-white text-xs"
+                              onClick={() => handleExportGroupToJSON(group)}
+                              title="Export curves in this graph as Graph Capture JSON file(s) for the check page"
+                            >
+                              Export JSON
                             </button>
                           </div>
                         </div>
