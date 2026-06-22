@@ -81,28 +81,7 @@ const buildParsedResult = (config, curves, raw, format) => {
   };
 };
 
-const parseGraphCaptureCsv = (content) => {
-  const lines = String(content || '').split(/\r?\n/);
-  const meta = {};
-  const dataRows = [];
-
-  lines.forEach((line) => {
-    const trimmed = line.trim();
-    if (!trimmed) return;
-
-    if (trimmed.startsWith('#')) {
-      const withoutHash = trimmed.replace(/^#\s*/, '');
-      const commaIndex = withoutHash.indexOf(',');
-      if (commaIndex === -1) return;
-      const key = withoutHash.slice(0, commaIndex).trim();
-      const value = withoutHash.slice(commaIndex + 1).trim();
-      if (key) meta[key] = value;
-      return;
-    }
-
-    dataRows.push(trimmed);
-  });
-
+const parseCsvPointRows = (dataRows) => {
   if (dataRows.length === 0) {
     throw new Error('Invalid CSV file: no data rows found.');
   }
@@ -118,9 +97,8 @@ const parseGraphCaptureCsv = (content) => {
   } else {
     xIndex = 0;
     yIndex = 1;
-    const firstValues = headerValues;
-    const firstX = parseFloat(firstValues[0]);
-    const firstY = parseFloat(firstValues[1]);
+    const firstX = parseFloat(headerValues[0]);
+    const firstY = parseFloat(headerValues[1]);
     if (!Number.isFinite(firstX) || !Number.isFinite(firstY)) {
       throw new Error('Invalid CSV file: expected numeric X and Y columns.');
     }
@@ -141,6 +119,122 @@ const parseGraphCaptureCsv = (content) => {
     throw new Error('Invalid CSV file: no numeric X/Y points found.');
   }
 
+  return points;
+};
+
+const parseGraphCaptureMultiCurveCsv = (content) => {
+  const lines = String(content || '').split(/\r?\n/);
+  const graphMeta = {};
+  const curveSections = [];
+  let currentCurveName = '';
+  let currentCurveMeta = {};
+  let currentDataRows = [];
+
+  const flushCurveSection = () => {
+    if (currentDataRows.length === 0) return;
+    const points = parseCsvPointRows(currentDataRows);
+    curveSections.push({
+      name: currentCurveName || graphMeta['Curve Name'] || 'Captured curve',
+      points,
+    });
+    currentCurveMeta = {};
+    currentDataRows = [];
+  };
+
+  lines.forEach((line) => {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+
+    if (trimmed.startsWith('#')) {
+      const withoutHash = trimmed.replace(/^#\s*/, '');
+      const commaIndex = withoutHash.indexOf(',');
+      if (commaIndex === -1) return;
+      const key = withoutHash.slice(0, commaIndex).trim();
+      const value = withoutHash.slice(commaIndex + 1).trim();
+
+      if (key === 'Curve') {
+        flushCurveSection();
+        currentCurveName = value;
+        return;
+      }
+
+      if (currentCurveName) {
+        currentCurveMeta[key] = value;
+      } else if (key) {
+        graphMeta[key] = value;
+      }
+      return;
+    }
+
+    currentDataRows.push(trimmed);
+  });
+
+  flushCurveSection();
+
+  if (curveSections.length === 0) {
+    throw new Error('Invalid CSV file: no curve sections found.');
+  }
+
+  const config = buildConfig(
+    {
+      graphTitle: graphMeta['Graph Title'] || graphMeta.graphTitle,
+      xScale: graphMeta['X Scale'] || graphMeta.xScale,
+      yScale: graphMeta['Y Scale'] || graphMeta.yScale,
+      xMin: graphMeta['X Min'] || graphMeta.xMin,
+      xMax: graphMeta['X Max'] || graphMeta.xMax,
+      yMin: graphMeta['Y Min'] || graphMeta.yMin,
+      yMax: graphMeta['Y Max'] || graphMeta.yMax,
+    },
+    curveSections
+  );
+
+  return buildParsedResult(
+    config,
+    curveSections.map((section) => ({
+      name: section.name,
+      points: section.points,
+    })),
+    content,
+    'csv'
+  );
+};
+
+const parseGraphCaptureCsv = (content) => {
+  const lines = String(content || '').split(/\r?\n/);
+  const hasCurveSections = lines.some((line) => /^#\s*Curve\s*,/i.test(line.trim()));
+  const curveCount = (() => {
+    const countLine = lines.find((line) => /^#\s*Curve Count\s*,/i.test(line.trim()));
+    if (!countLine) return null;
+    const value = countLine.replace(/^#\s*Curve Count\s*,/i, '').trim();
+    const parsed = parseInt(value, 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  })();
+
+  if (hasCurveSections || (curveCount !== null && curveCount > 1)) {
+    return parseGraphCaptureMultiCurveCsv(content);
+  }
+
+  const meta = {};
+  const dataRows = [];
+
+  lines.forEach((line) => {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+
+    if (trimmed.startsWith('#')) {
+      const withoutHash = trimmed.replace(/^#\s*/, '');
+      const commaIndex = withoutHash.indexOf(',');
+      if (commaIndex === -1) return;
+      const key = withoutHash.slice(0, commaIndex).trim();
+      const value = withoutHash.slice(commaIndex + 1).trim();
+      if (key) meta[key] = value;
+      return;
+    }
+
+    dataRows.push(trimmed);
+  });
+
+  const points = parseCsvPointRows(dataRows);
   const config = buildConfig(
     {
       graphTitle: meta['Graph Title'] || meta.graphTitle,
@@ -165,6 +259,39 @@ const parseGraphCaptureCsv = (content) => {
 
 const parseGraphCaptureJson = (data) => {
   const metadata = data?.metadata || {};
+
+  if (Array.isArray(data?.curves) && data.curves.length > 0) {
+    const curves = data.curves
+      .map((curve, index) => {
+        const points = normalizePoints(curve?.points);
+        if (points.length === 0) return null;
+        return {
+          name: String(curve?.name || `Series ${index + 1}`).trim() || `Series ${index + 1}`,
+          points,
+        };
+      })
+      .filter(Boolean);
+
+    if (curves.length === 0) {
+      throw new Error('Invalid JSON file: no points found in curves.');
+    }
+
+    const config = buildConfig(
+      {
+        graphTitle: metadata.graphTitle,
+        xScale: metadata.xScale,
+        yScale: metadata.yScale,
+        xMin: metadata.xMin,
+        xMax: metadata.xMax,
+        yMin: metadata.yMin,
+        yMax: metadata.yMax,
+      },
+      curves
+    );
+
+    return buildParsedResult(config, curves, data, 'json');
+  }
+
   const points = normalizePoints(data?.points);
   if (points.length === 0) {
     throw new Error('Invalid JSON file: no points found.');
@@ -298,6 +425,10 @@ const parseJsonLikeContent = (content, filename) => {
   }
 
   if (data?.metadata && Array.isArray(data?.points)) {
+    return { type: 'parsed', parsed: parseGraphCaptureJson(data) };
+  }
+
+  if (data?.metadata && Array.isArray(data?.curves)) {
     return { type: 'parsed', parsed: parseGraphCaptureJson(data) };
   }
 

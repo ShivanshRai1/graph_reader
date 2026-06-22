@@ -7584,14 +7584,14 @@ const GraphCapture = () => {
                     <button
                       className="px-3 py-1 rounded bg-gray-700 text-white text-xs"
                       onClick={handleExportAllSavedCurvesToCSV}
-                      title="Export all saved curves as Graph Capture CSV file(s) for the check page"
+                      title="Download each curve as CSV plus one combined all-curves file (per graph group)"
                     >
                       Export all CSV
                     </button>
                     <button
                       className="px-3 py-1 rounded bg-gray-700 text-white text-xs"
                       onClick={handleExportAllSavedCurvesToJSON}
-                      title="Export all saved curves as Graph Capture JSON file(s) for the check page"
+                      title="Download each curve as JSON plus one combined all-curves file (per graph group)"
                     >
                       Export all JSON
                     </button>
@@ -7635,14 +7635,14 @@ const GraphCapture = () => {
                             <button
                               className="px-3 py-1 rounded bg-gray-700 text-white text-xs"
                               onClick={() => handleExportGroupToCSV(group)}
-                              title="Export curves in this graph as Graph Capture CSV file(s) for the check page"
+                              title="Download each curve as CSV plus one combined all-curves file for the check page"
                             >
                               Export CSV
                             </button>
                             <button
                               className="px-3 py-1 rounded bg-gray-700 text-white text-xs"
                               onClick={() => handleExportGroupToJSON(group)}
-                              title="Export curves in this graph as Graph Capture JSON file(s) for the check page"
+                              title="Download each curve as JSON plus one combined all-curves file for the check page"
                             >
                               Export JSON
                             </button>

@@ -651,6 +651,10 @@ const getSavedCurveExportPoints = (curve = {}) =>
     }))
     .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
 
+const getSavedCurveDisplayName = (curve, index = 0) =>
+  String(curve?.config?.curveName || curve?.curve_name || curve?.name || '').trim() ||
+  `Series ${index + 1}`;
+
 const buildSavedCurveExportMetadata = (curve, graphConfig = {}, options = {}) => {
   const exportConfig = resolveExportGraphConfig([curve], graphConfig, options);
   return {
@@ -668,6 +672,30 @@ const buildSavedCurveExportMetadata = (curve, graphConfig = {}, options = {}) =>
     exportedAt: new Date().toISOString(),
   };
 };
+
+const buildSavedGraphExportMetadata = (curves = [], graphConfig = {}, options = {}) => {
+  const exportConfig = resolveExportGraphConfig(curves, graphConfig, options);
+  return {
+    graphTitle: exportConfig.graphTitle || '',
+    curveCount: curves.length,
+    xScale: exportConfig.xScale || 'Linear',
+    yScale: exportConfig.yScale || 'Linear',
+    xUnitPrefix: exportConfig.xUnitPrefix || '1',
+    yUnitPrefix: exportConfig.yUnitPrefix || '1',
+    xMin: formatSavedCurveExportValue(exportConfig.xMin),
+    xMax: formatSavedCurveExportValue(exportConfig.xMax),
+    yMin: formatSavedCurveExportValue(exportConfig.yMin),
+    yMax: formatSavedCurveExportValue(exportConfig.yMax),
+    exportedAt: new Date().toISOString(),
+  };
+};
+
+const mapSavedCurvePointsForJsonExport = (points) =>
+  points.map((point, index) => ({
+    index: index + 1,
+    x: formatSavedCurveExportValue(point.x),
+    y: formatSavedCurveExportValue(point.y),
+  }));
 
 export const buildSavedCurveCsvExport = (curve, graphConfig = {}, options = {}) => {
   const points = getSavedCurveExportPoints(curve);
@@ -711,11 +739,90 @@ export const buildSavedCurveJsonExport = (curve, graphConfig = {}, options = {})
   return JSON.stringify(
     {
       metadata,
-      points: points.map((point, index) => ({
-        index: index + 1,
-        x: formatSavedCurveExportValue(point.x),
-        y: formatSavedCurveExportValue(point.y),
-      })),
+      points: mapSavedCurvePointsForJsonExport(points),
+    },
+    null,
+    2
+  );
+};
+
+export const buildSavedCurvesCombinedCsvExport = (curves = [], graphConfig = {}, options = {}) => {
+  const curveList = (Array.isArray(curves) ? curves : []).filter(Boolean);
+  const sections = curveList
+    .map((curve, index) => {
+      const points = getSavedCurveExportPoints(curve);
+      if (points.length === 0) return null;
+      const meta = buildSavedCurveExportMetadata(curve, graphConfig, options);
+      return {
+        name: getSavedCurveDisplayName(curve, index),
+        temperature: meta.temperature || '',
+        points,
+      };
+    })
+    .filter(Boolean);
+
+  if (sections.length === 0) {
+    throw new Error('No points to export.');
+  }
+
+  const graphMeta = buildSavedGraphExportMetadata(curveList, graphConfig, options);
+  const graphMetaRows = [
+    ['# Graph Title', graphMeta.graphTitle],
+    ['# Curve Count', String(graphMeta.curveCount)],
+    ['# X Scale', graphMeta.xScale],
+    ['# Y Scale', graphMeta.yScale],
+    ['# X Unit Prefix', graphMeta.xUnitPrefix],
+    ['# Y Unit Prefix', graphMeta.yUnitPrefix],
+    ['# X Min', graphMeta.xMin],
+    ['# X Max', graphMeta.xMax],
+    ['# Y Min', graphMeta.yMin],
+    ['# Y Max', graphMeta.yMax],
+    ['# Exported At', graphMeta.exportedAt],
+    [''],
+  ];
+
+  const sectionRows = sections.flatMap((section) => {
+    const rows = [
+      ['# Curve', section.name],
+      ['# Temperature', section.temperature],
+      [''],
+      ['#', 'X', 'Y'],
+      ...section.points.map((point, index) => [
+        String(index + 1),
+        formatSavedCurveExportValue(point.x),
+        formatSavedCurveExportValue(point.y),
+      ]),
+      [''],
+    ];
+    return rows;
+  });
+
+  return [...graphMetaRows, ...sectionRows].map((row) => row.join(',')).join('\n');
+};
+
+export const buildSavedCurvesCombinedJsonExport = (curves = [], graphConfig = {}, options = {}) => {
+  const curveList = (Array.isArray(curves) ? curves : []).filter(Boolean);
+  const exportedCurves = curveList
+    .map((curve, index) => {
+      const points = getSavedCurveExportPoints(curve);
+      if (points.length === 0) return null;
+      const meta = buildSavedCurveExportMetadata(curve, graphConfig, options);
+      return {
+        name: getSavedCurveDisplayName(curve, index),
+        temperature: meta.temperature || '',
+        points: mapSavedCurvePointsForJsonExport(points),
+      };
+    })
+    .filter(Boolean);
+
+  if (exportedCurves.length === 0) {
+    throw new Error('No points to export.');
+  }
+
+  return JSON.stringify(
+    {
+      metadata: buildSavedGraphExportMetadata(curveList, graphConfig, options),
+      curves: exportedCurves,
     },
     null,
     2
@@ -728,6 +835,18 @@ export const buildSavedCurveComparisonFilename = (curve, graphConfig = {}, optio
   const curveName = sanitizeFilenamePart(exportConfig.curveName || 'curve');
   const safeExtension = String(extension || 'csv').replace(/^\./, '');
   return `${graphName}-${curveName}.${safeExtension}`;
+};
+
+export const buildSavedGraphComparisonFilename = (curves = [], graphConfig = {}, options = {}, extension = 'csv') => {
+  const curveList = Array.isArray(curves) ? curves.filter(Boolean) : [];
+  const exportConfig = resolveExportGraphConfig(curveList, graphConfig, options);
+  const graphName = sanitizeFilenamePart(exportConfig.graphTitle || 'graph');
+  const safeExtension = String(extension || 'csv').replace(/^\./, '');
+  if (curveList.length <= 1) {
+    const curveName = sanitizeFilenamePart(exportConfig.curveName || 'curve');
+    return `${graphName}-${curveName}.${safeExtension}`;
+  }
+  return `${graphName}-all_curves.${safeExtension}`;
 };
 
 export const downloadTextExportFile = (filename, content, mimeType = 'text/plain;charset=utf-8;') => {
@@ -743,17 +862,38 @@ export const downloadTextExportFile = (filename, content, mimeType = 'text/plain
   document.body.removeChild(anchor);
 };
 
+const queueTextExportDownloads = (downloads = [], delayMs = 200) => {
+  downloads.forEach((item, index) => {
+    const run = () => downloadTextExportFile(item.filename, item.content, item.mimeType);
+    if (index === 0 || downloads.length === 1) {
+      run();
+      return;
+    }
+    window.setTimeout(run, index * delayMs);
+  });
+};
+
 export const exportSavedCurvesToCsv = (curves = [], graphConfig = {}, options = {}) => {
   const curveList = Array.isArray(curves) ? curves.filter(Boolean) : [];
   if (curveList.length === 0) {
     throw new Error('No saved curves to export.');
   }
 
-  curveList.forEach((curve) => {
-    const csvContent = buildSavedCurveCsvExport(curve, graphConfig, options);
-    const filename = buildSavedCurveComparisonFilename(curve, graphConfig, options, 'csv');
-    downloadTextExportFile(filename, csvContent, 'text/csv;charset=utf-8;');
-  });
+  const downloads = curveList.map((curve) => ({
+    filename: buildSavedCurveComparisonFilename(curve, graphConfig, options, 'csv'),
+    content: buildSavedCurveCsvExport(curve, graphConfig, options),
+    mimeType: 'text/csv;charset=utf-8;',
+  }));
+
+  if (curveList.length > 1) {
+    downloads.push({
+      filename: buildSavedGraphComparisonFilename(curveList, graphConfig, options, 'csv'),
+      content: buildSavedCurvesCombinedCsvExport(curveList, graphConfig, options),
+      mimeType: 'text/csv;charset=utf-8;',
+    });
+  }
+
+  queueTextExportDownloads(downloads);
 };
 
 export const exportSavedCurvesToJson = (curves = [], graphConfig = {}, options = {}) => {
@@ -762,9 +902,19 @@ export const exportSavedCurvesToJson = (curves = [], graphConfig = {}, options =
     throw new Error('No saved curves to export.');
   }
 
-  curveList.forEach((curve) => {
-    const jsonContent = buildSavedCurveJsonExport(curve, graphConfig, options);
-    const filename = buildSavedCurveComparisonFilename(curve, graphConfig, options, 'json');
-    downloadTextExportFile(filename, jsonContent, 'application/json;charset=utf-8;');
-  });
+  const downloads = curveList.map((curve) => ({
+    filename: buildSavedCurveComparisonFilename(curve, graphConfig, options, 'json'),
+    content: buildSavedCurveJsonExport(curve, graphConfig, options),
+    mimeType: 'application/json;charset=utf-8;',
+  }));
+
+  if (curveList.length > 1) {
+    downloads.push({
+      filename: buildSavedGraphComparisonFilename(curveList, graphConfig, options, 'json'),
+      content: buildSavedCurvesCombinedJsonExport(curveList, graphConfig, options),
+      mimeType: 'application/json;charset=utf-8;',
+    });
+  }
+
+  queueTextExportDownloads(downloads);
 };
