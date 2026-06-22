@@ -1317,6 +1317,75 @@ const pickStoredAxisBounds = (source = {}) => {
   return { xMin, xMax, yMin, yMax };
 };
 
+const AXIS_BOUND_TOLERANCE = 1e-9;
+
+const resolveAxisBoundFields = (source = {}) => ({
+  xMin: source.xMin ?? source.x_min ?? '',
+  xMax: source.xMax ?? source.x_max ?? '',
+  yMin: source.yMin ?? source.y_min ?? '',
+  yMax: source.yMax ?? source.y_max ?? '',
+});
+
+const haveAxisBoundsChanged = (current = {}, next = {}) => {
+  const fields = ['xMin', 'xMax', 'yMin', 'yMax'];
+  return fields.some((field) => {
+    const left = parseFloat(current[field]);
+    const right = parseFloat(next[field]);
+    if (Number.isFinite(left) && Number.isFinite(right)) {
+      return left !== right;
+    }
+    return String(current[field] ?? '').trim() !== String(next[field] ?? '').trim();
+  });
+};
+
+const isPointWithinAxisBounds = (point, bounds = {}) => {
+  const x = Number(point?.x);
+  const y = Number(point?.y);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+
+  const xMin = parseFloat(bounds.xMin);
+  const xMax = parseFloat(bounds.xMax);
+  const yMin = parseFloat(bounds.yMin);
+  const yMax = parseFloat(bounds.yMax);
+
+  if (Number.isFinite(xMin) && x < xMin - AXIS_BOUND_TOLERANCE) return false;
+  if (Number.isFinite(xMax) && x > xMax + AXIS_BOUND_TOLERANCE) return false;
+  if (Number.isFinite(yMin) && y < yMin - AXIS_BOUND_TOLERANCE) return false;
+  if (Number.isFinite(yMax) && y > yMax + AXIS_BOUND_TOLERANCE) return false;
+  return true;
+};
+
+const partitionPointsByAxisBounds = (points = [], bounds = {}) => {
+  const normalized = (Array.isArray(points) ? points : [])
+    .map((point) => ({
+      x: Number(point?.x_value ?? point?.x),
+      y: Number(point?.y_value ?? point?.y),
+    }))
+    .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
+
+  const inBounds = [];
+  let removedCount = 0;
+  normalized.forEach((point) => {
+    if (isPointWithinAxisBounds(point, bounds)) {
+      inBounds.push(point);
+    } else {
+      removedCount += 1;
+    }
+  });
+  return { inBounds, removedCount };
+};
+
+const buildCurveMetaFromSaved = (curve, graphConfig = {}) => ({
+  xScale: curve?.config?.xScale || curve?.x_scale || graphConfig?.xScale || 'Linear',
+  yScale: curve?.config?.yScale || curve?.y_scale || graphConfig?.yScale || 'Linear',
+  xUnitPrefix: curve?.config?.xUnitPrefix || curve?.x_unit || graphConfig?.xUnitPrefix || '1',
+  yUnitPrefix: curve?.config?.yUnitPrefix || curve?.y_unit || graphConfig?.yUnitPrefix || '1',
+  xMin: String(curve?.config?.xMin ?? curve?.x_min ?? graphConfig?.xMin ?? ''),
+  xMax: String(curve?.config?.xMax ?? curve?.x_max ?? graphConfig?.xMax ?? ''),
+  yMin: String(curve?.config?.yMin ?? curve?.y_min ?? graphConfig?.yMin ?? ''),
+  yMax: String(curve?.config?.yMax ?? curve?.y_max ?? graphConfig?.yMax ?? ''),
+});
+
 const pickUsableAxisBounds = (source = {}) => {
   const bounds = pickStoredAxisBounds(source);
   if (!bounds || isDefaultPlaceholderAxisBounds(bounds)) return null;
@@ -3857,7 +3926,12 @@ const GraphCapture = () => {
     yScale: 'Linear',
     xUnitPrefix: '1',
     yUnitPrefix: '1',
+    xMin: '',
+    xMax: '',
+    yMin: '',
+    yMax: '',
   });
+  const editSessionAxisRef = useRef(null);
   const [editCurveSymbolValues, setEditCurveSymbolValues] = useState({});
   const [editCurveName, setEditCurveName] = useState('');
   // State for axis confirmation and freezing (Issue 5 & 7)
@@ -4395,18 +4469,42 @@ const GraphCapture = () => {
 
     setIsReadOnly(false);
 
+    const sessionAxisBounds = resolveAxisBoundFields({
+      xMin: graphConfig.xMin ?? nextConfig.xMin ?? curve.config?.xMin ?? curve.x_min,
+      xMax: graphConfig.xMax ?? nextConfig.xMax ?? curve.config?.xMax ?? curve.x_max,
+      yMin: graphConfig.yMin ?? nextConfig.yMin ?? curve.config?.yMin ?? curve.y_min,
+      yMax: graphConfig.yMax ?? nextConfig.yMax ?? curve.config?.yMax ?? curve.y_max,
+    });
+    editSessionAxisRef.current = sessionAxisBounds;
+
     setEditingCurveId(curve.id);
     setEditCurveMeta({
       xScale: nextConfig.xScale,
       yScale: nextConfig.yScale,
       xUnitPrefix: nextConfig.xUnitPrefix,
       yUnitPrefix: nextConfig.yUnitPrefix,
+      xMin: String(sessionAxisBounds.xMin ?? ''),
+      xMax: String(sessionAxisBounds.xMax ?? ''),
+      yMin: String(sessionAxisBounds.yMin ?? ''),
+      yMax: String(sessionAxisBounds.yMax ?? ''),
     });
     setEditCurveSymbolValues(normalizeCurveSymbolValues(curve));
     setEditCurveName(curve.config?.curveName || curve.curve_name || curve.name || '');
   };
 
+  const handleEditAxisBoundChange = (field, value) => {
+    setEditCurveMeta((prev) => ({ ...prev, [field]: value }));
+    setGraphConfig((prev) => ({ ...prev, [field]: value }));
+  };
+
   const handleEditCurveCancel = () => {
+    if (editSessionAxisRef.current) {
+      setGraphConfig((prev) => ({
+        ...prev,
+        ...editSessionAxisRef.current,
+      }));
+    }
+    editSessionAxisRef.current = null;
     setEditingCurveId('');
     setEditCurveSymbolValues({});
     setEditCurveName('');
@@ -4783,7 +4881,13 @@ const GraphCapture = () => {
     previousUploadedImageRef.current = nextImage;
   }, [uploadedImage, savedCurves.length]);
 
-  const pushEditedCurveToApi = async (curve, nextMeta, nextSymbols, newCurveName = '') => {
+  const pushEditedCurveToApi = async (curve, nextMeta, nextSymbols, newCurveName = '', options = {}) => {
+    const {
+      pointsOverride = null,
+      axisBoundsOverride = null,
+      axisBaseline = null,
+      isCompanionAxisSync = false,
+    } = options;
     const currentSymbolPayload = buildDynamicSymbolPayload(
       normalizeCurveSymbolValues(curve),
       symbolLabels,
@@ -4798,18 +4902,32 @@ const GraphCapture = () => {
     );
     const tctjValue = nextSymbolPayload.legacyTctjValue;
     const currentPoints = normalizePointsForComparison(curve?.points);
-    const nextPoints = normalizePointsForComparison(getEditCurveDataPoints(curve, dataPoints));
+    const nextPoints = pointsOverride !== null
+      ? normalizePointsForComparison(pointsOverride)
+      : normalizePointsForComparison(getEditCurveDataPoints(curve, dataPoints));
     const currentMeta = {
       xScale: curve.config?.xScale || curve.x_scale || 'Linear',
       yScale: curve.config?.yScale || curve.y_scale || 'Linear',
       xUnitPrefix: curve.config?.xUnitPrefix || curve.x_unit || '1',
       yUnitPrefix: curve.config?.yUnitPrefix || curve.y_unit || '1',
     };
+    const currentAxisBounds = resolveAxisBoundFields(
+      axisBaseline || curve.config || curve || graphConfig
+    );
+    const resolvedEditAxis = resolveAxisBoundFields(
+      axisBoundsOverride || {
+        xMin: nextMeta.xMin ?? graphConfig.xMin ?? curve.config?.xMin ?? curve.x_min,
+        xMax: nextMeta.xMax ?? graphConfig.xMax ?? curve.config?.xMax ?? curve.x_max,
+        yMin: nextMeta.yMin ?? graphConfig.yMin ?? curve.config?.yMin ?? curve.y_min,
+        yMax: nextMeta.yMax ?? graphConfig.yMax ?? curve.config?.yMax ?? curve.y_max,
+      }
+    );
     const hasMetaChanges =
       currentMeta.xScale !== nextMeta.xScale ||
       currentMeta.yScale !== nextMeta.yScale ||
       currentMeta.xUnitPrefix !== nextMeta.xUnitPrefix ||
       currentMeta.yUnitPrefix !== nextMeta.yUnitPrefix;
+    const hasAxisBoundsChanges = haveAxisBoundsChanged(currentAxisBounds, resolvedEditAxis);
     const hasLegacyTemperatureChange =
       String(currentSymbolPayload.legacyTctjValue || '') !== String(nextSymbolPayload.legacyTctjValue || '');
     const hasSymbolValueChanges = haveSymbolValuesChanged(
@@ -4836,11 +4954,37 @@ const GraphCapture = () => {
 
     const oldCurveName = String(curve?.config?.curveName || curve?.curve_name || curve?.name || '');
     const hasCurveNameChange = newCurveName !== '' && newCurveName !== oldCurveName;
-    const hasLocalChanges = hasMetaChanges || hasLegacyTemperatureChange || hasXyChanges || hasCurveNameChange;
-    const hasCompanyChanges = hasMetaChanges || hasLegacyTemperatureChange || hasSymbolValueChanges || hasXyChanges || hasCurveNameChange;
+    const hasLocalChanges =
+      hasMetaChanges || hasAxisBoundsChanges || hasLegacyTemperatureChange || hasXyChanges || hasCurveNameChange;
+    const hasCompanyChanges =
+      hasMetaChanges ||
+      hasAxisBoundsChanges ||
+      hasLegacyTemperatureChange ||
+      hasSymbolValueChanges ||
+      hasXyChanges ||
+      hasCurveNameChange;
 
-    if (!(savedCurvesSource === 'company' ? hasCompanyChanges : hasLocalChanges)) {
+    if (
+      !isCompanionAxisSync &&
+      !(savedCurvesSource === 'company' ? hasCompanyChanges : hasLocalChanges)
+    ) {
       throw new Error('No changes detected to update.');
+    }
+
+    if (
+      isCompanionAxisSync &&
+      !hasAxisBoundsChanges &&
+      !hasXyChanges &&
+      !hasMetaChanges &&
+      !hasSymbolValueChanges &&
+      !hasCurveNameChange
+    ) {
+      return {
+        graphId: String(getGraphIdForCurve(curve) || ''),
+        detailId: String(getDetailIdForCurve(curve) || ''),
+        xyConfirmedOnDiscoveree: true,
+        skipped: true,
+      };
     }
 
     if (savedCurvesSource !== 'company') {
@@ -4856,7 +5000,13 @@ const GraphCapture = () => {
       if (currentMeta.yUnitPrefix !== nextMeta.yUnitPrefix) localPayload.y_unit = nextMeta.yUnitPrefix;
       if (hasLegacyTemperatureChange) localPayload.temperature = tctjValue;
       if (hasCurveNameChange) localPayload.curve_name = newCurveName;
-      if (hasXyChanges) {
+      if (hasAxisBoundsChanges) {
+        localPayload.x_min = parseFloat(resolvedEditAxis.xMin);
+        localPayload.x_max = parseFloat(resolvedEditAxis.xMax);
+        localPayload.y_min = parseFloat(resolvedEditAxis.yMin);
+        localPayload.y_max = parseFloat(resolvedEditAxis.yMax);
+      }
+      if (hasXyChanges || pointsOverride !== null) {
         localPayload.data_points = nextPoints.map((point) => ({
           x_value: point.x,
           y_value: point.y,
@@ -4923,12 +5073,6 @@ const GraphCapture = () => {
       yScale: nextMeta.yScale || currentMeta.yScale || 'Linear',
       xUnitPrefix: nextMeta.xUnitPrefix || currentMeta.xUnitPrefix || '1',
       yUnitPrefix: nextMeta.yUnitPrefix || currentMeta.yUnitPrefix || '1',
-    };
-    const resolvedEditAxis = {
-      xMin: graphConfig.xMin ?? curve.config?.xMin ?? curve.x_min ?? '',
-      xMax: graphConfig.xMax ?? curve.config?.xMax ?? curve.x_max ?? '',
-      yMin: graphConfig.yMin ?? curve.config?.yMin ?? curve.y_min ?? '',
-      yMax: graphConfig.yMax ?? curve.config?.yMax ?? curve.y_max ?? '',
     };
     const resolvedEditIdentifier = normalizeSessionIdentifier(
       activeSessionIdentifierRef.current ||
@@ -5077,72 +5221,219 @@ const GraphCapture = () => {
       return;
     }
 
-    const confirmed = window.confirm('Are you sure you want to update this curve?');
-    if (!confirmed) {
+    const nextAxisBounds = {
+      xMin: editCurveMeta.xMin,
+      xMax: editCurveMeta.xMax,
+      yMin: editCurveMeta.yMin,
+      yMax: editCurveMeta.yMax,
+    };
+
+    if (!hasValidStoredAxisBounds(nextAxisBounds)) {
+      alert('Please enter valid axis min/max values (each min must be less than its max).');
+      return;
+    }
+
+    const graphIdForCurve = String(
+      targetCurve.graphId || getGraphIdForCurve(targetCurve) || urlParams.graph_id || ''
+    ).trim();
+    const curvesOnGraph = savedCurves.filter(
+      (curve) => String(curve.graphId || getGraphIdForCurve(curve) || graphIdForCurve) === graphIdForCurve
+    );
+
+    const axisBaseline = editSessionAxisRef.current || resolveAxisBoundFields(graphConfig);
+    const hasAxisChange = haveAxisBoundsChanged(axisBaseline, nextAxisBounds);
+
+    const editPlans = curvesOnGraph.map((curve) => {
+      const isTarget = curve.id === curveId;
+      const rawPoints = isTarget
+        ? normalizePointsForComparison(getEditCurveDataPoints(targetCurve, dataPoints))
+        : normalizePointsForComparison(curve?.points);
+      const { inBounds, removedCount } = partitionPointsByAxisBounds(rawPoints, nextAxisBounds);
+      return { curve, isTarget, points: inBounds, removedCount };
+    });
+
+    const totalRemoved = editPlans.reduce((sum, plan) => sum + plan.removedCount, 0);
+
+    if (editPlans.some((plan) => plan.points.length === 0)) {
+      alert('Cannot update: at least one curve would have no points left. Widen the axis range or adjust points first.');
+      return;
+    }
+
+    let confirmMessage = 'Are you sure you want to update this curve?';
+    if (totalRemoved > 0) {
+      confirmMessage =
+        `${totalRemoved} point(s) fall outside the new axis range and will be removed.` +
+        (hasAxisChange ? ' Axis min/max will apply to all curves on this graph.' : '') +
+        '\n\nContinue with update?';
+    } else if (hasAxisChange) {
+      confirmMessage =
+        'Axis min/max will apply to all curves on this graph.\n\nAre you sure you want to update?';
+    }
+
+    if (!window.confirm(confirmMessage)) {
       return;
     }
 
     setIsUpdatingCurveId(curveId);
     try {
-      const editResult = await pushEditedCurveToApi(targetCurve, editCurveMeta, editCurveSymbolValues, editCurveName);
-      const xyConfirmedOnDiscoveree = editResult?.xyConfirmedOnDiscoveree !== false;
-      const newDetailId = String(editResult?.detailId || '').trim();
-      const graphIdForCurve = String(targetCurve.graphId || getGraphIdForCurve(targetCurve) || urlParams.graph_id || '').trim();
+      const targetPlan = editPlans.find((plan) => plan.isTarget);
+      if (!targetPlan) {
+        throw new Error('Unable to prepare the selected curve for update.');
+      }
+
+      const targetOverlayId = String(targetCurve?.id ?? targetCurve?.detailId ?? 'saved');
+      if (
+        targetPlan.points.length !==
+        normalizePointsForComparison(getEditCurveDataPoints(targetCurve, dataPoints)).length
+      ) {
+        replaceDataPoints(
+          targetPlan.points.map((point) => ({
+            x: point.x,
+            y: point.y,
+            imported: true,
+            overlayCurveId: targetOverlayId,
+          }))
+        );
+      }
+
+      if (hasAxisChange) {
+        setGraphConfig((prev) => ({ ...prev, ...nextAxisBounds }));
+        setFrozenGraphConfig((prev) => (prev ? { ...prev, ...nextAxisBounds } : prev));
+        editSessionAxisRef.current = { ...nextAxisBounds };
+      }
+
+      const editResult = await pushEditedCurveToApi(
+        targetCurve,
+        editCurveMeta,
+        editCurveSymbolValues,
+        editCurveName,
+        {
+          pointsOverride: targetPlan.points,
+          axisBoundsOverride: nextAxisBounds,
+          axisBaseline,
+        }
+      );
+
+      const saveResults = new Map();
+      saveResults.set(curveId, {
+        detailId: String(editResult?.detailId || '').trim(),
+        points: targetPlan.points,
+        xyConfirmedOnDiscoveree: editResult?.xyConfirmedOnDiscoveree !== false,
+      });
+
+      if (hasAxisChange && savedCurvesSource === 'company') {
+        for (const plan of editPlans.filter((plan) => !plan.isTarget)) {
+          const companionMeta = buildCurveMetaFromSaved(plan.curve, graphConfig);
+          const companionResult = await pushEditedCurveToApi(
+            plan.curve,
+            companionMeta,
+            normalizeCurveSymbolValues(plan.curve),
+            plan.curve.config?.curveName || plan.curve.name || '',
+            {
+              pointsOverride: plan.points,
+              axisBoundsOverride: nextAxisBounds,
+              axisBaseline: resolveAxisBoundFields(plan.curve.config || plan.curve),
+              isCompanionAxisSync: true,
+            }
+          );
+          saveResults.set(plan.curve.id, {
+            detailId: String(companionResult?.detailId || getDetailIdForCurve(plan.curve) || '').trim(),
+            points: plan.points,
+            xyConfirmedOnDiscoveree: companionResult?.xyConfirmedOnDiscoveree !== false,
+          });
+        }
+      }
+
       syncGraphIdContext(targetCurve.graphId || getGraphIdForCurve(targetCurve));
 
       setSavedCurves((prev) => {
-        const next = prev.map((curve) => {
-          if (curve.id !== curveId) return curve;
-          const updatedName = editCurveName || curve.name;
+        const updated = prev.map((curve) => {
+          const onGraph =
+            String(curve.graphId || getGraphIdForCurve(curve) || graphIdForCurve) === graphIdForCurve;
+          if (!onGraph) return curve;
+
+          const plan = editPlans.find((entry) => entry.curve.id === curve.id);
+          if (!plan) return curve;
+
+          const result = saveResults.get(curve.id);
+          const isTarget = curve.id === curveId;
+          const updatedName = isTarget ? editCurveName || curve.name : curve.name;
+
           return {
             ...curve,
-            ...(newDetailId && graphIdForCurve
+            ...(result?.detailId && graphIdForCurve
               ? {
-                  detailId: newDetailId,
-                  id: `${graphIdForCurve}_${newDetailId}`,
+                  detailId: result.detailId,
+                  id: `${graphIdForCurve}_${result.detailId}`,
                 }
               : {}),
-            name: updatedName,
-            points: normalizePointsForComparison(getEditCurveDataPoints(targetCurve, dataPoints)).map((point) => ({
+            name: isTarget ? updatedName : curve.name,
+            points: plan.points.map((point) => ({
               x_value: point.x,
               y_value: point.y,
             })),
             config: {
               ...(curve.config || {}),
-              curveName: updatedName,
-              xScale: editCurveMeta.xScale,
-              yScale: editCurveMeta.yScale,
-              xUnitPrefix: editCurveMeta.xUnitPrefix,
-              yUnitPrefix: editCurveMeta.yUnitPrefix,
+              ...(isTarget
+                ? {
+                    curveName: updatedName,
+                    xScale: editCurveMeta.xScale,
+                    yScale: editCurveMeta.yScale,
+                    xUnitPrefix: editCurveMeta.xUnitPrefix,
+                    yUnitPrefix: editCurveMeta.yUnitPrefix,
+                  }
+                : {}),
             },
-            symbolValues: { ...editCurveSymbolValues },
-            x_scale: editCurveMeta.xScale,
-            y_scale: editCurveMeta.yScale,
-            x_unit: editCurveMeta.xUnitPrefix,
-            y_unit: editCurveMeta.yUnitPrefix,
+            ...(isTarget
+              ? {
+                  symbolValues: { ...editCurveSymbolValues },
+                  x_scale: editCurveMeta.xScale,
+                  y_scale: editCurveMeta.yScale,
+                  x_unit: editCurveMeta.xUnitPrefix,
+                  y_unit: editCurveMeta.yUnitPrefix,
+                }
+              : {}),
             updatedAt: Date.now(),
-            locallyModified: !xyConfirmedOnDiscoveree,
+            locallyModified: result ? !result.xyConfirmedOnDiscoveree : curve.locallyModified,
           };
         });
-        const updatedGraphId = String(
-          targetCurve.graphId || getGraphIdForCurve(targetCurve) || urlParams.graph_id || ''
-        ).trim();
-        if (updatedGraphId) {
+
+        const axisConfig = hasAxisChange
+          ? { ...graphConfig, ...nextAxisBounds }
+          : graphConfig;
+        const next = hasAxisChange && graphIdForCurve
+          ? patchSavedCurvesWithAxisConfig(updated, axisConfig, graphIdForCurve)
+          : updated;
+
+        if (graphIdForCurve) {
           const curvesForGraph = next.filter(
-            (curve) => (curve.graphId || getGraphIdForCurve(curve)) === updatedGraphId
+            (curve) => (curve.graphId || getGraphIdForCurve(curve)) === graphIdForCurve
           );
-          persistSavedCurves(updatedGraphId, curvesForGraph, savedCurvesSource);
+          persistSavedCurves(graphIdForCurve, curvesForGraph, savedCurvesSource);
         }
         return next;
       });
-      const updatedGraphId = String(targetCurve.graphId || getGraphIdForCurve(targetCurve) || urlParams.graph_id || '').trim();
-      if (updatedGraphId && graphArea.width > 0 && graphArea.height > 0) {
-        persistGraphContext(updatedGraphId, graphArea, graphConfig);
+
+      if (graphIdForCurve && graphArea.width > 0 && graphArea.height > 0) {
+        persistGraphContext(
+          graphIdForCurve,
+          graphArea,
+          hasAxisChange ? { ...graphConfig, ...nextAxisBounds } : graphConfig
+        );
       }
+
       setEditingCurveId('');
       setEditCurveSymbolValues({});
       setEditCurveName('');
-      alert('Curve updated successfully.');
+      editSessionAxisRef.current = null;
+
+      const successMessage =
+        totalRemoved > 0
+          ? `Curve updated successfully. ${totalRemoved} point(s) outside the axis range were removed.`
+          : hasAxisChange
+            ? 'Curve updated successfully. Axis min/max were applied to all curves on this graph.'
+            : 'Curve updated successfully.';
+      alert(successMessage);
     } catch (error) {
       console.error('Edit update API error:', error);
       alert(`Edit update failed: ${error.message}`);
@@ -7333,6 +7624,49 @@ const GraphCapture = () => {
                                         ))}
                                       </select>
                                     </label>
+                                  </div>
+                                  <div className="mt-3 p-2 rounded border border-gray-200 bg-gray-50">
+                                    <div className="text-xs font-medium text-gray-700 mb-2">
+                                      Axis Range (applies to all curves on this graph)
+                                    </div>
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                      <label className="text-xs text-gray-700">
+                                        X Min
+                                        <input
+                                          type="text"
+                                          className="w-full mt-1 px-2 py-1 border border-gray-300 rounded text-xs"
+                                          value={editCurveMeta.xMin}
+                                          onChange={(e) => handleEditAxisBoundChange('xMin', e.target.value)}
+                                        />
+                                      </label>
+                                      <label className="text-xs text-gray-700">
+                                        X Max
+                                        <input
+                                          type="text"
+                                          className="w-full mt-1 px-2 py-1 border border-gray-300 rounded text-xs"
+                                          value={editCurveMeta.xMax}
+                                          onChange={(e) => handleEditAxisBoundChange('xMax', e.target.value)}
+                                        />
+                                      </label>
+                                      <label className="text-xs text-gray-700">
+                                        Y Min
+                                        <input
+                                          type="text"
+                                          className="w-full mt-1 px-2 py-1 border border-gray-300 rounded text-xs"
+                                          value={editCurveMeta.yMin}
+                                          onChange={(e) => handleEditAxisBoundChange('yMin', e.target.value)}
+                                        />
+                                      </label>
+                                      <label className="text-xs text-gray-700">
+                                        Y Max
+                                        <input
+                                          type="text"
+                                          className="w-full mt-1 px-2 py-1 border border-gray-300 rounded text-xs"
+                                          value={editCurveMeta.yMax}
+                                          onChange={(e) => handleEditAxisBoundChange('yMax', e.target.value)}
+                                        />
+                                      </label>
+                                    </div>
                                   </div>
                                   {(() => {
                                     const editableSymbolKeys = Array.from(
