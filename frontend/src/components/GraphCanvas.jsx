@@ -660,8 +660,9 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
 
       ctx.strokeStyle = orderedPoints[0].overlayColor || '#1976d2';
       ctx.lineWidth = inSavedView ? 2.5 : 4;
-      // Make line transparent when editing/dragging to see underlying curve
-      ctx.globalAlpha = isEditingCurve ? 0.1 : (inSavedView ? 0.85 : 1);
+      // Transparent when dragging, translucent when idle in edit mode, normal otherwise
+      const isActiveDrag = isEditingCurve && editDragPointIndex !== null;
+      ctx.globalAlpha = isActiveDrag ? 0.1 : (isEditingCurve ? 0.35 : (inSavedView ? 0.85 : 1));
       ctx.beginPath();
       ctx.moveTo(orderedPoints[0].canvasX, orderedPoints[0].canvasY);
       for (let i = 1; i < orderedPoints.length; i++) {
