@@ -1,7 +1,7 @@
 import { graphToCanvasWithBounds } from '../context/GraphContext';
 
-export const AI_MAX_POINTS_STORAGE_KEY = 'ai_max_points_per_curve';
-export const DEFAULT_AI_MAX_POINTS = 20;
+export const AI_MAX_POINTS_STORAGE_KEY = 'ai_max_points_per_curve_v2';
+export const DEFAULT_AI_MAX_POINTS = 10;
 export const MIN_AI_MAX_POINTS = 2;
 export const MAX_AI_MAX_POINTS = 200;
 /** Require at least this many AI points before auto-trimming a constant-axis line to endpoints. */

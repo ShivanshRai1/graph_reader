@@ -1,0 +1,101 @@
+DISCOVEREE EDIT XY — PROOF PACKAGE (NOT OUR APP BUG)
+Generated: 2026-06-18
+Graph Capture repo: graph_reader / graph-capture.netlify.app
+
+================================================================================
+SUMMARY FOR DISCOVEREE
+================================================================================
+- REMOVE works: action=remove persists after refresh (user verified in production).
+- EDIT xy does NOT persist: POST returns success but immediate GET returns old xy.
+- Same result when calling DiscoverEE API directly with curl/node (no Graph Capture code).
+
+================================================================================
+TEST A — RAW HTTP (bypasses Graph Capture entirely)
+================================================================================
+Graph ID: 17413
+Detail ID: 28394
+Curve: TJ = 175°C
+
+STEP 1 — GET BEFORE
+  URL: https://www.discoveree.io/graph_capture_api.php?graph_id=17413
+  first point: x=5, y=0
+  point count: 25
+
+STEP 2 — POST EDIT
+  URL: https://www.discoveree.io/graph_capture_api.php?action=edit&graph_id=17413
+  Method: POST
+  Content-Type: application/json
+  Body includes: details[0].id = "28394", full xy with first point y changed 0 -> 0.123
+  Response: {"status":"success","msg":"Graph data saved..","graph_id":"17413"}
+  HTTP: 200
+
+STEP 3 — GET IMMEDIATELY AFTER (3 second wait)
+  URL: https://www.discoveree.io/graph_capture_api.php?graph_id=17413
+  detail.id: 28394 (unchanged)
+  first point: x=5, y=0  <-- STILL OLD VALUE (sent 0.123)
+  VERDICT: POST success but xy NOT persisted on server
+
+================================================================================
+TEST B — WHAT GRAPH CAPTURE SENDS ON EDIT (our code is correct)
+================================================================================
+URL: graph_capture_api.php?action=edit&graph_id=<graph_id>
+Method: POST
+JSON shape:
+{
+  "graph": { "graph_id", "discoveree_cat_id", "identifier", "partno", "manf",
+              "graph_title", "curve_title", "mark_review", "testuser_id", ...symbols },
+  "details": [{
+    "id": "<DiscoverEE detail id>",     // required for edit
+    "curve_title": "...",
+    "xy": "{x:...,y:...},...",          // full updated point list
+    "changed_points": [...],            // when points changed
+    "xscale", "yscale", "xunit", "yunit",
+    "x_min", "x_max", "y_min", "y_max"
+  }]
+}
+
+Console logs in app:
+  === EDIT API REQUEST ===   (full payload)
+  === EDIT API RESPONSE ===  (status success)
+  [EDIT VERIFY]              (xyConfirmedOnDiscoveree: false when server xy stale)
+
+================================================================================
+TEST C — REMOVE WORKS (contrast)
+================================================================================
+URL: graph_capture_api.php?action=remove&graph_id=X&id=<detail_id>&discoveree_cat_id=...&testuser_id=...
+Method: GET
+User confirmed: curve gone after refresh => DiscoverEE persistence works for remove.
+
+================================================================================
+REPRODUCE RAW TEST (copy/paste for DiscoverEE)
+================================================================================
+Run in Node.js or adapt to curl:
+
+  GET  https://www.discoveree.io/graph_capture_api.php?graph_id=17413
+  POST https://www.discoveree.io/graph_capture_api.php?action=edit&graph_id=17413
+       Body: JSON with details[0].id and modified details[0].xy
+  GET  https://www.discoveree.io/graph_capture_api.php?graph_id=17413
+       Compare details[].xy — unchanged despite POST success
+
+Question for DiscoverEE:
+  What is the correct API to update details[].xy for an existing detail id?
+
+================================================================================
+SCREENSHOT CHECKLIST (browser — send to DiscoverEE)
+================================================================================
+1. Network tab: POST to graph_capture_api.php?action=edit&graph_id=...
+   - Request payload shows details[0].id and new xy string
+   - Response: {"status":"success",...}
+
+2. Console tab: [EDIT VERIFY] log
+   - sentPointCount vs verifiedXyLength differ OR xyConfirmedOnDiscoveree: false
+
+3. Network tab: GET graph_capture_api.php?graph_id=... right after edit
+   - Response details[].xy still has OLD coordinates
+
+4. Network tab: remove flow (working reference)
+   - GET ?action=remove&graph_id=...&id=...
+   - Refresh + GET shows curve removed
+
+5. Optional: same graph_id in new incognito window after edit
+   - Shows old points (proves not just localStorage — server data stale)
