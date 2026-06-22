@@ -1484,15 +1484,20 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
         )}
         {hasImportedCurvePoints() && !canShowImportedCurveOverlay() && (
           <div className="text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2 mt-2 text-sm">
-            {axisTickGuideContext ? (
-              <>
-                Set axis 0–{axisTickGuideContext.axisMax}. Place bottom-left on (0, 0). Orange dashed lines mark the last printed tick ({axisTickGuideContext.lastLabeled}) — the blue corner must sit on the outer plot border at {axisTickGuideContext.axisMax}, not on that inner grid line. Then Final Check.
-              </>
-            ) : (
-              <>
-                AI curve points are loaded. Set min/max to the full plot scale. Drag the blue box so bottom-left is at ({graphConfig.xMin}, {graphConfig.yMin}) and top-right at ({graphConfig.xMax}, {graphConfig.yMax}), then click Final Check.
-              </>
-            )}
+            <p className="font-semibold mb-1.5">AI points loaded — follow these steps:</p>
+            <ol className="list-decimal list-inside space-y-1 m-0 pl-0.5">
+              <li>Set <strong>X/Y min and max</strong> to match the graph axis labels.</li>
+              <li>
+                Drag the <strong>blue box</strong> to align with the plot area
+                (bottom-left near ({graphConfig.xMin}, {graphConfig.yMin}), top-right near ({graphConfig.xMax}, {graphConfig.yMax})).
+                {axisTickGuideContext ? (
+                  <span className="block mt-1 text-xs">
+                    Orange dashed lines mark the last printed tick ({axisTickGuideContext.lastLabeled}) — place the blue corner on the outer plot border at {axisTickGuideContext.axisMax}, not on that inner grid line.
+                  </span>
+                ) : null}
+              </li>
+              <li>Click <strong>Final Check</strong> in the configuration panel.</li>
+            </ol>
           </div>
         )}
         {savedViewCrosscheckActive && (
@@ -1502,15 +1507,19 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
         )}
         {hasImportedCurvePoints() && canShowImportedCurveOverlay() && isAxisMappingConfirmed && !isEditingCurve && !savedViewCrosscheckActive && (
           <div className="text-blue-800 bg-blue-50 border border-blue-200 rounded px-3 py-2 mt-2 text-sm">
-            {axisTickGuideContext ? (
-              <>
-                If points cross the top or right edge, the box corner is on the {axisTickGuideContext.lastLabeled} tick instead of the {axisTickGuideContext.axisMax} border — drag top-right outward past the orange dashed lines. Otherwise fine-tune with box handles or Edit curve.
-              </>
-            ) : (
-              <>
-                Drag the blue box handles to fine-tune alignment — AI points move with the box. Use Edit curve to drag individual points if needed.
-              </>
-            )}
+            <p className="font-semibold mb-1.5">AI points loaded — fine-tune and save:</p>
+            <ol className="list-decimal list-inside space-y-1 m-0 pl-0.5">
+              <li>Drag the <strong>blue box</strong> if the plot area needs alignment (AI points move with the box).
+                {axisTickGuideContext ? (
+                  <span className="block mt-1 text-xs">
+                    If points cross the top or right edge, drag the top-right corner outward past the orange dashed lines (past the {axisTickGuideContext.lastLabeled} tick to the {axisTickGuideContext.axisMax} border).
+                  </span>
+                ) : null}
+              </li>
+              <li>In <strong>Saved Graphs</strong>, click <strong>Edit</strong> — curve name and axis mapping are already set.</li>
+              <li>Drag points onto the curve if placement is off.</li>
+              <li>Click <strong>Update Data</strong> to save.</li>
+            </ol>
           </div>
         )}
         {removedPointsMsg && (
