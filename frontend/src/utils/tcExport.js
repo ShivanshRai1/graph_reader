@@ -719,7 +719,7 @@ export const buildSavedCurveCsvExport = (curve, graphConfig = {}, options = {}) 
     ['# Exported At', meta.exportedAt],
     [''],
   ];
-  const header = ['#', 'X', 'Y'];
+  const header = ['Index', 'X', 'Y'];
   const rows = points.map((point, index) => [
     String(index + 1),
     formatSavedCurveExportValue(point.x),
@@ -786,7 +786,7 @@ export const buildSavedCurvesCombinedCsvExport = (curves = [], graphConfig = {},
       ['# Curve', section.name],
       ['# Temperature', section.temperature],
       [''],
-      ['#', 'X', 'Y'],
+      ['Index', 'X', 'Y'],
       ...section.points.map((point, index) => [
         String(index + 1),
         formatSavedCurveExportValue(point.x),

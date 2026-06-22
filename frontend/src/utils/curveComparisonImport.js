@@ -94,6 +94,39 @@ const parseCsvPointRows = (dataRows) => {
 
   if (xIndex >= 0 && yIndex >= 0) {
     startIndex = 1;
+  } else if (headerValues.length >= 3) {
+    const firstCol = headerLower[0];
+    const indexCol =
+      firstCol === '#' || firstCol === 'index' || firstCol === '' || firstCol === 'no' || firstCol === 'num';
+    const n0 = parseFloat(headerValues[0]);
+    const n1 = parseFloat(headerValues[1]);
+    const n2 = parseFloat(headerValues[2]);
+    const looksLikeIndexRow =
+      Number.isFinite(n0) &&
+      Number.isFinite(n1) &&
+      Number.isFinite(n2) &&
+      Math.abs(n0 - Math.round(n0)) < 1e-9 &&
+      n0 > 0 &&
+      n1 !== n0;
+
+    if (indexCol) {
+      xIndex = 1;
+      yIndex = 2;
+      startIndex = 1;
+    } else if (looksLikeIndexRow) {
+      xIndex = 1;
+      yIndex = 2;
+      startIndex = 0;
+    } else {
+      xIndex = 0;
+      yIndex = 1;
+      const firstX = parseFloat(headerValues[0]);
+      const firstY = parseFloat(headerValues[1]);
+      if (!Number.isFinite(firstX) || !Number.isFinite(firstY)) {
+        throw new Error('Invalid CSV file: expected numeric X and Y columns.');
+      }
+      startIndex = 0;
+    }
   } else {
     xIndex = 0;
     yIndex = 1;

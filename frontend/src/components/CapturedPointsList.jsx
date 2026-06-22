@@ -167,7 +167,7 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false, isEditin
       ['# Exported At', meta.exportedAt],
       [''],
     ];
-    const header = ['#', 'X', 'Y'];
+    const header = ['Index', 'X', 'Y'];
     const rows = manualCapturePoints.map((point, idx) => {
       const recalculated = getRecalculatedPoint(point);
       return [
