@@ -43,10 +43,18 @@ const LAYOUT_OVERLAY = 'overlay';
 const LAYOUT_TC_SPLIT = 'tcSplit';
 /** Original image | overlaid .tc */
 const LAYOUT_IMAGE_OVERLAY = 'imageOverlay';
-/** Original image | reference .tc | export .tc (two charts on the right) */
-const LAYOUT_IMAGE_TC_SPLIT = 'imageTcSplit';
 /** Original | reference .tc | export .tc in one row */
 const LAYOUT_TRIPLE = 'triple';
+
+const getPreferredLayoutMode = (options, { hasImage, canComparePlots }) => {
+  if (hasImage && canComparePlots && options.some((option) => option.id === LAYOUT_TRIPLE)) {
+    return LAYOUT_TRIPLE;
+  }
+  if (canComparePlots && options.some((option) => option.id === LAYOUT_TC_SPLIT)) {
+    return LAYOUT_TC_SPLIT;
+  }
+  return options[0]?.id ?? LAYOUT_TRIPLE;
+};
 
 /** Set true to show the numeric accuracy table when reference + export are loaded */
 const SHOW_ACCURACY_TABLE = false;
@@ -103,6 +111,7 @@ const TcPlotChecker = () => {
   const panelDiscovereeRef = useRef(null);
   const panelAnalogRef = useRef(null);
   const rmsExportRef = useRef(null);
+  const userPickedLayoutRef = useRef(false);
 
   const revokeImageUrl = useCallback(() => {
     if (imageUrlRef.current) {
@@ -174,7 +183,6 @@ const TcPlotChecker = () => {
     setOriginalImage(null);
     setLayoutMode((prev) => {
       if (prev === LAYOUT_IMAGE_OVERLAY) return LAYOUT_OVERLAY;
-      if (prev === LAYOUT_IMAGE_TC_SPLIT) return LAYOUT_TC_SPLIT;
       if (prev === LAYOUT_TRIPLE) return LAYOUT_OVERLAY;
       return prev;
     });
@@ -304,14 +312,9 @@ const TcPlotChecker = () => {
 
   const layoutOptions = useMemo(() => {
     const options = [];
-    if (hasImage && hasPlot) {
-      if (canComparePlots) {
-        options.push({ id: LAYOUT_TRIPLE, label: 'Side by side (image | captured | reference)' });
-        options.push({ id: LAYOUT_IMAGE_OVERLAY, label: 'Overlay (image + captured & reference on one plot)' });
-        options.push({ id: LAYOUT_IMAGE_TC_SPLIT, label: 'Image + captured | reference' });
-      } else {
-        options.push({ id: LAYOUT_IMAGE_OVERLAY, label: 'Side by side (image | captured)' });
-      }
+    if (hasImage && hasPlot && canComparePlots) {
+      options.push({ id: LAYOUT_TRIPLE, label: 'Side by side (image | captured | reference)' });
+      options.push({ id: LAYOUT_IMAGE_OVERLAY, label: 'Overlay (image + captured & reference on one plot)' });
     } else if (canComparePlots) {
       options.push({ id: LAYOUT_TC_SPLIT, label: 'Side by side (captured | reference)' });
       options.push({ id: LAYOUT_OVERLAY, label: 'Overlay (captured & reference on one plot)' });
@@ -321,21 +324,33 @@ const TcPlotChecker = () => {
 
   useEffect(() => {
     if (layoutOptions.length === 0) return;
+    const context = { hasImage, canComparePlots };
     const isValid = layoutOptions.some((option) => option.id === layoutMode);
     if (!isValid) {
-      setLayoutMode(layoutOptions[0].id);
+      setLayoutMode(getPreferredLayoutMode(layoutOptions, context));
+      return;
     }
-  }, [layoutOptions, layoutMode]);
+    if (!userPickedLayoutRef.current) {
+      const preferred = getPreferredLayoutMode(layoutOptions, context);
+      if (preferred && layoutMode !== preferred) {
+        setLayoutMode(preferred);
+      }
+    }
+  }, [layoutOptions, layoutMode, hasImage, canComparePlots]);
+
+  const handleLayoutModeChange = (mode) => {
+    userPickedLayoutRef.current = true;
+    setLayoutMode(mode);
+  };
 
   const showImageInComparison = hasImage && (
     layoutMode === LAYOUT_IMAGE_OVERLAY ||
-    layoutMode === LAYOUT_IMAGE_TC_SPLIT ||
     layoutMode === LAYOUT_TRIPLE
   );
 
   const isTripleLayout = layoutMode === LAYOUT_TRIPLE;
   const isOverlayLayout = layoutMode === LAYOUT_OVERLAY || layoutMode === LAYOUT_IMAGE_OVERLAY;
-  const isTcSplitLayout = layoutMode === LAYOUT_TC_SPLIT || layoutMode === LAYOUT_IMAGE_TC_SPLIT;
+  const isTcSplitLayout = layoutMode === LAYOUT_TC_SPLIT;
 
   const chartWidth = isTripleLayout ? 500 : (isTcSplitLayout ? 540 : 720);
   const chartHeight = isTripleLayout ? 400 : (isTcSplitLayout ? 380 : 460);
@@ -538,7 +553,6 @@ const TcPlotChecker = () => {
                 {renderOverlayChart()}
               </div>
             )}
-            {isTcSplitLayout && canComparePlots && renderSplitTcCharts(true, true)}
           </div>
         </div>
       );
@@ -806,7 +820,7 @@ const TcPlotChecker = () => {
                     type="radio"
                     name="comparison-layout"
                     checked={layoutMode === option.id}
-                    onChange={() => setLayoutMode(option.id)}
+                    onChange={() => handleLayoutModeChange(option.id)}
                   />
                   {option.label}
                 </label>
