@@ -7563,21 +7563,21 @@ const GraphCapture = () => {
                               })()}
                               {editingCurveId === curve.id ? (
                                 <div className="mt-2">
-                                  <label className="text-xs text-gray-700 block mb-3">
+                                  <label className="text-sm font-semibold text-gray-700 block mb-3">
                                     Curve Name
                                     <input
                                       type="text"
-                                      className="w-full mt-1 px-2 py-1 border border-gray-300 rounded text-xs"
+                                      className="w-full mt-1 px-2 py-1.5 border border-gray-300 rounded text-sm font-medium"
                                       value={editCurveName}
                                       onChange={(e) => setEditCurveName(e.target.value)}
                                       placeholder="Enter curve name"
                                     />
                                   </label>
                                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                    <label className="text-xs text-gray-700">
+                                    <label className="text-sm font-semibold text-gray-700">
                                       Y Scale
                                       <select
-                                        className="w-full mt-1 px-2 py-1 border border-gray-300 rounded text-xs"
+                                        className="w-full mt-1 px-2 py-1.5 border border-gray-300 rounded text-sm font-medium"
                                         value={editCurveMeta.yScale}
                                         onChange={(e) => setEditCurveMeta({ ...editCurveMeta, yScale: e.target.value })}
                                       >
@@ -7585,10 +7585,10 @@ const GraphCapture = () => {
                                         <option value="Logarithmic">Logarithmic</option>
                                       </select>
                                     </label>
-                                    <label className="text-xs text-gray-700">
+                                    <label className="text-sm font-semibold text-gray-700">
                                       Y Unit
                                       <select
-                                        className="w-full mt-1 px-2 py-1 border border-gray-300 rounded text-xs"
+                                        className="w-full mt-1 px-2 py-1.5 border border-gray-300 rounded text-sm font-medium"
                                         value={editCurveMeta.yUnitPrefix}
                                         onChange={(e) => setEditCurveMeta({ ...editCurveMeta, yUnitPrefix: e.target.value })}
                                       >
@@ -7599,10 +7599,10 @@ const GraphCapture = () => {
                                         ))}
                                       </select>
                                     </label>
-                                    <label className="text-xs text-gray-700">
+                                    <label className="text-sm font-semibold text-gray-700">
                                       X Scale
                                       <select
-                                        className="w-full mt-1 px-2 py-1 border border-gray-300 rounded text-xs"
+                                        className="w-full mt-1 px-2 py-1.5 border border-gray-300 rounded text-sm font-medium"
                                         value={editCurveMeta.xScale}
                                         onChange={(e) => setEditCurveMeta({ ...editCurveMeta, xScale: e.target.value })}
                                       >
@@ -7610,10 +7610,10 @@ const GraphCapture = () => {
                                         <option value="Logarithmic">Logarithmic</option>
                                       </select>
                                     </label>
-                                    <label className="text-xs text-gray-700">
+                                    <label className="text-sm font-semibold text-gray-700">
                                       X Unit
                                       <select
-                                        className="w-full mt-1 px-2 py-1 border border-gray-300 rounded text-xs"
+                                        className="w-full mt-1 px-2 py-1.5 border border-gray-300 rounded text-sm font-medium"
                                         value={editCurveMeta.xUnitPrefix}
                                         onChange={(e) => setEditCurveMeta({ ...editCurveMeta, xUnitPrefix: e.target.value })}
                                       >
@@ -7626,42 +7626,42 @@ const GraphCapture = () => {
                                     </label>
                                   </div>
                                   <div className="mt-3 p-2 rounded border border-gray-200 bg-gray-50">
-                                    <div className="text-xs font-medium text-gray-700 mb-2">
+                                    <div className="text-sm font-bold text-gray-800 mb-2">
                                       Axis Range (applies to all curves on this graph)
                                     </div>
                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                      <label className="text-xs text-gray-700">
+                                      <label className="text-sm font-semibold text-gray-700">
                                         X Min
                                         <input
                                           type="text"
-                                          className="w-full mt-1 px-2 py-1 border border-gray-300 rounded text-xs"
+                                          className="w-full mt-1 px-2 py-1.5 border border-gray-300 rounded text-sm font-medium"
                                           value={editCurveMeta.xMin}
                                           onChange={(e) => handleEditAxisBoundChange('xMin', e.target.value)}
                                         />
                                       </label>
-                                      <label className="text-xs text-gray-700">
+                                      <label className="text-sm font-semibold text-gray-700">
                                         X Max
                                         <input
                                           type="text"
-                                          className="w-full mt-1 px-2 py-1 border border-gray-300 rounded text-xs"
+                                          className="w-full mt-1 px-2 py-1.5 border border-gray-300 rounded text-sm font-medium"
                                           value={editCurveMeta.xMax}
                                           onChange={(e) => handleEditAxisBoundChange('xMax', e.target.value)}
                                         />
                                       </label>
-                                      <label className="text-xs text-gray-700">
+                                      <label className="text-sm font-semibold text-gray-700">
                                         Y Min
                                         <input
                                           type="text"
-                                          className="w-full mt-1 px-2 py-1 border border-gray-300 rounded text-xs"
+                                          className="w-full mt-1 px-2 py-1.5 border border-gray-300 rounded text-sm font-medium"
                                           value={editCurveMeta.yMin}
                                           onChange={(e) => handleEditAxisBoundChange('yMin', e.target.value)}
                                         />
                                       </label>
-                                      <label className="text-xs text-gray-700">
+                                      <label className="text-sm font-semibold text-gray-700">
                                         Y Max
                                         <input
                                           type="text"
-                                          className="w-full mt-1 px-2 py-1 border border-gray-300 rounded text-xs"
+                                          className="w-full mt-1 px-2 py-1.5 border border-gray-300 rounded text-sm font-medium"
                                           value={editCurveMeta.yMax}
                                           onChange={(e) => handleEditAxisBoundChange('yMax', e.target.value)}
                                         />
@@ -7685,11 +7685,11 @@ const GraphCapture = () => {
                                       {editableSymbolKeys.map((symbol) => {
                                         const displayLabel = getSymbolDisplayLabel(symbol);
                                         return (
-                                          <label key={`${curve.id}_${symbol}`} className="text-sm text-gray-700">
+                                          <label key={`${curve.id}_${symbol}`} className="text-sm font-semibold text-gray-700">
                                             {displayLabel}
                                             <input
                                               type="text"
-                                              className="w-full mt-1 px-2 py-1 border border-gray-300 rounded text-sm"
+                                              className="w-full mt-1 px-2 py-1.5 border border-gray-300 rounded text-sm font-medium"
                                               value={resolveSymbolValue(editCurveSymbolValues, symbol, editableSymbolKeys)}
                                               onChange={(e) =>
                                                 setEditCurveSymbolValues({
@@ -7706,14 +7706,14 @@ const GraphCapture = () => {
                                   })()}
                                   <div className="flex gap-2 mt-3">
                                     <button
-                                      className="px-3 py-1 rounded bg-green-600 text-white text-sm"
+                                      className="px-3 py-1.5 rounded bg-green-600 text-white text-sm font-semibold"
                                       onClick={() => handleEditCurveUpdate(curve.id)}
                                       disabled={isUpdatingCurveId === curve.id}
                                     >
                                       {isUpdatingCurveId === curve.id ? 'Updating...' : 'Update Data'}
                                     </button>
                                     <button
-                                      className="px-3 py-1 rounded bg-gray-700 text-white text-sm"
+                                      className="px-3 py-1.5 rounded bg-gray-700 text-white text-sm font-semibold"
                                       onClick={handleEditCurveCancel}
                                     >
                                       Cancel Edit
