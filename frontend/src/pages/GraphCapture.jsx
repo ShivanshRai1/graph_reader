@@ -1490,10 +1490,7 @@ const buildCompanyXyString = (points = []) =>
     .map((point) => `{x:${String(point.x)},y:${String(point.y)}}`)
     .join(',');
 
-// Option 2 experiment: POST company edits using the same URL/shape as append save (not action=edit).
-const COMPANY_EDIT_USE_SAVE_STYLE = true;
-
-const buildCompanySaveStyleDetailPayload = ({
+const buildCompanyAppendDetailPayload = ({
   curveTitle,
   points,
   xScale,
@@ -1501,7 +1498,6 @@ const buildCompanySaveStyleDetailPayload = ({
   xUnitPrefix,
   yUnitPrefix,
   axisConfig,
-  detailId,
 }) => {
   const detailPayload = {
     curve_title: curveTitle || '',
@@ -1510,11 +1506,110 @@ const buildCompanySaveStyleDetailPayload = ({
     xunit: xUnitPrefix || '1',
     yunit: yUnitPrefix || '1',
   };
-  if (detailId) detailPayload.id = String(detailId);
   appendCompanyDetailAxisBounds(detailPayload, axisConfig);
   const xy = buildCompanyXyString(points);
-  if (xy) detailPayload.xy = xy;
+  if (!xy) {
+    throw new Error('No valid points to save.');
+  }
+  detailPayload.xy = xy;
   return detailPayload;
+};
+
+const removeCompanyDetailFromDiscoveree = async ({
+  graphId,
+  detailId,
+  discovereeCatId = '',
+  testuserId = '',
+  corsFallback,
+}) => {
+  const normalizedGraphId = String(graphId || '').trim();
+  const normalizedDetailId = String(detailId || '').trim();
+  if (!normalizedGraphId || !normalizedDetailId) {
+    throw new Error('Missing graph_id or detail id for remove.');
+  }
+
+  const companyUrl = `https://www.discoveree.io/graph_capture_api.php?${new URLSearchParams({
+    action: 'remove',
+    graph_id: normalizedGraphId,
+    id: normalizedDetailId,
+    discoveree_cat_id: String(discovereeCatId || ''),
+    testuser_id: String(testuserId || ''),
+  }).toString()}`;
+
+  console.log('=== COMPANY REMOVE REQUEST ===', {
+    graphId: normalizedGraphId,
+    detailId: normalizedDetailId,
+    url: companyUrl,
+  });
+
+  try {
+    const response = await fetch(companyUrl, { method: 'GET' });
+    const responseText = await response.text();
+    console.log('=== COMPANY REMOVE RESPONSE ===', {
+      graphId: normalizedGraphId,
+      detailId: normalizedDetailId,
+      status: response.status,
+      ok: response.ok,
+      response: responseText.substring(0, 300),
+    });
+    if (!response.ok) {
+      throw new Error(`Company remove failed (${response.status})`);
+    }
+  } catch (error) {
+    const maybeCors = error?.message === 'Failed to fetch' || error?.name === 'TypeError';
+    if (maybeCors && typeof corsFallback === 'function') {
+      console.warn('Remove fetch blocked by CORS, using browser fallback:', companyUrl);
+      await corsFallback(companyUrl);
+      return;
+    }
+    throw error;
+  }
+};
+
+const postCompanyAppendSave = async (graphId, payload) => {
+  const normalizedGraphId = String(graphId || '').trim();
+  if (!normalizedGraphId) {
+    throw new Error('Missing graph_id for append save.');
+  }
+
+  const companyUrl = `${DISCOVEREE_GRAPH_CAPTURE_API_URL}?graph_id=${encodeURIComponent(normalizedGraphId)}`;
+  console.log('=== COMPANY APPEND SAVE REQUEST ===', {
+    graphId: normalizedGraphId,
+    url: companyUrl,
+    payload,
+  });
+
+  const response = await fetch(companyUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+  const rawText = await response.text();
+  let result = {};
+  try {
+    result = rawText ? parseCompanyApiText(rawText) : {};
+  } catch {
+    result = rawText;
+  }
+  console.log('=== COMPANY APPEND SAVE RESPONSE ===', {
+    graphId: normalizedGraphId,
+    url: companyUrl,
+    status: response.status,
+    ok: response.ok,
+    rawText,
+    response: result,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Company append save failed (${response.status})`);
+  }
+  if (result?.status && result.status !== 'success') {
+    throw new Error(result?.msg || 'Company append save returned non-success status');
+  }
+
+  return { result, companyUrl, rawText };
 };
 
 const parseCompanyAxisNumber = (value) => {
@@ -4790,36 +4885,14 @@ const GraphCapture = () => {
       ''
     );
     const resolvedDetailId = getDetailIdForCurve(curve);
+    if (!resolvedDetailId) {
+      throw new Error('Missing DiscoverEE detail id for update. Refresh the graph and try again.');
+    }
+    if (nextPoints.length === 0) {
+      throw new Error('No valid points to save for this curve.');
+    }
 
-    const buildCompanyEditGraphSection = (curveTitle, includeLegacyRenameFields = false) => ({
-      graph_id: String(companyGraphId),
-      discoveree_cat_id: String(curve?.discoveree_cat_id || urlParams.discoveree_cat_id || ''),
-      identifier: resolvedEditIdentifier,
-      partno: urlParams.partno || graphConfig.partNumber || curve.config?.partNumber || '',
-      manf: urlParams.manf || urlParams.manufacturer || graphConfig.manufacturer || '',
-      manufacturer: urlParams.manufacturer || graphConfig.manufacturer || '',
-      graph_title: graphConfig.graphTitle || urlParams.graph_title || curve.config?.graphTitle || '',
-      curve_title: curveTitle,
-      x_title: graphConfig.xLabel || urlParams.x_label || curve.config?.xLabel || '',
-      y_title: graphConfig.yLabel || urlParams.y_label || curve.config?.yLabel || '',
-      ...(resolvedGraphImageForEdit ? { graph_img: resolvedGraphImageForEdit } : {}),
-      mark_review: '1',
-      testuser_id: String(curve?.testuser_id || urlParams.testuser_id || ''),
-      uname: urlParams.username || graphConfig.username || '',
-      username: urlParams.username || graphConfig.username || '',
-      ...(includeLegacyRenameFields && hasCurveNameChange
-        ? { old_curve_name: resolvedOldCurveName, new_curve_name: resolvedNewCurveName }
-        : {}),
-    });
-
-    const attachCompanySymbolFields = (payload, symbolPayload) => {
-      Object.entries(getGraphDynamicFieldValues(symbolPayload)).forEach(([key, value]) => {
-        payload.graph[key] = value;
-      });
-      return payload;
-    };
-
-    const saveStyleDetailPayload = buildCompanySaveStyleDetailPayload({
+    const detailPayload = buildCompanyAppendDetailPayload({
       curveTitle: resolvedNewCurveName,
       points: nextPoints,
       xScale: resolvedEditMeta.xScale,
@@ -4827,124 +4900,66 @@ const GraphCapture = () => {
       xUnitPrefix: resolvedEditMeta.xUnitPrefix,
       yUnitPrefix: resolvedEditMeta.yUnitPrefix,
       axisConfig: resolvedEditAxis,
-      detailId: resolvedDetailId,
     });
 
-    const legacyDetailPayload = {
-      curve_title: resolvedNewCurveName,
-      xscale: resolvedEditMeta.xScale,
-      yscale: resolvedEditMeta.yScale,
-      xunit: resolvedEditMeta.xUnitPrefix,
-      yunit: resolvedEditMeta.yUnitPrefix,
-    };
-    if (resolvedDetailId) legacyDetailPayload.id = String(resolvedDetailId);
-    appendCompanyDetailAxisBounds(legacyDetailPayload, resolvedEditAxis);
-    if (nextPoints.length > 0) {
-      legacyDetailPayload.xy = buildCompanyXyString(nextPoints);
-      if (hasXyChanges) legacyDetailPayload.changed_points = changedPoints;
-    }
-
-    const postCompanyEditPayload = async (companyUrl, payload, editMode) => {
-      console.log('=== EDIT API REQUEST ===', {
-        source: 'company',
-        editMode,
-        targetGraphId: companyGraphId,
-        targetDetailId: resolvedDetailId || '',
-        url: companyUrl,
-        method: 'POST',
-        payload,
-      });
-
-      const response = await fetch(companyUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-      const rawText = await response.text();
-      let result = {};
-      try {
-        result = rawText ? parseCompanyApiText(rawText) : {};
-      } catch {
-        result = rawText;
-      }
-      console.log('=== EDIT API RESPONSE ===', {
-        source: 'company',
-        editMode,
-        targetGraphId: companyGraphId,
-        targetDetailId: resolvedDetailId || '',
-        url: companyUrl,
-        status: response.status,
-        ok: response.ok,
-        rawText,
-        response: result,
-      });
-      return { response, result, rawText, companyUrl };
-    };
-
-    let editMode = 'action-edit';
-    let detailPayload = legacyDetailPayload;
-    let companyUrl = `https://www.discoveree.io/graph_capture_api.php?${new URLSearchParams({
-      action: 'edit',
-      graph_id: String(companyGraphId),
-    }).toString()}`;
-    let response;
-    let result = {};
-    let rawText = '';
-
-    if (COMPANY_EDIT_USE_SAVE_STYLE) {
-      const saveStylePayload = attachCompanySymbolFields(
-        {
-          graph: buildCompanyEditGraphSection(resolvedNewCurveName, false),
-          details: [saveStyleDetailPayload],
-        },
-        nextSymbolPayload
-      );
-      const saveStyleUrl = `${DISCOVEREE_GRAPH_CAPTURE_API_URL}?graph_id=${encodeURIComponent(String(companyGraphId))}`;
-      try {
-        const saveStyleAttempt = await postCompanyEditPayload(saveStyleUrl, saveStylePayload, 'save-style');
-        response = saveStyleAttempt.response;
-        result = saveStyleAttempt.result;
-        rawText = saveStyleAttempt.rawText;
-        companyUrl = saveStyleAttempt.companyUrl;
-        editMode = 'save-style';
-        detailPayload = saveStyleDetailPayload;
-
-        if (!response.ok) {
-          throw new Error(`Company save-style update failed (${response.status})`);
-        }
-        if (result?.status && result.status !== 'success') {
-          throw new Error(result?.msg || 'Company save-style returned non-success status');
-        }
-      } catch (saveStyleError) {
-        console.warn('[EDIT EXPERIMENT] save-style update failed; falling back to action=edit', saveStyleError);
-        editMode = 'action-edit-fallback';
-      }
-    }
-
-    if (editMode !== 'save-style') {
-      const legacyPayload = attachCompanySymbolFields(
-        {
-          graph: buildCompanyEditGraphSection(resolvedNewCurveName, true),
-          details: [legacyDetailPayload],
-        },
-        nextSymbolPayload
-      );
-      companyUrl = `https://www.discoveree.io/graph_capture_api.php?${new URLSearchParams({
-        action: 'edit',
+    const appendPayload = {
+      graph: {
         graph_id: String(companyGraphId),
-      }).toString()}`;
-      const legacyAttempt = await postCompanyEditPayload(companyUrl, legacyPayload, editMode);
-      response = legacyAttempt.response;
-      result = legacyAttempt.result;
-      rawText = legacyAttempt.rawText;
-      detailPayload = legacyDetailPayload;
+        discoveree_cat_id: String(curve?.discoveree_cat_id || urlParams.discoveree_cat_id || ''),
+        identifier: resolvedEditIdentifier,
+        partno: urlParams.partno || graphConfig.partNumber || curve.config?.partNumber || '',
+        manf: urlParams.manf || urlParams.manufacturer || graphConfig.manufacturer || '',
+        manufacturer: urlParams.manufacturer || graphConfig.manufacturer || '',
+        graph_title: graphConfig.graphTitle || urlParams.graph_title || curve.config?.graphTitle || '',
+        curve_title: resolvedNewCurveName,
+        x_title: graphConfig.xLabel || urlParams.x_label || curve.config?.xLabel || '',
+        y_title: graphConfig.yLabel || urlParams.y_label || curve.config?.yLabel || '',
+        ...(resolvedGraphImageForEdit ? { graph_img: resolvedGraphImageForEdit } : {}),
+        mark_review: '1',
+        testuser_id: String(curve?.testuser_id || urlParams.testuser_id || ''),
+        uname: urlParams.username || graphConfig.username || '',
+        username: urlParams.username || graphConfig.username || '',
+      },
+      details: [detailPayload],
+    };
+    Object.entries(getGraphDynamicFieldValues(nextSymbolPayload)).forEach(([key, value]) => {
+      appendPayload.graph[key] = value;
+    });
+
+    console.log('=== EDIT REMOVE-AND-RESAVE ===', {
+      step: 'remove',
+      graphId: companyGraphId,
+      detailId: resolvedDetailId,
+    });
+    try {
+      await removeCompanyDetailFromDiscoveree({
+        graphId: companyGraphId,
+        detailId: resolvedDetailId,
+        discovereeCatId: String(curve?.discoveree_cat_id || urlParams.discoveree_cat_id || ''),
+        testuserId: String(curve?.testuser_id || urlParams.testuser_id || ''),
+        corsFallback: triggerGetWithoutCors,
+      });
+    } catch (removeError) {
+      throw new Error(`Failed to remove old curve before save: ${removeError.message}`);
     }
 
-    const returnedGraphId = result?.graph_id ? String(result.graph_id) : '';
+    console.log('=== EDIT REMOVE-AND-RESAVE ===', {
+      step: 'append-save',
+      graphId: companyGraphId,
+    });
+    let appendResult;
+    try {
+      appendResult = await postCompanyAppendSave(companyGraphId, appendPayload);
+    } catch (saveError) {
+      throw new Error(
+        `Curve was removed from DiscoverEE but re-save failed: ${saveError.message}. ` +
+        'Refresh the page — you may need to capture this curve again.'
+      );
+    }
+
+    const returnedGraphId = appendResult?.result?.graph_id ? String(appendResult.result.graph_id) : '';
     console.log('=== GRAPH ID CONSISTENCY CHECK (EDIT) ===', {
-      editMode,
+      editMode: 'remove-and-resave',
       expectedGraphId: String(companyGraphId),
       sentGraphId: String(companyGraphId),
       sentIdentifier: String(resolvedEditIdentifier || ''),
@@ -4953,56 +4968,40 @@ const GraphCapture = () => {
       note: 'If matchesExpected is false, API is creating/updating a different graph context than requested.',
     });
 
-    if (!response.ok) {
-      throw new Error(`Company API update failed (${response.status})`);
-    }
-
-    if (result?.status && result.status !== 'success') {
-      throw new Error(result?.msg || 'Company API returned non-success status');
-    }
-
     void mirrorGraphImageToBackend(
       apiUrl,
       String(companyGraphId),
       resolvedGraphImageForEdit || uploadedImage
     );
 
-    if (detailPayload.xy) {
-      const sentXy = normalizeCompanyXyString(detailPayload.xy);
-      const { details: verifyDetails } = await fetchCompanyGraphDetailsWithRetry(companyGraphId);
-      const verifiedDetail = findCompanyDetailByIdOrXy(verifyDetails, {
-        detailId: resolvedDetailId,
-        xy: detailPayload.xy,
-      });
-      const verifiedXy = normalizeCompanyXyString(verifiedDetail?.xy);
-      const xyConfirmedOnDiscoveree = Boolean(verifiedXy && sentXy && verifiedXy === sentXy);
+    const sentXy = normalizeCompanyXyString(detailPayload.xy);
+    const { details: verifyDetails } = await fetchCompanyGraphDetailsWithRetry(companyGraphId);
+    const verifiedDetail = findCompanyDetailByIdOrXy(verifyDetails, { xy: detailPayload.xy });
+    const verifiedXy = normalizeCompanyXyString(verifiedDetail?.xy);
+    const xyConfirmedOnDiscoveree = Boolean(verifiedXy && sentXy && verifiedXy === sentXy);
+    const newDetailId = verifiedDetail?.id ? String(verifiedDetail.id) : '';
 
-      console.log('[EDIT VERIFY]', {
-        editMode,
-        graphId: String(companyGraphId),
-        detailId: resolvedDetailId || '',
-        verifiedDetailId: verifiedDetail?.id ? String(verifiedDetail.id) : '',
-        sentPointCount: nextPoints.length,
-        sentXyLength: sentXy.length,
-        verifiedXyLength: verifiedXy.length,
-        xyConfirmedOnDiscoveree,
-      });
+    console.log('[EDIT VERIFY]', {
+      editMode: 'remove-and-resave',
+      graphId: String(companyGraphId),
+      removedDetailId: resolvedDetailId,
+      verifiedDetailId: newDetailId,
+      sentPointCount: nextPoints.length,
+      sentXyLength: sentXy.length,
+      verifiedXyLength: verifiedXy.length,
+      xyConfirmedOnDiscoveree,
+    });
 
-      if (!xyConfirmedOnDiscoveree) {
-        console.warn(
-          '[EDIT VERIFY] DiscoverEE GET did not yet return the edited xy; locallyModified cache will be used on refresh.'
-        );
-      }
-
-      return {
-        graphId: String(companyGraphId),
-        xyConfirmedOnDiscoveree,
-      };
+    if (!xyConfirmedOnDiscoveree) {
+      console.warn(
+        '[EDIT VERIFY] DiscoverEE GET did not yet return the re-saved xy; locallyModified cache will be used on refresh.'
+      );
     }
 
     return {
       graphId: String(companyGraphId),
-      xyConfirmedOnDiscoveree: true,
+      detailId: newDetailId,
+      xyConfirmedOnDiscoveree,
     };
   };
 
@@ -5022,6 +5021,8 @@ const GraphCapture = () => {
     try {
       const editResult = await pushEditedCurveToApi(targetCurve, editCurveMeta, editCurveSymbolValues, editCurveName);
       const xyConfirmedOnDiscoveree = editResult?.xyConfirmedOnDiscoveree !== false;
+      const newDetailId = String(editResult?.detailId || '').trim();
+      const graphIdForCurve = String(targetCurve.graphId || getGraphIdForCurve(targetCurve) || urlParams.graph_id || '').trim();
       syncGraphIdContext(targetCurve.graphId || getGraphIdForCurve(targetCurve));
 
       setSavedCurves((prev) => {
@@ -5030,6 +5031,12 @@ const GraphCapture = () => {
           const updatedName = editCurveName || curve.name;
           return {
             ...curve,
+            ...(newDetailId && graphIdForCurve
+              ? {
+                  detailId: newDetailId,
+                  id: `${graphIdForCurve}_${newDetailId}`,
+                }
+              : {}),
             name: updatedName,
             points: normalizePointsForComparison(dataPoints).map((point) => ({
               x_value: point.x,
@@ -5129,66 +5136,13 @@ const GraphCapture = () => {
       return;
     }
 
-    const removePayload = new URLSearchParams({
-      action: 'remove',
-      graph_id: String(graphId),
-      id: detailId,
-      discoveree_cat_id: discovereeCatId,
-      testuser_id: testuserId,
+    await removeCompanyDetailFromDiscoveree({
+      graphId,
+      detailId,
+      discovereeCatId,
+      testuserId,
+      corsFallback: triggerGetWithoutCors,
     });
-
-    const companyUrl = `https://www.discoveree.io/graph_capture_api.php?${removePayload.toString()}`;
-    // console.log('=== REMOVE API REQUEST ===', {
-    //   source: 'company',
-    //   targetGraphId: String(graphId),
-    //   targetDetailId: detailId,
-    //   url: companyUrl,
-    //   method: 'GET',
-    //   payload: Object.fromEntries(removePayload.entries()),
-    // });
-
-    try {
-      const response = await fetch(companyUrl, {
-        method: 'GET',
-      });
-
-      const responseText = await response.text();
-      let result = responseText;
-      try {
-        result = JSON.parse(responseText);
-      } catch {
-        // Keep raw text response when API does not return JSON.
-      }
-
-      // console.log('=== REMOVE API RESPONSE ===', {
-      //   source: 'company',
-      //   targetGraphId: String(graphId),
-      //   targetDetailId: detailId,
-      //   url: companyUrl,
-      //   status: response.status,
-      //   ok: response.ok,
-      //   response: result,
-      // });
-
-      if (!response.ok) {
-        throw new Error(`Company remove failed (${response.status})`);
-      }
-    } catch (error) {
-      const maybeCors = error?.message === 'Failed to fetch' || error?.name === 'TypeError';
-      if (!maybeCors) {
-        throw error;
-      }
-
-      console.warn('Remove fetch blocked by CORS, using browser fallback:', companyUrl);
-      const fallbackResult = await triggerGetWithoutCors(companyUrl);
-      // console.log('=== REMOVE API RESPONSE (FALLBACK) ===', {
-      //   source: 'company',
-      //   targetGraphId: String(graphId),
-      //   targetDetailId: detailId,
-      //   url: companyUrl,
-      //   fallbackResult,
-      // });
-    }
   };
 
   const handleRemoveCurve = async (curve) => {
