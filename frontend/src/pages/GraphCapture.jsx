@@ -1485,7 +1485,37 @@ const normalizeCompanyXyString = (xy) =>
   String(xy || '').replace(/\s/g, '').toLowerCase();
 
 const buildCompanyXyString = (points = []) =>
-  points.map((point) => `{x:${point.x},y:${point.y}}`).join(',');
+  (Array.isArray(points) ? points : [])
+    .filter((point) => Number.isFinite(Number(point?.x)) && Number.isFinite(Number(point?.y)))
+    .map((point) => `{x:${String(point.x)},y:${String(point.y)}}`)
+    .join(',');
+
+// Option 2 experiment: POST company edits using the same URL/shape as append save (not action=edit).
+const COMPANY_EDIT_USE_SAVE_STYLE = true;
+
+const buildCompanySaveStyleDetailPayload = ({
+  curveTitle,
+  points,
+  xScale,
+  yScale,
+  xUnitPrefix,
+  yUnitPrefix,
+  axisConfig,
+  detailId,
+}) => {
+  const detailPayload = {
+    curve_title: curveTitle || '',
+    xscale: xScale || '1',
+    yscale: yScale || '1',
+    xunit: xUnitPrefix || '1',
+    yunit: yUnitPrefix || '1',
+  };
+  if (detailId) detailPayload.id = String(detailId);
+  appendCompanyDetailAxisBounds(detailPayload, axisConfig);
+  const xy = buildCompanyXyString(points);
+  if (xy) detailPayload.xy = xy;
+  return detailPayload;
+};
 
 const parseCompanyAxisNumber = (value) => {
   const parsed = Number.parseFloat(value);
@@ -4761,92 +4791,163 @@ const GraphCapture = () => {
     );
     const resolvedDetailId = getDetailIdForCurve(curve);
 
-    const detailPayload = {
+    const buildCompanyEditGraphSection = (curveTitle, includeLegacyRenameFields = false) => ({
+      graph_id: String(companyGraphId),
+      discoveree_cat_id: String(curve?.discoveree_cat_id || urlParams.discoveree_cat_id || ''),
+      identifier: resolvedEditIdentifier,
+      partno: urlParams.partno || graphConfig.partNumber || curve.config?.partNumber || '',
+      manf: urlParams.manf || urlParams.manufacturer || graphConfig.manufacturer || '',
+      manufacturer: urlParams.manufacturer || graphConfig.manufacturer || '',
+      graph_title: graphConfig.graphTitle || urlParams.graph_title || curve.config?.graphTitle || '',
+      curve_title: curveTitle,
+      x_title: graphConfig.xLabel || urlParams.x_label || curve.config?.xLabel || '',
+      y_title: graphConfig.yLabel || urlParams.y_label || curve.config?.yLabel || '',
+      ...(resolvedGraphImageForEdit ? { graph_img: resolvedGraphImageForEdit } : {}),
+      mark_review: '1',
+      testuser_id: String(curve?.testuser_id || urlParams.testuser_id || ''),
+      uname: urlParams.username || graphConfig.username || '',
+      username: urlParams.username || graphConfig.username || '',
+      ...(includeLegacyRenameFields && hasCurveNameChange
+        ? { old_curve_name: resolvedOldCurveName, new_curve_name: resolvedNewCurveName }
+        : {}),
+    });
+
+    const attachCompanySymbolFields = (payload, symbolPayload) => {
+      Object.entries(getGraphDynamicFieldValues(symbolPayload)).forEach(([key, value]) => {
+        payload.graph[key] = value;
+      });
+      return payload;
+    };
+
+    const saveStyleDetailPayload = buildCompanySaveStyleDetailPayload({
+      curveTitle: resolvedNewCurveName,
+      points: nextPoints,
+      xScale: resolvedEditMeta.xScale,
+      yScale: resolvedEditMeta.yScale,
+      xUnitPrefix: resolvedEditMeta.xUnitPrefix,
+      yUnitPrefix: resolvedEditMeta.yUnitPrefix,
+      axisConfig: resolvedEditAxis,
+      detailId: resolvedDetailId,
+    });
+
+    const legacyDetailPayload = {
       curve_title: resolvedNewCurveName,
       xscale: resolvedEditMeta.xScale,
       yscale: resolvedEditMeta.yScale,
       xunit: resolvedEditMeta.xUnitPrefix,
       yunit: resolvedEditMeta.yUnitPrefix,
     };
-    if (resolvedDetailId) detailPayload.id = String(resolvedDetailId);
-    appendCompanyDetailAxisBounds(detailPayload, resolvedEditAxis);
-
-    if (hasXyChanges && nextPoints.length > 0) {
-      detailPayload.xy = buildCompanyXyString(nextPoints);
-      detailPayload.changed_points = changedPoints;
+    if (resolvedDetailId) legacyDetailPayload.id = String(resolvedDetailId);
+    appendCompanyDetailAxisBounds(legacyDetailPayload, resolvedEditAxis);
+    if (nextPoints.length > 0) {
+      legacyDetailPayload.xy = buildCompanyXyString(nextPoints);
+      if (hasXyChanges) legacyDetailPayload.changed_points = changedPoints;
     }
 
-    const payload = {
-      graph: {
-        graph_id: String(companyGraphId),
-        discoveree_cat_id: String(curve?.discoveree_cat_id || urlParams.discoveree_cat_id || ''),
-        identifier: resolvedEditIdentifier,
-        partno: urlParams.partno || graphConfig.partNumber || curve.config?.partNumber || '',
-        manf: urlParams.manf || urlParams.manufacturer || graphConfig.manufacturer || '',
-        manufacturer: urlParams.manufacturer || graphConfig.manufacturer || '',
-        graph_title: graphConfig.graphTitle || urlParams.graph_title || curve.config?.graphTitle || '',
-        curve_title: resolvedNewCurveName,
-        x_title: graphConfig.xLabel || urlParams.x_label || curve.config?.xLabel || '',
-        y_title: graphConfig.yLabel || urlParams.y_label || curve.config?.yLabel || '',
-        ...(resolvedGraphImageForEdit ? { graph_img: resolvedGraphImageForEdit } : {}),
-        mark_review: '1',
-        testuser_id: String(curve?.testuser_id || urlParams.testuser_id || ''),
-        uname: urlParams.username || graphConfig.username || '',
-        username: urlParams.username || graphConfig.username || '',
-        ...(hasCurveNameChange ? { old_curve_name: resolvedOldCurveName, new_curve_name: resolvedNewCurveName } : {}),
-      },
-      details: [detailPayload],
+    const postCompanyEditPayload = async (companyUrl, payload, editMode) => {
+      console.log('=== EDIT API REQUEST ===', {
+        source: 'company',
+        editMode,
+        targetGraphId: companyGraphId,
+        targetDetailId: resolvedDetailId || '',
+        url: companyUrl,
+        method: 'POST',
+        payload,
+      });
+
+      const response = await fetch(companyUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+      const rawText = await response.text();
+      let result = {};
+      try {
+        result = rawText ? parseCompanyApiText(rawText) : {};
+      } catch {
+        result = rawText;
+      }
+      console.log('=== EDIT API RESPONSE ===', {
+        source: 'company',
+        editMode,
+        targetGraphId: companyGraphId,
+        targetDetailId: resolvedDetailId || '',
+        url: companyUrl,
+        status: response.status,
+        ok: response.ok,
+        rawText,
+        response: result,
+      });
+      return { response, result, rawText, companyUrl };
     };
 
-    // Always send all symbol values in the payload, not just changed ones
-    Object.entries(getGraphDynamicFieldValues(nextSymbolPayload)).forEach(([key, value]) => {
-      payload.graph[key] = value;
-    });
-
-    const editQuery = new URLSearchParams({
+    let editMode = 'action-edit';
+    let detailPayload = legacyDetailPayload;
+    let companyUrl = `https://www.discoveree.io/graph_capture_api.php?${new URLSearchParams({
       action: 'edit',
       graph_id: String(companyGraphId),
-    });
-    const companyUrl = `https://www.discoveree.io/graph_capture_api.php?${editQuery.toString()}`;
-    console.log('=== EDIT API REQUEST ===', {
-      source: 'company',
-      targetGraphId: companyGraphId,
-      targetDetailId: resolvedDetailId || '',
-      url: companyUrl,
-      method: 'POST',
-      payload,
-    });
-
-    const response = await fetch(companyUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
-    const rawText = await response.text();
+    }).toString()}`;
+    let response;
     let result = {};
-    try {
-      result = rawText ? parseCompanyApiText(rawText) : {};
-    } catch {
-      result = rawText;
+    let rawText = '';
+
+    if (COMPANY_EDIT_USE_SAVE_STYLE) {
+      const saveStylePayload = attachCompanySymbolFields(
+        {
+          graph: buildCompanyEditGraphSection(resolvedNewCurveName, false),
+          details: [saveStyleDetailPayload],
+        },
+        nextSymbolPayload
+      );
+      const saveStyleUrl = `${DISCOVEREE_GRAPH_CAPTURE_API_URL}?graph_id=${encodeURIComponent(String(companyGraphId))}`;
+      try {
+        const saveStyleAttempt = await postCompanyEditPayload(saveStyleUrl, saveStylePayload, 'save-style');
+        response = saveStyleAttempt.response;
+        result = saveStyleAttempt.result;
+        rawText = saveStyleAttempt.rawText;
+        companyUrl = saveStyleAttempt.companyUrl;
+        editMode = 'save-style';
+        detailPayload = saveStyleDetailPayload;
+
+        if (!response.ok) {
+          throw new Error(`Company save-style update failed (${response.status})`);
+        }
+        if (result?.status && result.status !== 'success') {
+          throw new Error(result?.msg || 'Company save-style returned non-success status');
+        }
+      } catch (saveStyleError) {
+        console.warn('[EDIT EXPERIMENT] save-style update failed; falling back to action=edit', saveStyleError);
+        editMode = 'action-edit-fallback';
+      }
     }
-    console.log('=== EDIT API RESPONSE ===', {
-      source: 'company',
-      targetGraphId: companyGraphId,
-      targetDetailId: resolvedDetailId || '',
-      url: companyUrl,
-      status: response.status,
-      ok: response.ok,
-      rawText,
-      response: result,
-    });
+
+    if (editMode !== 'save-style') {
+      const legacyPayload = attachCompanySymbolFields(
+        {
+          graph: buildCompanyEditGraphSection(resolvedNewCurveName, true),
+          details: [legacyDetailPayload],
+        },
+        nextSymbolPayload
+      );
+      companyUrl = `https://www.discoveree.io/graph_capture_api.php?${new URLSearchParams({
+        action: 'edit',
+        graph_id: String(companyGraphId),
+      }).toString()}`;
+      const legacyAttempt = await postCompanyEditPayload(companyUrl, legacyPayload, editMode);
+      response = legacyAttempt.response;
+      result = legacyAttempt.result;
+      rawText = legacyAttempt.rawText;
+      detailPayload = legacyDetailPayload;
+    }
 
     const returnedGraphId = result?.graph_id ? String(result.graph_id) : '';
     console.log('=== GRAPH ID CONSISTENCY CHECK (EDIT) ===', {
+      editMode,
       expectedGraphId: String(companyGraphId),
-      sentGraphId: String(payload?.graph?.graph_id || ''),
-      sentIdentifier: String(payload?.graph?.identifier || ''),
+      sentGraphId: String(companyGraphId),
+      sentIdentifier: String(resolvedEditIdentifier || ''),
       returnedGraphId,
       matchesExpected: !returnedGraphId || returnedGraphId === String(companyGraphId),
       note: 'If matchesExpected is false, API is creating/updating a different graph context than requested.',
@@ -4866,7 +4967,7 @@ const GraphCapture = () => {
       resolvedGraphImageForEdit || uploadedImage
     );
 
-    if (hasXyChanges && detailPayload.xy) {
+    if (detailPayload.xy) {
       const sentXy = normalizeCompanyXyString(detailPayload.xy);
       const { details: verifyDetails } = await fetchCompanyGraphDetailsWithRetry(companyGraphId);
       const verifiedDetail = findCompanyDetailByIdOrXy(verifyDetails, {
@@ -4877,8 +4978,10 @@ const GraphCapture = () => {
       const xyConfirmedOnDiscoveree = Boolean(verifiedXy && sentXy && verifiedXy === sentXy);
 
       console.log('[EDIT VERIFY]', {
+        editMode,
         graphId: String(companyGraphId),
         detailId: resolvedDetailId || '',
+        verifiedDetailId: verifiedDetail?.id ? String(verifiedDetail.id) : '',
         sentPointCount: nextPoints.length,
         sentXyLength: sentXy.length,
         verifiedXyLength: verifiedXy.length,
