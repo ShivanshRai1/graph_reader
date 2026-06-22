@@ -7223,11 +7223,11 @@ const GraphCapture = () => {
                                       {editableSymbolKeys.map((symbol) => {
                                         const displayLabel = getSymbolDisplayLabel(symbol);
                                         return (
-                                          <label key={`${curve.id}_${symbol}`} className="text-xs text-gray-700">
+                                          <label key={`${curve.id}_${symbol}`} className="text-sm text-gray-700">
                                             {displayLabel}
                                             <input
                                               type="text"
-                                              className="w-full mt-1 px-2 py-1 border border-gray-300 rounded text-xs"
+                                              className="w-full mt-1 px-2 py-1 border border-gray-300 rounded text-sm"
                                               value={resolveSymbolValue(editCurveSymbolValues, symbol, editableSymbolKeys)}
                                               onChange={(e) =>
                                                 setEditCurveSymbolValues({
@@ -7244,14 +7244,14 @@ const GraphCapture = () => {
                                   })()}
                                   <div className="flex gap-2 mt-3">
                                     <button
-                                      className="px-3 py-1 rounded bg-green-600 text-white text-xs"
+                                      className="px-3 py-1 rounded bg-green-600 text-white text-sm"
                                       onClick={() => handleEditCurveUpdate(curve.id)}
                                       disabled={isUpdatingCurveId === curve.id}
                                     >
                                       {isUpdatingCurveId === curve.id ? 'Updating...' : 'Update Data'}
                                     </button>
                                     <button
-                                      className="px-3 py-1 rounded bg-gray-700 text-white text-xs"
+                                      className="px-3 py-1 rounded bg-gray-700 text-white text-sm"
                                       onClick={handleEditCurveCancel}
                                     >
                                       Cancel Edit
