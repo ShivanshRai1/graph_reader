@@ -6805,6 +6805,7 @@ const GraphCapture = () => {
         ...prevConfig,
         curveName: '',
       }));
+      setShowCaptureAnotherGuidance(true);
       setIsReadOnly(false);
       setIsSaving(false);
 
@@ -7590,9 +7591,17 @@ const GraphCapture = () => {
               <CapturedPointsList isReadOnly={isReadOnly} hasReturnUrl={!!urlParams.return_url} isEditingCurve={Boolean(editingCurveId)} />
             </div>
             <div className="w-full lg:w-3/5">
-              {showCaptureAnotherGuidance && !isAxisMappingConfirmed ? (
+              {showCaptureAnotherGuidance ? (
                 <div className="mb-4 rounded border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                  Enter a new curve or line name, then click <strong>Final Check</strong> to capture the next curve.
+                  {isAxisMappingConfirmed ? (
+                    <>
+                      Curve saved. Enter a new <strong>Curve or Line Name</strong>, capture points on the graph, then click <strong>Save Data Points</strong> again. Axis mapping stays locked for this graph.
+                    </>
+                  ) : (
+                    <>
+                      Enter a new curve or line name, then click <strong>Final Check</strong> to capture the next curve.
+                    </>
+                  )}
                 </div>
               ) : null}
               <GraphConfig
@@ -7606,6 +7615,7 @@ const GraphCapture = () => {
                 initialXTitle={urlParams.x_label}
                 initialYTitle={urlParams.y_label}
                 isAxisMappingConfirmed={isAxisMappingConfirmed}
+                allowNextCurveNameEntry={showCaptureAnotherGuidance && isAxisMappingConfirmed}
                 isEditingCurve={Boolean(editingCurveId)}
                 isPartNumberFromUrl={Boolean(urlParams.partno)}
                 isPartNumberLocked={partNumberLocked}
@@ -7638,6 +7648,7 @@ const GraphCapture = () => {
                 onRetakeAxis={() => {
                   setIsAxisMappingConfirmed(false);
                   setFrozenGraphConfig(null);
+                  setShowCaptureAnotherGuidance(false);
                 }}
               >
                 {/* Dynamic Symbol Input Boxes - Only show if other_symb exists in URL */}

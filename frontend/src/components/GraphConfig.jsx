@@ -55,7 +55,7 @@ const convertTemperatureToCelsius = (rawValue, unit) => {
   return formatTemperatureNumber(numericValue);
 };
 
-const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNameReadOnly = false, isXTitleReadOnly = false, isYTitleReadOnly = false, initialCurveName = '', initialGraphTitle = '', initialXTitle = '', initialYTitle = '', isAxisMappingConfirmed = false, isEditingCurve = false, isPartNumberFromUrl = false, isPartNumberLocked = false, showManufacturerField = false, showUsernameField = false, onConfirmAxisMapping = () => {}, onRetakeAxis = () => {}, children = null }) => {
+const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNameReadOnly = false, isXTitleReadOnly = false, isYTitleReadOnly = false, initialCurveName = '', initialGraphTitle = '', initialXTitle = '', initialYTitle = '', isAxisMappingConfirmed = false, isEditingCurve = false, allowNextCurveNameEntry = false, isPartNumberFromUrl = false, isPartNumberLocked = false, showManufacturerField = false, showUsernameField = false, onConfirmAxisMapping = () => {}, onRetakeAxis = () => {}, children = null }) => {
   const { graphConfig, setGraphConfig } = useGraph();
   const [logError, setLogError] = useState({ x: '', y: '' });
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -64,7 +64,10 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
   const [temperatureValue, setTemperatureValue] = useState('');
   const [temperatureUnit, setTemperatureUnit] = useState('C');
   const skipTemperatureSyncRef = useRef(false);
-  const isConfigLocked = Boolean(isEditingCurve || isAxisMappingConfirmed);
+  const isMetadataLocked = Boolean(isEditingCurve || isAxisMappingConfirmed);
+  const isCurveNameFieldLocked = Boolean(
+    isEditingCurve || isCurveNameReadOnly || (isAxisMappingConfirmed && !allowNextCurveNameEntry)
+  );
   
   // Apply initial values from props when component mounts
   useEffect(() => {
@@ -378,14 +381,16 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
   return (
     <div
       className="w-full p-5 bg-white rounded-lg mt-5 shadow"
-      style={{
-        opacity: isConfigLocked ? 0.55 : 1,
-        pointerEvents: isConfigLocked ? 'none' : 'auto',
-      }}
     >
       <h3 className="text-gray-900 text-lg font-semibold mb-5">Graph Configuration</h3>
 
-      <div className="mb-5">
+      <div
+        className="mb-5"
+        style={{
+          opacity: isMetadataLocked && !allowNextCurveNameEntry ? 0.55 : 1,
+          pointerEvents: isMetadataLocked ? 'none' : 'auto',
+        }}
+      >
         <label className="block mb-3 font-medium text-gray-800">
           <span className="block mb-1 text-sm text-gray-800">Graph Title:</span>
           <input
@@ -395,15 +400,21 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             onChange={handleChange}
             placeholder="Enter graph title"
             className={`w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 ${
-              isGraphTitleReadOnly || isConfigLocked
+              isGraphTitleReadOnly || isMetadataLocked
                 ? 'bg-gray-100 cursor-not-allowed opacity-70'
                 : 'bg-white'
             }`}
-            readOnly={isGraphTitleReadOnly || isConfigLocked}
-            disabled={isGraphTitleReadOnly || isConfigLocked}
+            readOnly={isGraphTitleReadOnly || isMetadataLocked}
+            disabled={isGraphTitleReadOnly || isMetadataLocked}
           />
         </label>
-        <label className="block mb-3 font-medium text-gray-800">
+        <label
+          className="block mb-3 font-medium text-gray-800"
+          style={{
+            opacity: allowNextCurveNameEntry ? 1 : undefined,
+            pointerEvents: allowNextCurveNameEntry ? 'auto' : undefined,
+          }}
+        >
           <span className="block mb-1 text-sm text-gray-800">Curve or Line Name:</span>
           <input
             type="text"
@@ -411,9 +422,11 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             value={graphConfig.curveName}
             onChange={handleChange}
             placeholder="Enter curve name"
-            className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed"
-            readOnly={isConfigLocked || isCurveNameReadOnly}
-            disabled={isConfigLocked || isCurveNameReadOnly}
+            className={`w-full px-3 py-2 border rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed ${
+              allowNextCurveNameEntry ? 'border-amber-400 ring-1 ring-amber-200' : 'border-gray-300'
+            }`}
+            readOnly={isCurveNameFieldLocked}
+            disabled={isCurveNameFieldLocked}
           />
         </label>
         {showManufacturerField && (
@@ -426,8 +439,8 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
               onChange={handleChange}
               placeholder="Enter manufacturer"
               className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed"
-              readOnly={isConfigLocked}
-              disabled={isConfigLocked}
+              readOnly={isMetadataLocked}
+              disabled={isMetadataLocked}
             />
           </label>
         )}
@@ -441,8 +454,8 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
               onChange={handleChange}
               placeholder="Enter username((Email Id)"
               className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed"
-              readOnly={isConfigLocked}
-              disabled={isConfigLocked}
+              readOnly={isMetadataLocked}
+              disabled={isMetadataLocked}
             />
           </label>
         )}
@@ -455,12 +468,12 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             onChange={handleChange}
             placeholder="Enter part number"
             className={`w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 ${
-              isPartNumberFromUrl || isPartNumberLocked || isConfigLocked
+              isPartNumberFromUrl || isPartNumberLocked || isMetadataLocked
                 ? 'bg-gray-100 cursor-not-allowed opacity-70'
                 : 'bg-white'
             }`}
-            readOnly={isPartNumberFromUrl || isPartNumberLocked || isConfigLocked}
-            disabled={isPartNumberFromUrl || isPartNumberLocked || isConfigLocked}
+            readOnly={isPartNumberFromUrl || isPartNumberLocked || isMetadataLocked}
+            disabled={isPartNumberFromUrl || isPartNumberLocked || isMetadataLocked}
           />
         </label>
         <label className="block mb-3 font-medium text-gray-800">
@@ -472,8 +485,8 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             onChange={handleChange}
             placeholder="Enter X title"
             className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed"
-            readOnly={isConfigLocked || isXTitleReadOnly}
-            disabled={isConfigLocked || isXTitleReadOnly}
+            readOnly={isMetadataLocked || isXTitleReadOnly}
+            disabled={isMetadataLocked || isXTitleReadOnly}
           />
         </label>
         <label className="block mb-3 font-medium text-gray-800">
@@ -485,8 +498,8 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             onChange={handleChange}
             placeholder="Enter Y title"
             className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed"
-            readOnly={isConfigLocked || isYTitleReadOnly}
-            disabled={isConfigLocked || isYTitleReadOnly}
+            readOnly={isMetadataLocked || isYTitleReadOnly}
+            disabled={isMetadataLocked || isYTitleReadOnly}
           />
         </label>
       </div>
@@ -628,14 +641,14 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
               inputMode="decimal"
               value={temperatureValue}
               onChange={(e) => handleTemperatureValueChange(e.target.value)}
-              disabled={isConfigLocked}
+              disabled={isMetadataLocked}
               placeholder="Enter numeric temperature"
               className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed"
             />
             <select
               value={temperatureUnit}
               onChange={(e) => handleTemperatureUnitChange(e.target.value)}
-              disabled={isConfigLocked}
+              disabled={isMetadataLocked}
               className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed"
             >
               <option value="C">deg C</option>
