@@ -755,46 +755,6 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     }
   };
 
-  const snapCaptureCanvasPointToGraphArea = (canvasX, canvasY) => {
-    const area = normalizeArea(graphArea);
-    const tol = CAPTURE_EDGE_TOLERANCE_PX;
-    let x = canvasX;
-    let y = canvasY;
-
-    const nearLeft = Math.abs(canvasX - area.x) <= tol;
-    const nearRight = Math.abs(canvasX - (area.x + area.width)) <= tol;
-    const nearTop = Math.abs(canvasY - area.y) <= tol;
-    const nearBottom = Math.abs(canvasY - (area.y + area.height)) <= tol;
-
-    if (nearLeft && nearTop) {
-      return { canvasX: area.x, canvasY: area.y };
-    }
-    if (nearRight && nearTop) {
-      return { canvasX: area.x + area.width, canvasY: area.y };
-    }
-    if (nearLeft && nearBottom) {
-      return { canvasX: area.x, canvasY: area.y + area.height };
-    }
-    if (nearRight && nearBottom) {
-      return { canvasX: area.x + area.width, canvasY: area.y + area.height };
-    }
-
-    if (nearLeft) x = area.x;
-    else if (nearRight) x = area.x + area.width;
-    if (nearTop) y = area.y;
-    else if (nearBottom) y = area.y + area.height;
-
-    return { canvasX: x, canvasY: y };
-  };
-
-  const resolveCaptureCanvasPoint = (canvasX, canvasY, handleKey = null) => {
-    if (handleKey) {
-      const snapped = getSnappedCanvasPointForHandle(handleKey);
-      if (snapped) return snapped;
-    }
-    return snapCaptureCanvasPointToGraphArea(canvasX, canvasY);
-  };
-
   const clampGraphCoordsToAxisBounds = (graphX, graphY) => {
     const xMin = parseFloat(graphConfig.xMin);
     const xMax = parseFloat(graphConfig.xMax);
@@ -853,11 +813,16 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       return false;
     }
 
-    const resolved = handleKey || insideBox
-      ? resolveCaptureCanvasPoint(canvasX, canvasY, handleKey)
-      : { canvasX, canvasY };
-    let captureX = resolved.canvasX;
-    let captureY = resolved.canvasY;
+    // Place points exactly where the pointer is; only snap when clicking a resize handle.
+    let captureX = canvasX;
+    let captureY = canvasY;
+    if (handleKey) {
+      const snapped = getSnappedCanvasPointForHandle(handleKey);
+      if (snapped) {
+        captureX = snapped.canvasX;
+        captureY = snapped.canvasY;
+      }
+    }
     if (!ALLOW_CAPTURE_OUTSIDE_BLUE_BOX && hasConfiguredAxisBounds()) {
       let { x: graphX, y: graphY } = convertCanvasToGraphCoordinates(captureX, captureY);
       if (!isGraphValueWithinAxisBounds(graphX, graphY)) {
