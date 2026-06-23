@@ -539,6 +539,12 @@ export const resolveGraphConfigForSavedCurvesExport = (curves = [], graphConfig 
     yMin: pickFirstFiniteAxisValue(cfg.yMin, first.y_min, persistedAxis?.yMin, graphConfig.yMin, computedAxis?.yMin),
     yMax: pickFirstFiniteAxisValue(cfg.yMax, first.y_max, persistedAxis?.yMax, graphConfig.yMax, computedAxis?.yMax),
     temperature: cfg.temperature || first.temperature || graphConfig.temperature || '',
+    partNumber:
+      cfg.partNumber ||
+      first.part_number ||
+      graphConfig.partNumber ||
+      options?.partNumber ||
+      '',
     y2Label: graphConfig.y2Label || cfg.y2Label || '',
     y2Min: graphConfig.y2Min ?? cfg.y2Min ?? '',
     y2Max: graphConfig.y2Max ?? cfg.y2Max ?? '',
@@ -660,6 +666,7 @@ const buildSavedCurveExportMetadata = (curve, graphConfig = {}, options = {}) =>
   return {
     graphTitle: exportConfig.graphTitle || '',
     curveName: exportConfig.curveName || '',
+    partNumber: exportConfig.partNumber || '',
     xScale: exportConfig.xScale || 'Linear',
     yScale: exportConfig.yScale || 'Linear',
     xUnitPrefix: exportConfig.xUnitPrefix || '1',
@@ -677,6 +684,7 @@ const buildSavedGraphExportMetadata = (curves = [], graphConfig = {}, options = 
   const exportConfig = resolveExportGraphConfig(curves, graphConfig, options);
   return {
     graphTitle: exportConfig.graphTitle || '',
+    partNumber: exportConfig.partNumber || '',
     curveCount: curves.length,
     xScale: exportConfig.xScale || 'Linear',
     yScale: exportConfig.yScale || 'Linear',
@@ -706,6 +714,7 @@ export const buildSavedCurveCsvExport = (curve, graphConfig = {}, options = {}) 
   const meta = buildSavedCurveExportMetadata(curve, graphConfig, options);
   const metaRows = [
     ['# Graph Title', meta.graphTitle],
+    ['# Part Number', meta.partNumber],
     ['# Curve Name', meta.curveName],
     ['# X Scale', meta.xScale],
     ['# Y Scale', meta.yScale],
@@ -768,6 +777,7 @@ export const buildSavedCurvesCombinedCsvExport = (curves = [], graphConfig = {},
   const graphMeta = buildSavedGraphExportMetadata(curveList, graphConfig, options);
   const graphMetaRows = [
     ['# Graph Title', graphMeta.graphTitle],
+    ['# Part Number', graphMeta.partNumber],
     ['# Curve Count', String(graphMeta.curveCount)],
     ['# X Scale', graphMeta.xScale],
     ['# Y Scale', graphMeta.yScale],
@@ -879,21 +889,57 @@ export const exportSavedCurvesToCsv = (curves = [], graphConfig = {}, options = 
     throw new Error('No saved curves to export.');
   }
 
-  const downloads = curveList.map((curve) => ({
-    filename: buildSavedCurveComparisonFilename(curve, graphConfig, options, 'csv'),
-    content: buildSavedCurveCsvExport(curve, graphConfig, options),
-    mimeType: 'text/csv;charset=utf-8;',
-  }));
+  if (curveList.length === 1) {
+    queueTextExportDownloads([
+      {
+        filename: buildSavedCurveComparisonFilename(curveList[0], graphConfig, options, 'csv'),
+        content: buildSavedCurveCsvExport(curveList[0], graphConfig, options),
+        mimeType: 'text/csv;charset=utf-8;',
+      },
+    ]);
+    return;
+  }
 
-  if (curveList.length > 1) {
-    downloads.push({
+  queueTextExportDownloads([
+    {
       filename: buildSavedGraphComparisonFilename(curveList, graphConfig, options, 'csv'),
       content: buildSavedCurvesCombinedCsvExport(curveList, graphConfig, options),
       mimeType: 'text/csv;charset=utf-8;',
-    });
-  }
+    },
+  ]);
+};
 
-  queueTextExportDownloads(downloads);
+export const exportSingleSavedCurveToCsv = (curve, graphConfig = {}, options = {}) => {
+  if (!curve) {
+    throw new Error('No saved curve to export.');
+  }
+  queueTextExportDownloads([
+    {
+      filename: buildSavedCurveComparisonFilename(curve, graphConfig, options, 'csv'),
+      content: buildSavedCurveCsvExport(curve, graphConfig, options),
+      mimeType: 'text/csv;charset=utf-8;',
+    },
+  ]);
+};
+
+export const exportSingleSavedCurveToJson = (curve, graphConfig = {}, options = {}) => {
+  if (!curve) {
+    throw new Error('No saved curve to export.');
+  }
+  queueTextExportDownloads([
+    {
+      filename: buildSavedCurveComparisonFilename(curve, graphConfig, options, 'json'),
+      content: buildSavedCurveJsonExport(curve, graphConfig, options),
+      mimeType: 'application/json;charset=utf-8;',
+    },
+  ]);
+};
+
+export const exportSingleSavedCurveDownloads = (curve, graphConfig = {}, options = {}) => {
+  exportSingleSavedCurveToCsv(curve, graphConfig, options);
+  window.setTimeout(() => {
+    exportSingleSavedCurveToJson(curve, graphConfig, options);
+  }, 200);
 };
 
 export const exportSavedCurvesToJson = (curves = [], graphConfig = {}, options = {}) => {
@@ -902,19 +948,22 @@ export const exportSavedCurvesToJson = (curves = [], graphConfig = {}, options =
     throw new Error('No saved curves to export.');
   }
 
-  const downloads = curveList.map((curve) => ({
-    filename: buildSavedCurveComparisonFilename(curve, graphConfig, options, 'json'),
-    content: buildSavedCurveJsonExport(curve, graphConfig, options),
-    mimeType: 'application/json;charset=utf-8;',
-  }));
+  if (curveList.length === 1) {
+    queueTextExportDownloads([
+      {
+        filename: buildSavedCurveComparisonFilename(curveList[0], graphConfig, options, 'json'),
+        content: buildSavedCurveJsonExport(curveList[0], graphConfig, options),
+        mimeType: 'application/json;charset=utf-8;',
+      },
+    ]);
+    return;
+  }
 
-  if (curveList.length > 1) {
-    downloads.push({
+  queueTextExportDownloads([
+    {
       filename: buildSavedGraphComparisonFilename(curveList, graphConfig, options, 'json'),
       content: buildSavedCurvesCombinedJsonExport(curveList, graphConfig, options),
       mimeType: 'application/json;charset=utf-8;',
-    });
-  }
-
-  queueTextExportDownloads(downloads);
+    },
+  ]);
 };

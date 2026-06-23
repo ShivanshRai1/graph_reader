@@ -2,7 +2,7 @@ import { useRef, useState, useEffect } from 'react';
 import { useGraph, isManualCapturePoint, getManualCapturePoints } from '../context/GraphContext';
 import { buildDefaultGraphArea } from '../utils/graphAreaHelpers';
 
-const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', isAxisMappingConfirmed = false, hasReturnUrl = false, isEditingCurve = false, savedCurveViewActive = false, useInsetDefaultAxisBox = false, onGraphAreaManuallyAdjusted }) => {
+const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', isAxisMappingConfirmed = false, hasReturnUrl = false, isEditingCurve = false, savedCurveViewActive = false, hasAiSavedCurves = false, useInsetDefaultAxisBox = false, onGraphAreaManuallyAdjusted }) => {
   const { uploadedImage, graphArea, setGraphArea, dataPoints, addDataPoint, clearDataPoints, graphConfig, deleteDataPoint, convertGraphToCanvasCoordinates, convertCanvasToGraphCoordinates, replaceDataPoints, updateDataPointFromCanvas } = useGraph();
   const [showRedrawMsg, setShowRedrawMsg] = useState(false);
   const canvasRef = useRef(null);
@@ -113,9 +113,12 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   };
 
   const canShowImportedCurveOverlay = () => {
-    if (isAxisMappingConfirmed || isEditingCurve) return true;
+    if (isEditingCurve) return true;
     return savedCurveViewActive && hasValidAxisForOverlay() && graphArea.width > 0 && graphArea.height > 0;
   };
+
+  const showAiAlignmentGuidance = () =>
+    (hasImportedCurvePoints() || hasAiSavedCurves) && !canShowImportedCurveOverlay();
 
   const isSavedViewCrosscheckActive = () =>
     savedCurveViewActive &&
@@ -123,9 +126,9 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     !isEditingCurve &&
     canShowImportedCurveOverlay();
 
-  // Allow box resize before Final Check, while editing, or after confirm when tuning AI overlay alignment.
+  // Allow box resize before Final Check, while editing/viewing, or when AI saved curves need alignment.
   const canAdjustAxisBox = () =>
-    !isAxisMappingConfirmed || isEditingCurve || hasImportedCurvePoints();
+    !isAxisMappingConfirmed || isEditingCurve || hasImportedCurvePoints() || hasAiSavedCurves;
   const EDGE_GAP = 12; // Hysteresis for edge checks to reduce flicker
   const EPS = 1e-6;
   const WARN_CLEAR_DELAY = 180; // ms to hold warning before clearing
@@ -1482,7 +1485,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
             Please redraw the axis box
           </div>
         )}
-        {hasImportedCurvePoints() && !canShowImportedCurveOverlay() && (
+        {showAiAlignmentGuidance() && (
           <div className="text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2 mt-2 text-sm">
             <p className="font-semibold mb-1.5">AI points loaded — follow these steps:</p>
             <ol className="list-decimal list-inside space-y-1 m-0 pl-0.5">

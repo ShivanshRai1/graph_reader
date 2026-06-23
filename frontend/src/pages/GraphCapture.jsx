@@ -12,6 +12,7 @@ import {
   downloadTypicalCurveFile,
   exportSavedCurvesToCsv,
   exportSavedCurvesToJson,
+  exportSingleSavedCurveDownloads,
   inferTypicalCurveExportSourceFromCurves,
   isSavedCurvesExportReady,
   resolveGraphConfigForSavedCurvesExport,
@@ -802,31 +803,28 @@ const getCurveMergeKey = (curve) => {
   return `n:${graphId}:${name}`;
 };
 
-const normalizeCurveTitleKey = (title = '') =>
-  String(title || '').trim().toLowerCase().replace(/\s+/g, '');
-
 const getCurveDetailIdNumber = (curve) =>
   Number(String(curve?.detailId || curve?.detail_id || '').trim() || 0);
 
-const dedupeCompanyApiDetailsByTitle = (details = []) => {
-  const bestByTitle = new Map();
-  const withoutTitle = [];
+const dedupeCompanyApiDetailsById = (details = []) => {
+  const bestById = new Map();
+  const withoutId = [];
 
   (Array.isArray(details) ? details : []).forEach((detail) => {
-    const titleKey = normalizeCurveTitleKey(detail?.curve_title);
-    if (!titleKey) {
-      withoutTitle.push(detail);
+    const id = String(detail?.id ?? '').trim();
+    if (!id) {
+      withoutId.push(detail);
       return;
     }
-    const existing = bestByTitle.get(titleKey);
+    const existing = bestById.get(id);
     const existingId = Number(existing?.id || 0);
     const candidateId = Number(detail?.id || 0);
     if (!existing || candidateId >= existingId) {
-      bestByTitle.set(titleKey, detail);
+      bestById.set(id, detail);
     }
   });
 
-  return [...withoutTitle, ...Array.from(bestByTitle.values())];
+  return [...withoutId, ...Array.from(bestById.values())];
 };
 
 const shouldReplaceMergedCurve = (existing, candidate) => {
@@ -867,19 +865,17 @@ const mergeCurvesForRestore = (...sources) => {
 };
 
 const dedupeCurvesByGraphAndName = (curves = []) => {
-  const byName = new Map();
+  const merged = new Map();
 
   curves.forEach((curve) => {
-    const graphId = String(curve?.graphId || '').trim();
-    const name = String(curve?.name || curve?.config?.curveName || curve?.curve_name || '').trim();
-    const key = `${graphId}::${name}`;
-    const existing = byName.get(key);
+    const key = getCurveMergeKey(curve);
+    const existing = merged.get(key);
     if (shouldReplaceMergedCurve(existing, curve)) {
-      byName.set(key, curve);
+      merged.set(key, curve);
     }
   });
 
-  return dedupeCurves(Array.from(byName.values()));
+  return dedupeCurves(Array.from(merged.values()));
 };
 
 const normalizeCurveForStorage = (curve) => {
@@ -4415,7 +4411,30 @@ const GraphCapture = () => {
 
   const getSavedCurvesExportOptions = () => {
     const graphId = String(urlParams.graph_id || activeSessionGraphIdRef.current || '').trim();
-    return { persistedAxis: getPersistedGraphContext(graphId)?.axis || null };
+    return {
+      persistedAxis: getPersistedGraphContext(graphId)?.axis || null,
+      partNumber: urlParams.partno || graphConfig.partNumber || '',
+    };
+  };
+
+  const handleDownloadCurve = (curve) => {
+    if (!curve) {
+      alert('No saved curve to export.');
+      return;
+    }
+
+    const exportOptions = getSavedCurvesExportOptions();
+    if (!isSavedCurvesExportReady([curve], graphConfig, exportOptions)) {
+      alert('Setup required before downloading: confirm axis mapping with X/Y min, max, scale, and unit in Graph Setup.');
+      return;
+    }
+
+    try {
+      exportSingleSavedCurveDownloads(curve, graphConfig, exportOptions);
+    } catch (error) {
+      console.error('Failed to download curve export:', error);
+      alert(`Failed to download curve file: ${error.message}`);
+    }
   };
 
   const handleExportGroupToCSV = (group) => {
@@ -5215,16 +5234,7 @@ const GraphCapture = () => {
       appendPayload.graph[key] = value;
     });
 
-    const { details: preRemoveDetails } = await fetchCompanyGraphDetailsWithRetry(companyGraphId);
-    const titleKey = normalizeCurveTitleKey(resolvedNewCurveName);
     const detailIdsToRemove = new Set([resolvedDetailId]);
-    if (titleKey) {
-      preRemoveDetails.forEach((detail) => {
-        if (normalizeCurveTitleKey(detail?.curve_title) === titleKey && detail?.id) {
-          detailIdsToRemove.add(String(detail.id));
-        }
-      });
-    }
 
     console.log('=== EDIT REMOVE-AND-RESAVE ===', {
       step: 'remove',
@@ -5519,6 +5529,7 @@ const GraphCapture = () => {
       setEditCurveSymbolValues({});
       setEditCurveName('');
       editSessionAxisRef.current = null;
+      clearDataPoints();
 
       const successMessage =
         totalRemoved > 0
@@ -5915,7 +5926,7 @@ const GraphCapture = () => {
           console.log('[DEBUG] DiscoverEE response:', result);
 
           const discovereeGraph = result?.graph && !Array.isArray(result.graph) ? result.graph : null;
-          const discovereeDetails = dedupeCompanyApiDetailsByTitle(parseCompanyApiDetails(result));
+          const discovereeDetails = dedupeCompanyApiDetailsById(parseCompanyApiDetails(result));
 
           if (result.status === 'success' && discovereeGraph && discovereeDetails.length > 0) {
             setGraphLoadNotice('');
@@ -6165,7 +6176,7 @@ const GraphCapture = () => {
         }
       })();
 
-      const { mappingConfirmed } = restoreGraphDisplayFromSavedCurve(firstCurve, graphId, {
+      restoreGraphDisplayFromSavedCurve(firstCurve, graphId, {
         keepCurveNameEmpty: true,
         allCurves: savedCurves,
         loadPoints: false,
@@ -6174,19 +6185,9 @@ const GraphCapture = () => {
             ? graphAreaRef.current
             : null,
       });
-      const curvesForGraph = savedCurves.filter(
-        (curve) => (curve.graphId || getGraphIdForCurve(curve)) === String(graphId)
-      );
-      const overlayCurves = curvesForGraph.length > 0 ? curvesForGraph : savedCurves;
-      if (overlayCurves.length > 0) {
-        // Before mapping is confirmed, preview one curve so box tuning is easier to judge.
-        const previewCurves =
-          !mappingConfirmed && overlayCurves.length > 1 ? [overlayCurves[0]] : overlayCurves;
-        replaceDataPoints(buildCombinedOverlayPoints(previewCurves));
-      }
       setIsReadOnly(false);
 
-      console.log('[DEBUG] Graph context and captured points restored after refresh.');
+      console.log('[DEBUG] Graph context restored after refresh (overlay points hidden until View/Edit).');
     }
   }, [savedCurves, replaceDataPoints, setGraphConfig, setUploadedImage]);
 
@@ -6230,9 +6231,17 @@ const GraphCapture = () => {
     if (graphArea.width <= 0 || graphArea.height <= 0) return;
     if (!hasValidAxisMapping(graphConfig)) return;
 
-    const importedPoints = dataPoints.filter(
-      (point) => point?.imported && Number.isFinite(point.x) && Number.isFinite(point.y)
-    );
+    const importedPoints = dataPoints.some((point) => point?.imported)
+      ? dataPoints.filter((point) => point?.imported && Number.isFinite(point.x) && Number.isFinite(point.y))
+      : (() => {
+          const searchParams = new URLSearchParams(window.location.search);
+          const graphId = String(searchParams.get('graph_id') || activeSessionGraphIdRef.current || '').trim();
+          const curvesForGraph = savedCurves.filter(
+            (curve) => !graphId || String(curve.graphId || getGraphIdForCurve(curve) || '') === graphId
+          );
+          const overlayCurves = curvesForGraph.length > 0 ? curvesForGraph : savedCurves;
+          return buildCombinedOverlayPoints(overlayCurves);
+        })();
     if (importedPoints.length < 2) return;
 
     const searchParams = new URLSearchParams(window.location.search);
@@ -6245,7 +6254,7 @@ const GraphCapture = () => {
       }
     }
 
-    const suggested = suggestGraphAreaFromImportedPoints(dataPoints, graphArea, graphConfig);
+    const suggested = suggestGraphAreaFromImportedPoints(importedPoints, graphArea, graphConfig);
     importedBoxAutoFitDoneRef.current = true;
     if (!suggested || graphAreasAreSimilar(suggested, graphArea)) return;
 
@@ -6263,6 +6272,7 @@ const GraphCapture = () => {
     graphConfig.xScale,
     graphConfig.yScale,
     dataPoints,
+    savedCurves,
     editingCurveId,
     isReadOnly,
     selectedCurveId,
@@ -7412,6 +7422,7 @@ const GraphCapture = () => {
                 hasReturnUrl={!!urlParams.return_url}
                 isEditingCurve={Boolean(editingCurveId)}
                 savedCurveViewActive={Boolean((selectedCurveId || combinedGroupId || showAllCombinedModal) && !editingCurveId)}
+                hasAiSavedCurves={savedCurves.length > 0 && savedCurvesSource === 'company'}
                 useInsetDefaultAxisBox={Boolean(
                   urlParams.graph_id ||
                   dataPoints.some((point) => point.imported) ||
@@ -7614,14 +7625,14 @@ const GraphCapture = () => {
                             <button
                               className="px-3 py-1 rounded bg-gray-700 text-white text-xs"
                               onClick={() => handleExportGroupToCSV(group)}
-                              title="Download each curve as CSV plus one combined all-curves file for the check page"
+                              title="Download one combined CSV with all curves in this graph"
                             >
                               Export CSV
                             </button>
                             <button
                               className="px-3 py-1 rounded bg-gray-700 text-white text-xs"
                               onClick={() => handleExportGroupToJSON(group)}
-                              title="Download each curve as JSON plus one combined all-curves file for the check page"
+                              title="Download one combined JSON with all curves in this graph"
                             >
                               Export JSON
                             </button>
@@ -7841,6 +7852,13 @@ const GraphCapture = () => {
                                     onClick={() => handleEditCurveStart(curve)}
                                   >
                                     Edit
+                                  </button>
+                                  <button
+                                    className="px-3 py-1 rounded bg-gray-700 text-white text-xs"
+                                    onClick={() => handleDownloadCurve(curve)}
+                                    title="Download this curve as CSV and JSON"
+                                  >
+                                    Download
                                   </button>
                                 </div>
                               )}
