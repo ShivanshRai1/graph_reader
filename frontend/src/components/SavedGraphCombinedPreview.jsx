@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { buildPolylinePointGroups, resolvePlotExtents } from '../utils/graphPreviewBounds';
 
 const normalizeNumber = (value, fallback) => {
   const num = parseFloat(value);
@@ -278,17 +279,16 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260, 
     const configYMin = toPlotConfigValue(baseConfig.yMin ?? baseConfig.y_min, yScale, baseLogModeY);
     const configYMax = toPlotConfigValue(baseConfig.yMax ?? baseConfig.y_max, yScale, baseLogModeY);
 
-    const xMin = Number.isFinite(configXMin) ? configXMin : computedXMin;
-    const xMax = Number.isFinite(configXMax) ? configXMax : computedXMax;
-    const yMin = Number.isFinite(configYMin) ? configYMin : computedYMin;
-    const yMax = Number.isFinite(configYMax) ? configYMax : computedYMax;
-
-    return {
-      xMin: xMin === xMax ? xMin - 1 : xMin,
-      xMax: xMin === xMax ? xMax + 1 : xMax,
-      yMin: yMin === yMax ? yMin - 1 : yMin,
-      yMax: yMin === yMax ? yMax + 1 : yMax,
-    };
+    return resolvePlotExtents({
+      configXMin,
+      configXMax,
+      configYMin,
+      configYMax,
+      computedXMin,
+      computedXMax,
+      computedYMin,
+      computedYMax,
+    });
   }, [parsedCurves, baseConfig, xScale, yScale, baseLogModeX, baseLogModeY]);
 
   const padding = { left: 58, right: 20, top: 16, bottom: 40 };
@@ -303,8 +303,11 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260, 
         return { ...point, svgX: x, svgY: y };
       });
 
-      const polyline = points.map((point) => `${point.svgX},${point.svgY}`).join(' ');
-      return { ...curve, points, polyline };
+      const polylineGroups = buildPolylinePointGroups(points).map((group) =>
+        group.map((point) => `${point.svgX},${point.svgY}`).join(' ')
+      );
+      const polyline = polylineGroups[0] || '';
+      return { ...curve, points, polyline, polylineGroups };
     });
   }, [parsedCurves, plotBounds, padding, drawableWidth, drawableHeight]);
 
@@ -535,30 +538,30 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260, 
         {yAxisLabel}
       </text>
 
-      {curveSvgData.map((curve, index) => (
-        <polyline
-          key={`${curve.id}-line`}
-          ref={(el) => {
-            polylineRefs.current[index] = el;
-          }}
-          points={curve.polyline}
-          fill="none"
-          stroke={curve.color}
-          strokeWidth="2"
-          strokeDasharray={curve.lineDash || undefined}
-          style={
-            curve.lineDash
-              ? undefined
-              : pathLengths[index]
-                ? {
-                    strokeDasharray: pathLengths[index],
-                    strokeDashoffset: pathLengths[index],
-                    animation: 'savedGraphLine 1s ease forwards',
-                  }
-                : undefined
-          }
-        />
-      ))}
+      {curveSvgData.map((curve, index) =>
+        (curve.polylineGroups?.length ? curve.polylineGroups : [curve.polyline]).map((segment, segmentIndex) => (
+          <polyline
+            key={`${curve.id}-line-${segmentIndex}`}
+            ref={segmentIndex === 0 ? (el) => { polylineRefs.current[index] = el; } : undefined}
+            points={segment}
+            fill="none"
+            stroke={curve.color}
+            strokeWidth="2"
+            strokeDasharray={curve.lineDash || undefined}
+            style={
+              curve.lineDash
+                ? undefined
+                : pathLengths[index] && segmentIndex === 0
+                  ? {
+                      strokeDasharray: pathLengths[index],
+                      strokeDashoffset: pathLengths[index],
+                      animation: 'savedGraphLine 1s ease forwards',
+                    }
+                  : undefined
+            }
+          />
+        ))
+      )}
 
       {curveSvgData.map((curve) =>
         curve.points.map((point) => (

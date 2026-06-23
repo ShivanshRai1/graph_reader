@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { buildPolylinePointGroups, resolvePlotExtents } from '../utils/graphPreviewBounds';
 
 const normalizeNumber = (value, fallback) => {
   const num = parseFloat(value);
@@ -152,17 +153,18 @@ const SavedGraphPreview = ({ points, config, width = 520, height = 220, animate 
     const configYMin = toPlotConfigValue(config?.yMin ?? config?.y_min, yScale, logModeY);
     const configYMax = toPlotConfigValue(config?.yMax ?? config?.y_max, yScale, logModeY);
 
-    const xMin = Number.isFinite(configXMin) ? configXMin : computedXMin;
-    const xMax = Number.isFinite(configXMax) ? configXMax : computedXMax;
-    const yMin = Number.isFinite(configYMin) ? configYMin : computedYMin;
-    const yMax = Number.isFinite(configYMax) ? configYMax : computedYMax;
-
     return {
       plottedPoints,
-      xMin: xMin === xMax ? xMin - 1 : xMin,
-      xMax: xMin === xMax ? xMax + 1 : xMax,
-      yMin: yMin === yMax ? yMin - 1 : yMin,
-      yMax: yMin === yMax ? yMax + 1 : yMax,
+      ...resolvePlotExtents({
+        configXMin,
+        configXMax,
+        configYMin,
+        configYMax,
+        computedXMin,
+        computedXMax,
+        computedYMin,
+        computedYMax,
+      }),
     };
   }, [displayPoints, config, xScale, yScale, logModeX, logModeY]);
 
@@ -181,15 +183,15 @@ const SavedGraphPreview = ({ points, config, width = 520, height = 220, animate 
   const drawableWidth = Math.max(width - padding.left - padding.right, 1);
   const drawableHeight = Math.max(height - padding.top - padding.bottom, 1);
 
-  const svgPoints = useMemo(() => {
-    if (plottedPoints.length === 0) return '';
-    return plottedPoints
-      .map((point) => {
-        const x = padding.left + ((point.plotX - xMin) / Math.max(xMax - xMin, 1e-9)) * drawableWidth;
-        const y = padding.top + (1 - (point.plotY - yMin) / Math.max(yMax - yMin, 1e-9)) * drawableHeight;
-        return `${x},${y}`;
-      })
-      .join(' ');
+  const polylineGroups = useMemo(() => {
+    const withSvg = plottedPoints.map((point) => {
+      const svgX = padding.left + ((point.plotX - xMin) / Math.max(xMax - xMin, 1e-9)) * drawableWidth;
+      const svgY = padding.top + (1 - (point.plotY - yMin) / Math.max(yMax - yMin, 1e-9)) * drawableHeight;
+      return { ...point, svgX, svgY };
+    });
+    return buildPolylinePointGroups(withSvg).map((group) =>
+      group.map((point) => `${point.svgX},${point.svgY}`).join(' ')
+    );
   }, [plottedPoints, xMin, xMax, yMin, yMax, padding, drawableWidth, drawableHeight]);
 
   const pointCoords = useMemo(() => {
@@ -261,7 +263,7 @@ const SavedGraphPreview = ({ points, config, width = 520, height = 220, animate 
     if (!polylineRef.current) return;
     const length = polylineRef.current.getTotalLength();
     setPathLength(Number.isFinite(length) ? length : 0);
-  }, [svgPoints]);
+  }, [polylineGroups]);
 
   if (plottedPoints.length === 0) {
     return (
@@ -441,23 +443,25 @@ const SavedGraphPreview = ({ points, config, width = 520, height = 220, animate 
       >
         {yAxisLabel}
       </text>
-      <polyline
-        key={svgPoints}
-        ref={polylineRef}
-        points={svgPoints}
-        fill="none"
-        stroke="#2563eb"
-        strokeWidth="2"
-        style={
-          animate && pathLength
-            ? {
-                strokeDasharray: pathLength,
-                strokeDashoffset: pathLength,
-                animation: 'savedGraphLine 1s ease forwards',
-              }
-            : undefined
-        }
-      />
+      {polylineGroups.map((segment, index) => (
+        <polyline
+          key={`preview-line-${index}-${segment}`}
+          ref={index === 0 ? polylineRef : undefined}
+          points={segment}
+          fill="none"
+          stroke="#2563eb"
+          strokeWidth="2"
+          style={
+            animate && pathLength && index === 0
+              ? {
+                  strokeDasharray: pathLength,
+                  strokeDashoffset: pathLength,
+                  animation: 'savedGraphLine 1s ease forwards',
+                }
+              : undefined
+          }
+        />
+      ))}
       {pointCoords.map((point) => (
         <g key={`${point.x}-${point.y}`}>
           <circle cx={point.svgX} cy={point.svgY} r={9} fill="transparent" pointerEvents="none" />

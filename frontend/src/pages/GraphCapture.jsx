@@ -3727,7 +3727,7 @@ const GraphCapture = () => {
   const [graphLoadNotice, setGraphLoadNotice] = useState('');
   const [savedCurvesSource, setSavedCurvesSource] = useState('company');
   const [showSavedPanel, setShowSavedPanel] = useState(false);
-  const [previewSortByX, setPreviewSortByX] = useState(true);
+  const [previewSortByX, setPreviewSortByX] = useState(false);
   const [isUpdatingCurveId, setIsUpdatingCurveId] = useState('');
   const [isRemovingCurveId, setIsRemovingCurveId] = useState('');
   const [isRemovingAllGraphs, setIsRemovingAllGraphs] = useState(false);
