@@ -139,6 +139,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   const DOUBLE_CLICK_GUARD_PX = 2; // Only suppress near-identical click locations
   const BOX_STROKE_HALF_PX = 2; // blue box lineWidth is 4, stroke extends outside the rect
   const CAPTURE_EDGE_TOLERANCE_PX = BOX_STROKE_HALF_PX + 4; // cover border stroke + slight aim error
+  const ALLOW_CAPTURE_OUTSIDE_BLUE_BOX = true; // Temporary — placement rules will be added later
   const EDIT_POINT_HIT_RADIUS = 12;
 
   const normalizeArea = (area) => {
@@ -207,6 +208,9 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   };
 
   const clampCanvasPointToGraphArea = (canvasX, canvasY) => {
+    if (ALLOW_CAPTURE_OUTSIDE_BLUE_BOX) {
+      return { canvasX, canvasY };
+    }
     const area = normalizeArea(graphArea);
     if (area.width <= 0 || area.height <= 0) {
       return { canvasX, canvasY };
@@ -844,22 +848,27 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       return false;
     }
 
-    if (!isCanvasPointInsideGraphArea(canvasX, canvasY, CAPTURE_EDGE_TOLERANCE_PX)) {
+    const insideBox = isCanvasPointInsideGraphArea(canvasX, canvasY, CAPTURE_EDGE_TOLERANCE_PX);
+    if (!ALLOW_CAPTURE_OUTSIDE_BLUE_BOX && !insideBox) {
       return false;
     }
 
-    const resolved = resolveCaptureCanvasPoint(canvasX, canvasY, handleKey);
+    const resolved = handleKey || insideBox
+      ? resolveCaptureCanvasPoint(canvasX, canvasY, handleKey)
+      : { canvasX, canvasY };
     let captureX = resolved.canvasX;
     let captureY = resolved.canvasY;
-    let { x: graphX, y: graphY } = convertCanvasToGraphCoordinates(captureX, captureY);
-    if (hasConfiguredAxisBounds() && !isGraphValueWithinAxisBounds(graphX, graphY)) {
-      const clamped = clampGraphCoordsToAxisBounds(graphX, graphY);
-      if (!isGraphValueWithinAxisBounds(clamped.x, clamped.y)) {
-        return false;
+    if (!ALLOW_CAPTURE_OUTSIDE_BLUE_BOX && hasConfiguredAxisBounds()) {
+      let { x: graphX, y: graphY } = convertCanvasToGraphCoordinates(captureX, captureY);
+      if (!isGraphValueWithinAxisBounds(graphX, graphY)) {
+        const clamped = clampGraphCoordsToAxisBounds(graphX, graphY);
+        if (!isGraphValueWithinAxisBounds(clamped.x, clamped.y)) {
+          return false;
+        }
+        const recanvas = convertGraphToCanvasCoordinates(clamped.x, clamped.y);
+        captureX = recanvas.canvasX;
+        captureY = recanvas.canvasY;
       }
-      const recanvas = convertGraphToCanvasCoordinates(clamped.x, clamped.y);
-      captureX = recanvas.canvasX;
-      captureY = recanvas.canvasY;
     }
 
     if (requireAxisConfirmed && !isAxisMappingConfirmed) {
@@ -966,9 +975,10 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     if (
       graphArea.width > 0 &&
       graphArea.height > 0 &&
-      isCanvasPointInsideGraphArea(x, y, CAPTURE_EDGE_TOLERANCE_PX)
+      (ALLOW_CAPTURE_OUTSIDE_BLUE_BOX ||
+        isCanvasPointInsideGraphArea(x, y, CAPTURE_EDGE_TOLERANCE_PX))
     ) {
-      // Inside the plot box: let click place a point instead of starting a box drag.
+      // Let click place a point instead of starting a box drag.
       return;
     }
 
@@ -1223,12 +1233,8 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     const canvasX = (e.clientX - rect.left) * scaleX;
     const canvasY = (e.clientY - rect.top) * scaleY;
     
-    // Preview line only inside the blue box so it matches where clicks are accepted.
-    if (isCanvasPointInsideGraphArea(canvasX, canvasY, CAPTURE_EDGE_TOLERANCE_PX)) {
-      setPreviewMousePos({ x: canvasX, y: canvasY });
-    } else {
-      setPreviewMousePos({ x: null, y: null });
-    }
+    // Preview crosshair follows the cursor anywhere on the canvas while capturing.
+    setPreviewMousePos({ x: canvasX, y: canvasY });
     
     // Check if mouse is directly over any resize handle
     const area = normalizeArea(graphArea);
