@@ -22,22 +22,28 @@ export const resolvePlotExtents = ({
   if (Number.isFinite(computedYMin)) yMin = Math.min(yMin, computedYMin);
   if (Number.isFinite(computedYMax)) yMax = Math.max(yMax, computedYMax);
 
+  // Pad only by how far data extends past the configured axis — not a % of the full span.
+  // (Otherwise a point at -0.8 on a 0–400 axis would get ~16 units of extra padding → ~-17 on the chart.)
+  const padBeyond = (overshoot, span) => {
+    if (!Number.isFinite(overshoot) || overshoot <= 0) return 0;
+    const safeSpan = Number.isFinite(span) && span > 0 ? span : 1;
+    return Math.min(overshoot * 0.12, safeSpan * 0.04);
+  };
+
   const xSpan = Math.abs(xMax - xMin);
   const ySpan = Math.abs(yMax - yMin);
-  const xPad = xSpan > 0 ? xSpan * 0.04 : 0.1;
-  const yPad = ySpan > 0 ? ySpan * 0.04 : 0.1;
 
   if (Number.isFinite(computedXMin) && Number.isFinite(configXMin) && computedXMin < configXMin) {
-    xMin -= xPad;
+    xMin -= padBeyond(configXMin - computedXMin, xSpan);
   }
   if (Number.isFinite(computedXMax) && Number.isFinite(configXMax) && computedXMax > configXMax) {
-    xMax += xPad;
+    xMax += padBeyond(computedXMax - configXMax, xSpan);
   }
   if (Number.isFinite(computedYMin) && Number.isFinite(configYMin) && computedYMin < configYMin) {
-    yMin -= yPad;
+    yMin -= padBeyond(configYMin - computedYMin, ySpan);
   }
   if (Number.isFinite(computedYMax) && Number.isFinite(configYMax) && computedYMax > configYMax) {
-    yMax += yPad;
+    yMax += padBeyond(computedYMax - configYMax, ySpan);
   }
 
   return {
