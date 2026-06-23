@@ -44,7 +44,6 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   const lastUserBoxRef = useRef(null); // Store last manually set box dimensions
   const potentialResizeHandleRef = useRef(null); // Track which handle was clicked
   const clickedOnHandleRef = useRef(false); // Track if this click originated on a handle
-  const clickedHandleKeyRef = useRef(null); // Which resize handle was clicked (for vertex/edge snap)
   const [editDragPointIndex, setEditDragPointIndex] = useState(null);
   const editDragPointIndexRef = useRef(null);
   const editDragMovedRef = useRef(false);
@@ -594,7 +593,8 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       
       const isAnnotation = point.isAnnotation === true;
       const isActiveEditPoint = isEditingCurve && editDragPointIndex === index;
-      const pointRadius = isActiveEditPoint ? 4 : (inSavedView ? 2.5 : 2.5);
+      const pointRadius = isActiveEditPoint ? 2 : 1;
+      const strokeWidth = isActiveEditPoint ? 1.25 : 0.5;
 
       // Different colors for different point types:
       // - Red for imported points
@@ -603,8 +603,8 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
         ? '#FFD700'
         : (isAnnotation ? '#FFD700' : (point.overlayColor || 'red'));
       
-      ctx.strokeStyle = isActiveEditPoint ? '#1976d2' : 'white';
-      ctx.lineWidth = isActiveEditPoint ? 2 : 1;
+      ctx.strokeStyle = isActiveEditPoint ? '#1976d2' : '#333333';
+      ctx.lineWidth = strokeWidth;
       ctx.beginPath();
       ctx.arc(drawX, drawY, pointRadius, 0, 2 * Math.PI);
       ctx.stroke();
@@ -619,8 +619,8 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
         const label = String(manualPointLabel);
         const labelX = drawX + 8;
         const labelY = drawY - 8;
-        ctx.font = 'bold 12px sans-serif';
-        ctx.lineWidth = 3;
+        ctx.font = 'bold 10px sans-serif';
+        ctx.lineWidth = 2;
         ctx.strokeStyle = '#000000';
         ctx.fillStyle = '#ffffff';
         ctx.strokeText(label, labelX, labelY);
@@ -727,34 +727,6 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     );
   };
 
-  const getSnappedCanvasPointForHandle = (handleKey) => {
-    const area = normalizeArea(graphArea);
-    const midX = area.x + area.width / 2;
-    const midY = area.y + area.height / 2;
-    const right = area.x + area.width;
-    const bottom = area.y + area.height;
-    switch (handleKey) {
-      case 'top-left':
-        return { canvasX: area.x, canvasY: area.y };
-      case 'top-right':
-        return { canvasX: right, canvasY: area.y };
-      case 'bottom-left':
-        return { canvasX: area.x, canvasY: bottom };
-      case 'bottom-right':
-        return { canvasX: right, canvasY: bottom };
-      case 'top':
-        return { canvasX: midX, canvasY: area.y };
-      case 'bottom':
-        return { canvasX: midX, canvasY: bottom };
-      case 'left':
-        return { canvasX: area.x, canvasY: midY };
-      case 'right':
-        return { canvasX: right, canvasY: midY };
-      default:
-        return null;
-    }
-  };
-
   const clampGraphCoordsToAxisBounds = (graphX, graphY) => {
     const xMin = parseFloat(graphConfig.xMin);
     const xMax = parseFloat(graphConfig.xMax);
@@ -802,7 +774,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     return true;
   };
 
-  const tryAddCapturedPoint = (canvasX, canvasY, { requireAxisConfirmed = true, applyDoubleClickGuard = true, handleKey = null } = {}) => {
+  const tryAddCapturedPoint = (canvasX, canvasY, { requireAxisConfirmed = true, applyDoubleClickGuard = true } = {}) => {
     if (graphArea.width === 0 || graphArea.height === 0) {
       setShowRedrawMsg(true);
       return false;
@@ -813,16 +785,8 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       return false;
     }
 
-    // Place points exactly where the pointer is; only snap when clicking a resize handle.
     let captureX = canvasX;
     let captureY = canvasY;
-    if (handleKey) {
-      const snapped = getSnappedCanvasPointForHandle(handleKey);
-      if (snapped) {
-        captureX = snapped.canvasX;
-        captureY = snapped.canvasY;
-      }
-    }
     if (!ALLOW_CAPTURE_OUTSIDE_BLUE_BOX && hasConfiguredAxisBounds()) {
       let { x: graphX, y: graphY } = convertCanvasToGraphCoordinates(captureX, captureY);
       if (!isGraphValueWithinAxisBounds(graphX, graphY)) {
@@ -931,7 +895,6 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       // Store that a handle was clicked, but don't resize yet
       potentialResizeHandleRef.current = mode;
       clickedOnHandleRef.current = true;
-      clickedHandleKeyRef.current = mode;
       setInitialArea(area);
       setInitialMouse({ x, y });
       return;
@@ -1106,9 +1069,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
 
     // Track if this click came from a handle
     const isHandleClick = clickedOnHandleRef.current;
-    const handleKey = clickedHandleKeyRef.current;
     clickedOnHandleRef.current = false;
-    clickedHandleKeyRef.current = null;
 
     // Skip point capture after resize/box draw (even when the interaction started on a handle).
     if (justFinishedResizingRef.current || isResizing) {
@@ -1123,7 +1084,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     }
 
     if (isHandleClick) {
-      tryAddCapturedPoint(canvasX, canvasY, { handleKey });
+      tryAddCapturedPoint(canvasX, canvasY);
       setDragDistance(0);
       return;
     }
@@ -1392,7 +1353,6 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     // Clean up potential resize handle and flag
     potentialResizeHandleRef.current = null;
     clickedOnHandleRef.current = false;
-    clickedHandleKeyRef.current = null;
     
     // Cancel any active resize operation when mouse leaves canvas
     if (isResizing) {
