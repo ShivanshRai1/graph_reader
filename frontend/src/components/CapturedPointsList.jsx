@@ -9,6 +9,8 @@ import {
 import lineSingleTemplate from '../assets/tc-templates/line-single.json';
 import { useEffect, useState } from 'react';
 
+const SHOW_CAPTURED_POINTS_TOOLBAR = false;
+
 const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false, isEditingCurve = false }) => {
   const { dataPoints, clearDataPoints, importDataPoints, uploadedImage, updateDataPoint, deleteDataPoint, graphConfig, graphArea, convertCanvasToGraphCoordinates } = useGraph();
   const manualCapturePoints = getManualCapturePoints(dataPoints);
@@ -338,6 +340,7 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false, isEditin
         )}
       </div>
 
+      {SHOW_CAPTURED_POINTS_TOOLBAR && (
       <div className="flex flex-wrap gap-2 mb-4">
         <input 
           type="file" 
@@ -386,6 +389,7 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false, isEditin
           📋 Copy Table
         </button>
       </div>
+      )}
 
       {manualCapturePoints.length === 0 ? (
         <div className="text-center p-10 text-gray-500 italic bg-gray-50 border-2 border-dashed border-gray-200 rounded-lg">

@@ -7574,27 +7574,6 @@ const GraphCapture = () => {
                     >
                       View all graphs combined
                     </button>
-                    <button
-                      className="px-3 py-1 rounded bg-gray-700 text-white text-xs"
-                      onClick={handleExportAllSavedCurvesToTC}
-                      title="Export all saved curves on this graph into HPPeval .tc file(s)"
-                    >
-                      Export all .tc
-                    </button>
-                    <button
-                      className="px-3 py-1 rounded bg-gray-700 text-white text-xs"
-                      onClick={handleExportAllSavedCurvesToCSV}
-                      title="Download each curve as CSV plus one combined all-curves file (per graph group)"
-                    >
-                      Export all CSV
-                    </button>
-                    <button
-                      className="px-3 py-1 rounded bg-gray-700 text-white text-xs"
-                      onClick={handleExportAllSavedCurvesToJSON}
-                      title="Download each curve as JSON plus one combined all-curves file (per graph group)"
-                    >
-                      Export all JSON
-                    </button>
                     <a
                       href={buildTcCheckerUrl()}
                       target="_blank"
@@ -7606,7 +7585,7 @@ const GraphCapture = () => {
                         border: '1px solid #93c5fd',
                         textDecoration: 'none',
                       }}
-                      title="DiscoverEE Approach and Analog Reference"
+                      title="Open plot checker to compare captured export against reference"
                     >
                       Check
                     </a>
