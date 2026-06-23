@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from database import engine, get_db, Base
@@ -17,6 +17,7 @@ from schemas import (
 import json
 import os
 import re
+import base64
 import threading
 import time
 from sqlalchemy import inspect, text
@@ -70,6 +71,50 @@ def normalize_mirror_graph_image(value: Optional[str]) -> str:
         payload = compact.replace("data:image/png;base64,", "")
         return f"data:image/png;base64,{payload}"
     return ""
+
+
+def decode_mirror_graph_image_to_png_bytes(value: Optional[str]) -> bytes:
+    normalized = normalize_mirror_graph_image(value)
+    if not normalized:
+        return b""
+    if normalized.lower().startswith("data:"):
+        _, _, payload = normalized.partition(",")
+        if not payload:
+            return b""
+        try:
+            return base64.b64decode(payload, validate=False)
+        except Exception:
+            return b""
+    try:
+        return base64.b64decode(normalized, validate=False)
+    except Exception:
+        return b""
+
+
+def resolve_mirror_graph_image_for_graph_id(db: Session, graph_id: str) -> tuple[str, Optional[object]]:
+    normalized_graph_id = str(graph_id or "").strip()
+    if not normalized_graph_id:
+        return "", None
+
+    mirror = (
+        db.query(GraphImageMirror)
+        .filter(GraphImageMirror.discoveree_graph_id == normalized_graph_id)
+        .first()
+    )
+    if mirror and normalize_mirror_graph_image(mirror.graph_image):
+        return normalize_mirror_graph_image(mirror.graph_image), mirror.updated_at
+
+    curve = (
+        db.query(Curve)
+        .filter(Curve.discoveree_graph_id == normalized_graph_id)
+        .order_by(Curve.updated_at.desc(), Curve.id.desc())
+        .first()
+    )
+    normalized_image = normalize_mirror_graph_image(curve.graph_image if curve else "")
+    if normalized_image:
+        return normalized_image, curve.updated_at if curve else None
+
+    return "", None
 
 
 def upsert_graph_image_mirror_record(db: Session, graph_id: str, graph_image: str) -> GraphImageMirror:
@@ -517,33 +562,38 @@ def get_graph_image_mirror(graph_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="graph_id is required")
 
     try:
-        mirror = (
-            db.query(GraphImageMirror)
-            .filter(GraphImageMirror.discoveree_graph_id == normalized_graph_id)
-            .first()
-        )
-        if mirror and normalize_mirror_graph_image(mirror.graph_image):
-            return GraphImageMirrorResponse(
-                graph_id=normalized_graph_id,
-                graph_image=normalize_mirror_graph_image(mirror.graph_image),
-                updated_at=mirror.updated_at,
-            )
-
-        curve = (
-            db.query(Curve)
-            .filter(Curve.discoveree_graph_id == normalized_graph_id)
-            .order_by(Curve.updated_at.desc(), Curve.id.desc())
-            .first()
-        )
-        normalized_image = normalize_mirror_graph_image(curve.graph_image if curve else "")
+        normalized_image, updated_at = resolve_mirror_graph_image_for_graph_id(db, normalized_graph_id)
         if normalized_image:
             return GraphImageMirrorResponse(
                 graph_id=normalized_graph_id,
                 graph_image=normalized_image,
-                updated_at=curve.updated_at if curve else None,
+                updated_at=updated_at,
             )
 
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Mirrored graph image not found")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching mirrored graph image: {str(e)}",
+        )
+
+
+@app.get("/api/graphs/{graph_id}/graph-image.png")
+def get_graph_image_mirror_png(graph_id: str, db: Session = Depends(get_db)):
+    """Return mirrored graph image as a PNG file (use this URL directly in img src or browsers)."""
+    normalized_graph_id = str(graph_id or "").strip()
+    if not normalized_graph_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="graph_id is required")
+
+    try:
+        normalized_image, _ = resolve_mirror_graph_image_for_graph_id(db, normalized_graph_id)
+        png_bytes = decode_mirror_graph_image_to_png_bytes(normalized_image)
+        if not png_bytes:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Mirrored graph image not found")
+
+        return Response(content=png_bytes, media_type="image/png")
     except HTTPException:
         raise
     except Exception as e:
