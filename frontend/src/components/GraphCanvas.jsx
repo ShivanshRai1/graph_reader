@@ -254,23 +254,21 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
           drawCurveOverlayLayers(ctx);
         };
 
-        // Defer so persisted graphArea from parent can sync into graphAreaRef first.
+        // Defer one frame so persisted graphArea from parent can sync into graphAreaRef first.
         requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            const currentArea = normalizeArea(graphAreaRef.current);
-            if (currentArea.width === 0 || currentArea.height === 0) {
-              const rememberedBox = normalizeArea(lastUserBoxRef.current);
-              const initialBox =
-                rememberedBox.width > 0 && rememberedBox.height > 0
-                  ? rememberedBox
-                  : createInitialAxisBox(img.width, img.height);
-              setGraphArea(initialBox);
-              lastUserBoxRef.current = initialBox;
-              setBoxTransparent(false);
-            }
+          const currentArea = normalizeArea(graphAreaRef.current);
+          if (currentArea.width === 0 || currentArea.height === 0) {
+            const rememberedBox = normalizeArea(lastUserBoxRef.current);
+            const initialBox =
+              rememberedBox.width > 0 && rememberedBox.height > 0
+                ? rememberedBox
+                : createInitialAxisBox(img.width, img.height);
+            setGraphArea(initialBox);
+            lastUserBoxRef.current = initialBox;
+            setBoxTransparent(false);
+          }
 
-            drawLoadedImage();
-          });
+          drawLoadedImage();
         });
       };
 

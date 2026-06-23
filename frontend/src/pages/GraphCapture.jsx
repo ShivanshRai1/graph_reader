@@ -271,6 +271,35 @@ const probeImageUrl = (url, timeoutMs = 12000) =>
     img.src = normalizedUrl;
   });
 
+/** Pick the first usable graph image without network probing (for immediate display). */
+const resolveQuickGraphImage = (graph = {}, graphId = '', extras = {}) => {
+  const persisted = extras.persistedGraphImage ?? getValidatedPersistedGraphImage(graphId);
+  if (persisted) return persisted;
+
+  const candidates = collectGraphImageCandidates({
+    graph,
+    graphId,
+    restoredPending: extras.restoredPending ?? '',
+    persistedGraphImage: persisted,
+    backendMirroredImage: extras.backendMirroredImage ?? '',
+    localGraphImage: extras.localGraphImage ?? '',
+  });
+
+  for (const candidate of candidates) {
+    if (isEmbeddedGraphImage(candidate)) {
+      return candidate;
+    }
+  }
+
+  for (const candidate of candidates) {
+    if (isRejectedGraphImageToken(candidate)) continue;
+    const urls = buildDiscovereeGraphImageUrlCandidates(candidate, graph);
+    if (urls[0]) return urls[0];
+  }
+
+  return '';
+};
+
 const resolveFirstReachableImageUrl = async (candidates = []) => {
   const list = Array.isArray(candidates) ? candidates : [];
 
@@ -3658,9 +3687,13 @@ const GraphCapture = () => {
   const [aiFlowStatusMessage, setAiFlowStatusMessage] = useState('');
   const [restoredPendingCapture, setRestoredPendingCapture] = useState(null);
   const [hasPendingCaptureChoice, setHasPendingCaptureChoice] = useState(false);
-  const [isInitialGraphFetchPending, setIsInitialGraphFetchPending] = useState(
-    () => Boolean(new URLSearchParams(window.location.search).get('graph_id'))
-  );
+  const [isInitialGraphFetchPending, setIsInitialGraphFetchPending] = useState(() => {
+    const graphId = String(new URLSearchParams(window.location.search).get('graph_id') || '').trim();
+    if (!graphId) return false;
+    if (getValidatedPersistedGraphImage(graphId)) return false;
+    if (getPersistedSavedCurves(graphId)?.curves?.length > 0) return false;
+    return true;
+  });
   const [graphLoadNotice, setGraphLoadNotice] = useState('');
   const [savedCurvesSource, setSavedCurvesSource] = useState('company');
   const [showSavedPanel, setShowSavedPanel] = useState(false);
@@ -3988,7 +4021,23 @@ const GraphCapture = () => {
       setIsAxisMappingConfirmed(true);
       setFrozenGraphConfig((prev) => prev || { ...persistedContext.axis });
     }
-  }, [setGraphArea, setGraphConfig]);
+
+    const cachedImage = getValidatedPersistedGraphImage(graphId);
+    if (cachedImage) {
+      suppressNextImageSessionResetRef.current = true;
+      setUploadedImage(cachedImage);
+    }
+
+    const persistedCurves = getPersistedSavedCurves(graphId);
+    if (persistedCurves?.curves?.length > 0) {
+      setSavedCurves(persistedCurves.curves);
+      setSavedCurvesSource(persistedCurves.source || 'company');
+    }
+
+    if (cachedImage || persistedCurves?.curves?.length > 0) {
+      autoLoadedGraphIdRef.current = graphId;
+    }
+  }, [setGraphArea, setGraphConfig, setUploadedImage]);
 
   const uniqueSavedCurves = useMemo(() => {
     if (!Array.isArray(savedCurves)) return [];
@@ -4185,15 +4234,8 @@ const GraphCapture = () => {
 
     if (restoredArea) {
       setGraphArea(restoredArea);
-    } else {
-      const liveArea =
-        normalizePersistedGraphArea(graphAreaOverride) ||
-        normalizePersistedGraphArea(graphAreaRef.current);
-      if (!liveArea) {
-        // Force GraphCanvas to apply a fresh plot-area box for this image (avoid stale box from another graph).
-        setGraphArea({ x: 0, y: 0, width: 0, height: 0 });
-      }
     }
+    // When no persisted area exists, keep the current box so GraphCanvas can show the default immediately.
 
     setGraphConfig((prev) => ({
       ...prev,
@@ -5907,12 +5949,7 @@ const GraphCapture = () => {
     console.log('[DEBUG] Fetching graph_id:', graphId);
     const fetchGraphById = async () => {
       try {
-        setSavedCurves([]);
-        setSavedCurvesSource('company');
-        setUploadedImage(null);
         clearDataPoints();
-        activeSessionImageKeyRef.current = '';
-        autoLoadedGraphIdRef.current = '';
 
         // Try DiscovereE API first
         console.log('[DEBUG] Attempting DiscovereE API fetch...');
@@ -5933,12 +5970,23 @@ const GraphCapture = () => {
             console.log('[DEBUG] Successfully parsed DiscoverEE data, details count:', discovereeDetails.length);
             console.log('[DEBUG] discovereeGraph all fields:', JSON.stringify(discovereeGraph, null, 2));
             const resolvedGraphId = String(discovereeGraph.graph_id || graphId).trim();
+            const quickImage = resolveQuickGraphImage(discovereeGraph, resolvedGraphId);
+            if (quickImage) {
+              setUploadedImageFromExistingGraph(quickImage);
+              if (isEmbeddedGraphImage(quickImage)) {
+                persistGraphImage(resolvedGraphId, quickImage);
+              }
+              setIsInitialGraphFetchPending(false);
+            }
             const graphImageUrl = await resolveReachableGraphImageUrl(
               discovereeGraph,
               discovereeDetails,
               resolvedGraphId,
               { restoredPending: '', apiUrl }
             );
+            if (graphImageUrl && graphImageUrl !== quickImage) {
+              setUploadedImageFromExistingGraph(graphImageUrl);
+            }
             logGraphImageAvailability(resolvedGraphId, graphImageUrl, 'discoveree-success-with-details', {
               detailsCount: discovereeDetails.length,
               companyGraphImgPresent: Boolean(String(discovereeGraph?.graph_img || '').trim()),
@@ -6044,6 +6092,7 @@ const GraphCapture = () => {
               const curvesToUse = restoredBundle.curves;
 
               console.log('[DEBUG] Setting savedCurves from DiscoverEE + persisted merge:', curvesToUse.length);
+              autoLoadedGraphIdRef.current = resolvedGraphIdForCurves;
               setSavedCurves(curvesToUse);
               setSavedCurvesSource(restoredBundle.source);
               persistSavedCurves(
@@ -6051,11 +6100,20 @@ const GraphCapture = () => {
                 curvesToUse,
                 restoredBundle.source
               );
-              activateAppendSession(discovereeGraph.graph_id, graphImageUrl, 'fetchGraphById');
+              activateAppendSession(discovereeGraph.graph_id, graphImageUrl || quickImage, 'fetchGraphById');
 
-              if (graphImageUrl) {
-                setUploadedImageFromExistingGraph(graphImageUrl);
+              if (graphImageUrl || quickImage) {
+                setUploadedImageFromExistingGraph(graphImageUrl || quickImage);
               }
+
+              restoreGraphDisplayFromSavedCurve(curvesToUse[0], resolvedGraphIdForCurves, {
+                keepCurveNameEmpty: true,
+                allCurves: curvesToUse,
+                loadPoints: false,
+                graphAreaOverride: normalizePersistedGraphArea(
+                  getPersistedGraphContext(resolvedGraphIdForCurves)?.graphArea
+                ),
+              });
 
               applyDiscovereeGraphMetadataToConfig(discovereeGraph, resolvedGraphTitle, discovereeDetails[0], curvesToUse);
               return;
@@ -6155,26 +6213,28 @@ const GraphCapture = () => {
         getValidatedPersistedGraphImage(graphId),
       ].filter(Boolean);
 
-      (async () => {
-        const backendMirroredImage = await fetchMirroredGraphImageFromBackend(apiUrl, graphId);
-        const resolvedSavedImage = await resolveFirstReachableImageUrl(
-          backendMirroredImage ? [backendMirroredImage, ...autoLoadCandidates] : autoLoadCandidates
-        );
+      if (!uploadedImage) {
+        (async () => {
+          const backendMirroredImage = await fetchMirroredGraphImageFromBackend(apiUrl, graphId);
+          const resolvedSavedImage = await resolveFirstReachableImageUrl(
+            backendMirroredImage ? [backendMirroredImage, ...autoLoadCandidates] : autoLoadCandidates
+          );
 
-        logGraphImageAvailability(graphId || firstCurve.graphId || getGraphIdForCurve(firstCurve), resolvedSavedImage, 'auto-load-graph-context', {
-          firstCurveId: firstCurve.id,
-        });
+          logGraphImageAvailability(graphId || firstCurve.graphId || getGraphIdForCurve(firstCurve), resolvedSavedImage, 'auto-load-graph-context', {
+            firstCurveId: firstCurve.id,
+          });
 
-        if (resolvedSavedImage) {
-          console.log('[DEBUG] Setting graph image:', resolvedSavedImage);
-          setUploadedImageFromExistingGraph(resolvedSavedImage);
-          if (isEmbeddedGraphImage(resolvedSavedImage)) {
-            persistGraphImage(graphId, resolvedSavedImage);
+          if (resolvedSavedImage) {
+            console.log('[DEBUG] Setting graph image:', resolvedSavedImage);
+            setUploadedImageFromExistingGraph(resolvedSavedImage);
+            if (isEmbeddedGraphImage(resolvedSavedImage)) {
+              persistGraphImage(graphId, resolvedSavedImage);
+            }
+          } else {
+            console.warn('[GRAPH_IMAGE] No reachable image URL for graph_id:', graphId);
           }
-        } else {
-          console.warn('[GRAPH_IMAGE] No reachable image URL for graph_id:', graphId);
-        }
-      })();
+        })();
+      }
 
       restoreGraphDisplayFromSavedCurve(firstCurve, graphId, {
         keepCurveNameEmpty: true,
@@ -6189,7 +6249,7 @@ const GraphCapture = () => {
 
       console.log('[DEBUG] Graph context restored after refresh (overlay points hidden until View/Edit).');
     }
-  }, [savedCurves, replaceDataPoints, setGraphConfig, setUploadedImage]);
+  }, [savedCurves, uploadedImage, replaceDataPoints, setGraphConfig, setUploadedImage]);
 
   // Keep blue box + axis mapping in localStorage so refresh restores them.
   useEffect(() => {
