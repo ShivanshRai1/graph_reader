@@ -2,7 +2,7 @@ import { useRef, useState, useEffect } from 'react';
 import { useGraph, isManualCapturePoint, getManualCapturePoints } from '../context/GraphContext';
 import { buildDefaultGraphArea } from '../utils/graphAreaHelpers';
 
-const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', isAxisMappingConfirmed = false, hasReturnUrl = false, isEditingCurve = false, editingCurveOverlayId = '', savedCurveViewActive = false, hasAiSavedCurves = false, useInsetDefaultAxisBox = false, onGraphAreaManuallyAdjusted }) => {
+const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', isAxisMappingConfirmed = false, hasReturnUrl = false, isEditingCurve = false, editingCurveOverlayId = '', savedCurveViewActive = false, hasAiSavedCurves = false, showAiCaptureGuidance = false, useInsetDefaultAxisBox = false, onGraphAreaManuallyAdjusted }) => {
   const { uploadedImage, graphArea, setGraphArea, dataPoints, addDataPoint, clearDataPoints, graphConfig, deleteDataPoint, convertGraphToCanvasCoordinates, convertCanvasToGraphCoordinates, replaceDataPoints, updateDataPointFromCanvas } = useGraph();
   const [showRedrawMsg, setShowRedrawMsg] = useState(false);
   const canvasRef = useRef(null);
@@ -118,7 +118,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   };
 
   const showAiAlignmentGuidance = () =>
-    (hasImportedCurvePoints() || hasAiSavedCurves) && !canShowImportedCurveOverlay();
+    showAiCaptureGuidance && hasImportedCurvePoints() && !canShowImportedCurveOverlay();
 
   const isSavedViewCrosscheckActive = () =>
     savedCurveViewActive &&
@@ -136,6 +136,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   const RESIZE_ACTIVATION_THRESHOLD = 3; // pixels to move before activating resize
   const DOUBLE_CLICK_GUARD_MS = 140; // Only suppress very rapid repeat clicks
   const DOUBLE_CLICK_GUARD_PX = 2; // Only suppress near-identical click locations
+  const CAPTURE_EDGE_TOLERANCE_PX = 3; // Accept clicks on the blue box border and corners
   const EDIT_POINT_HIT_RADIUS = 12;
 
   const normalizeArea = (area) => {
@@ -708,14 +709,15 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     };
   };
 
-  const isCanvasPointInsideGraphArea = (canvasX, canvasY) => {
+  const isCanvasPointInsideGraphArea = (canvasX, canvasY, edgeTolerancePx = 0) => {
     if (graphArea.width === 0 || graphArea.height === 0) return false;
     const area = normalizeArea(graphArea);
+    const tol = Math.max(0, edgeTolerancePx);
     return (
-      canvasX >= area.x &&
-      canvasX <= area.x + area.width &&
-      canvasY >= area.y &&
-      canvasY <= area.y + area.height
+      canvasX >= area.x - tol &&
+      canvasX <= area.x + area.width + tol &&
+      canvasY >= area.y - tol &&
+      canvasY <= area.y + area.height + tol
     );
   };
 
@@ -734,17 +736,24 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     );
   };
 
+  const getAxisBoundTolerance = (min, max) => {
+    const span = Math.abs(max - min);
+    if (!Number.isFinite(span) || span <= 0) return 1e-6;
+    return Math.max(1e-6, span * 1e-8);
+  };
+
   const isGraphValueWithinAxisBounds = (graphX, graphY) => {
     const xMin = parseFloat(graphConfig.xMin);
     const xMax = parseFloat(graphConfig.xMax);
     const yMin = parseFloat(graphConfig.yMin);
     const yMax = parseFloat(graphConfig.yMax);
-    const tolerance = 1e-9;
+    const xTol = getAxisBoundTolerance(xMin, xMax);
+    const yTol = getAxisBoundTolerance(yMin, yMax);
 
-    if (Number.isFinite(xMin) && graphX < xMin - tolerance) return false;
-    if (Number.isFinite(xMax) && graphX > xMax + tolerance) return false;
-    if (Number.isFinite(yMin) && graphY < yMin - tolerance) return false;
-    if (Number.isFinite(yMax) && graphY > yMax + tolerance) return false;
+    if (Number.isFinite(xMin) && graphX < xMin - xTol) return false;
+    if (Number.isFinite(xMax) && graphX > xMax + xTol) return false;
+    if (Number.isFinite(yMin) && graphY < yMin - yTol) return false;
+    if (Number.isFinite(yMax) && graphY > yMax + yTol) return false;
     return true;
   };
 
@@ -754,7 +763,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       return false;
     }
 
-    if (!isCanvasPointInsideGraphArea(canvasX, canvasY)) {
+    if (!isCanvasPointInsideGraphArea(canvasX, canvasY, CAPTURE_EDGE_TOLERANCE_PX)) {
       return false;
     }
 
@@ -1037,6 +1046,8 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     }
 
     if (isHandleClick) {
+      tryAddCapturedPoint(canvasX, canvasY);
+      setDragDistance(0);
       return;
     }
 
@@ -1111,7 +1122,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     const canvasY = (e.clientY - rect.top) * scaleY;
     
     // Preview line only inside the blue box so it matches where clicks are accepted.
-    if (isCanvasPointInsideGraphArea(canvasX, canvasY)) {
+    if (isCanvasPointInsideGraphArea(canvasX, canvasY, CAPTURE_EDGE_TOLERANCE_PX)) {
       setPreviewMousePos({ x: canvasX, y: canvasY });
     } else {
       setPreviewMousePos({ x: null, y: null });
@@ -1547,7 +1558,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
             Hover over the graph image to read live axis coordinates and use the magnifier (top-right) to cross-check captured points against the datasheet.
           </div>
         )}
-        {hasImportedCurvePoints() && canShowImportedCurveOverlay() && isAxisMappingConfirmed && !isEditingCurve && !savedViewCrosscheckActive && (
+        {showAiCaptureGuidance && hasImportedCurvePoints() && canShowImportedCurveOverlay() && isAxisMappingConfirmed && !isEditingCurve && !savedViewCrosscheckActive && (
           <div className="text-blue-800 bg-blue-50 border border-blue-200 rounded px-3 py-2 mt-2 text-sm">
             <p className="font-semibold mb-1.5">AI points loaded — fine-tune and save:</p>
             <ol className="list-decimal list-inside space-y-1 m-0 pl-0.5">

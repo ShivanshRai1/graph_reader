@@ -1824,6 +1824,27 @@ const AI_PENDING_CAPTURE_STORAGE_KEY = 'ai_pending_capture_image';
 const AI_PENDING_CAPTURE_TTL_MS = 5 * 60 * 1000;
 const AI_LAST_RETURNED_GRAPH_ID_KEY = 'ai_last_returned_graph_id';
 const AI_EXTRACTED_METADATA_KEY = 'ai_extracted_metadata';
+const AI_CAPTURE_GUIDANCE_KEY = 'ai_capture_guidance_active';
+
+const readAiCaptureGuidanceActive = () => {
+  try {
+    return window.sessionStorage.getItem(AI_CAPTURE_GUIDANCE_KEY) === '1';
+  } catch {
+    return false;
+  }
+};
+
+const persistAiCaptureGuidanceActive = (active) => {
+  try {
+    if (active) {
+      window.sessionStorage.setItem(AI_CAPTURE_GUIDANCE_KEY, '1');
+    } else {
+      window.sessionStorage.removeItem(AI_CAPTURE_GUIDANCE_KEY);
+    }
+  } catch (error) {
+    console.warn('Unable to persist AI capture guidance flag.', error);
+  }
+};
 
 const persistAiExtractedMetadata = (metadata) => {
   try {
@@ -3060,6 +3081,9 @@ const GraphCapture = () => {
     };
 
     try {
+      setAiCaptureGuidanceActive(true);
+      persistAiCaptureGuidanceActive(true);
+
       const _u = new URL(window.location.href);
       _u.searchParams.set('type', 'ai_extraction');
       window.history.replaceState(null, '', _u.toString());
@@ -3670,6 +3694,9 @@ const GraphCapture = () => {
     window.history.replaceState({}, '', currentUrl.toString());
     setAiFlowStatusMessage('');
 
+    setAiCaptureGuidanceActive(false);
+    persistAiCaptureGuidanceActive(false);
+
     if (shouldPreserveGraphContext) {
       setShouldSkipCaptureChoiceAfterAi(false);
     }
@@ -3689,6 +3716,7 @@ const GraphCapture = () => {
   const [aiFlowStatusMessage, setAiFlowStatusMessage] = useState('');
   const [restoredPendingCapture, setRestoredPendingCapture] = useState(null);
   const [hasPendingCaptureChoice, setHasPendingCaptureChoice] = useState(false);
+  const [aiCaptureGuidanceActive, setAiCaptureGuidanceActive] = useState(() => readAiCaptureGuidanceActive());
   const [isInitialGraphFetchPending, setIsInitialGraphFetchPending] = useState(() => {
     const graphId = String(new URLSearchParams(window.location.search).get('graph_id') || '').trim();
     if (!graphId) return false;
@@ -7551,6 +7579,7 @@ const GraphCapture = () => {
                 editingCurveOverlayId={editingCurveId ? String(editingCurveId) : ''}
                 savedCurveViewActive={Boolean((selectedCurveId || combinedGroupId || showAllCombinedModal) && !editingCurveId)}
                 hasAiSavedCurves={savedCurves.length > 0 && savedCurvesSource === 'company'}
+                showAiCaptureGuidance={aiCaptureGuidanceActive}
                 useInsetDefaultAxisBox={Boolean(
                   urlParams.graph_id ||
                   dataPoints.some((point) => point.imported) ||
