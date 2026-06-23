@@ -31,7 +31,7 @@ import {
   graphAreasAreSimilar,
   suggestGraphAreaFromImportedPoints,
 } from '../utils/graphAreaHelpers';
-import { useGraph, graphToCanvasWithBounds, getManualCapturePoints } from '../context/GraphContext';
+import { useGraph, graphToCanvasWithBounds, getManualCapturePoints, MANUAL_CAPTURE_OVERLAY_ID } from '../context/GraphContext';
 import { clearAnnotationsForCurve } from '../utils/annotationStorage';
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 
@@ -860,6 +860,8 @@ const shouldReplaceMergedCurve = (existing, candidate) => {
   if (!existing) return true;
   if (candidate?.locallyModified && !existing?.locallyModified) return true;
   if (existing?.locallyModified && !candidate?.locallyModified) return false;
+  if (candidate?.userAdjustedPoints && !existing?.userAdjustedPoints) return true;
+  if (existing?.userAdjustedPoints && !candidate?.userAdjustedPoints) return false;
 
   const existingTs = Number(existing?.updatedAt || 0);
   const candidateTs = Number(candidate?.updatedAt || 0);
@@ -4741,7 +4743,9 @@ const GraphCapture = () => {
     }
     return allPoints.filter((point) => {
       const overlayId = String(point?.overlayCurveId || '').trim();
-      return !overlayId || curveKeys.has(overlayId);
+      if (!overlayId) return true;
+      if (overlayId === MANUAL_CAPTURE_OVERLAY_ID) return true;
+      return curveKeys.has(overlayId);
     });
   };
 
@@ -5539,7 +5543,8 @@ const GraphCapture = () => {
                 }
               : {}),
             updatedAt: Date.now(),
-            locallyModified: result ? !result.xyConfirmedOnDiscoveree : curve.locallyModified,
+            locallyModified: true,
+            userAdjustedPoints: isTarget ? true : Boolean(curve.userAdjustedPoints),
           };
         });
 
@@ -5565,6 +5570,67 @@ const GraphCapture = () => {
           graphArea,
           hasAxisChange ? { ...graphConfig, ...nextAxisBounds } : graphConfig
         );
+      }
+
+      if (savedCurvesSource === 'company' && graphIdForCurve) {
+        try {
+          const { details: refetchDetails } = await fetchCompanyGraphDetailsWithRetry(graphIdForCurve);
+          const apiDetails = dedupeCompanyApiDetailsById(refetchDetails);
+          if (apiDetails.length > 0) {
+            setSavedCurves((prev) => {
+              const graphIdKey = String(graphIdForCurve);
+              const onGraph = prev.filter(
+                (curve) => String(curve.graphId || getGraphIdForCurve(curve) || '') === graphIdKey
+              );
+              const offGraph = prev.filter(
+                (curve) => String(curve.graphId || getGraphIdForCurve(curve) || '') !== graphIdKey
+              );
+              const knownDetailIds = new Set(
+                onGraph.map((curve) => String(getDetailIdForCurve(curve) || '')).filter(Boolean)
+              );
+              const missing = apiDetails.filter(
+                (detail) => detail?.id && !knownDetailIds.has(String(detail.id))
+              );
+              if (missing.length === 0) {
+                return prev;
+              }
+
+              const graphImageUrl =
+                onGraph[0]?.graphImageUrl ||
+                onGraph[0]?.graph_img ||
+                uploadedImage ||
+                '';
+              const restoredBundle = buildRestoredSavedCurves({
+                graphId: graphIdKey,
+                companyCurves: missing.map((detail, i) => {
+                  const rawPoints = parseXyString(detail.xy);
+                  return {
+                    id: `${graphIdKey}_${detail.id || i}`,
+                    detailId: detail.id ? String(detail.id) : '',
+                    graphId: graphIdKey,
+                    name: detail.curve_title || `Curve ${i + 1}`,
+                    points: rawPoints,
+                    graphImageUrl,
+                    config: {
+                      curveName: detail.curve_title || '',
+                      graphTitle: onGraph[0]?.config?.graphTitle || graphConfig.graphTitle || '',
+                    },
+                  };
+                }),
+                graphImageUrl,
+              });
+
+              const next = dedupeCurves([...offGraph, ...onGraph, ...restoredBundle.curves]);
+              const curvesForGraph = next.filter(
+                (curve) => String(curve.graphId || getGraphIdForCurve(curve) || '') === graphIdKey
+              );
+              persistSavedCurves(graphIdKey, curvesForGraph, savedCurvesSource);
+              return next;
+            });
+          }
+        } catch (refetchError) {
+          console.warn('[EDIT REFETCH] Unable to reconcile sibling curves from DiscoverEE:', refetchError);
+        }
       }
 
       setEditingCurveId('');
@@ -6020,7 +6086,8 @@ const GraphCapture = () => {
 
             const fetched = discovereeDetails.map((detail, i) => {
               const axisFields = resolveDiscovereeAxisFields(discovereeGraph, detail);
-              const points = processAiImportedPoints(parseXyString(detail.xy), getAiMaxPointsLimit());
+              const rawPoints = parseXyString(detail.xy);
+              const points = rawPoints;
               const resolvedXMin = axisFields.xMin;
               const resolvedXMax = axisFields.xMax;
               const resolvedYMin = axisFields.yMin;
@@ -7481,6 +7548,7 @@ const GraphCapture = () => {
                 isAxisMappingConfirmed={isAxisMappingConfirmed}
                 hasReturnUrl={!!urlParams.return_url}
                 isEditingCurve={Boolean(editingCurveId)}
+                editingCurveOverlayId={editingCurveId ? String(editingCurveId) : ''}
                 savedCurveViewActive={Boolean((selectedCurveId || combinedGroupId || showAllCombinedModal) && !editingCurveId)}
                 hasAiSavedCurves={savedCurves.length > 0 && savedCurvesSource === 'company'}
                 useInsetDefaultAxisBox={Boolean(

@@ -2,7 +2,7 @@ import { useRef, useState, useEffect } from 'react';
 import { useGraph, isManualCapturePoint, getManualCapturePoints } from '../context/GraphContext';
 import { buildDefaultGraphArea } from '../utils/graphAreaHelpers';
 
-const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', isAxisMappingConfirmed = false, hasReturnUrl = false, isEditingCurve = false, savedCurveViewActive = false, hasAiSavedCurves = false, useInsetDefaultAxisBox = false, onGraphAreaManuallyAdjusted }) => {
+const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', isAxisMappingConfirmed = false, hasReturnUrl = false, isEditingCurve = false, editingCurveOverlayId = '', savedCurveViewActive = false, hasAiSavedCurves = false, useInsetDefaultAxisBox = false, onGraphAreaManuallyAdjusted }) => {
   const { uploadedImage, graphArea, setGraphArea, dataPoints, addDataPoint, clearDataPoints, graphConfig, deleteDataPoint, convertGraphToCanvasCoordinates, convertCanvasToGraphCoordinates, replaceDataPoints, updateDataPointFromCanvas } = useGraph();
   const [showRedrawMsg, setShowRedrawMsg] = useState(false);
   const canvasRef = useRef(null);
@@ -587,7 +587,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       
       const isAnnotation = point.isAnnotation === true;
       const isActiveEditPoint = isEditingCurve && editDragPointIndex === index;
-      const pointRadius = isActiveEditPoint ? 6 : (inSavedView ? 4 : 4);
+      const pointRadius = isActiveEditPoint ? 4 : (inSavedView ? 2.5 : 2.5);
 
       // Different colors for different point types:
       // - Red for imported points
@@ -711,13 +711,41 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   const isCanvasPointInsideGraphArea = (canvasX, canvasY) => {
     if (graphArea.width === 0 || graphArea.height === 0) return false;
     const area = normalizeArea(graphArea);
-    const borderWidth = 4;
     return (
-      canvasX >= area.x - borderWidth &&
-      canvasX <= area.x + area.width + borderWidth &&
-      canvasY >= area.y - borderWidth &&
-      canvasY <= area.y + area.height + borderWidth
+      canvasX >= area.x &&
+      canvasX <= area.x + area.width &&
+      canvasY >= area.y &&
+      canvasY <= area.y + area.height
     );
+  };
+
+  const hasConfiguredAxisBounds = () => {
+    const xMin = parseFloat(graphConfig.xMin);
+    const xMax = parseFloat(graphConfig.xMax);
+    const yMin = parseFloat(graphConfig.yMin);
+    const yMax = parseFloat(graphConfig.yMax);
+    return (
+      Number.isFinite(xMin) &&
+      Number.isFinite(xMax) &&
+      Number.isFinite(yMin) &&
+      Number.isFinite(yMax) &&
+      xMax > xMin &&
+      yMax > yMin
+    );
+  };
+
+  const isGraphValueWithinAxisBounds = (graphX, graphY) => {
+    const xMin = parseFloat(graphConfig.xMin);
+    const xMax = parseFloat(graphConfig.xMax);
+    const yMin = parseFloat(graphConfig.yMin);
+    const yMax = parseFloat(graphConfig.yMax);
+    const tolerance = 1e-9;
+
+    if (Number.isFinite(xMin) && graphX < xMin - tolerance) return false;
+    if (Number.isFinite(xMax) && graphX > xMax + tolerance) return false;
+    if (Number.isFinite(yMin) && graphY < yMin - tolerance) return false;
+    if (Number.isFinite(yMax) && graphY > yMax + tolerance) return false;
+    return true;
   };
 
   const tryAddCapturedPoint = (canvasX, canvasY, { requireAxisConfirmed = true, applyDoubleClickGuard = true } = {}) => {
@@ -727,6 +755,11 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     }
 
     if (!isCanvasPointInsideGraphArea(canvasX, canvasY)) {
+      return false;
+    }
+
+    const { x: graphX, y: graphY } = convertCanvasToGraphCoordinates(canvasX, canvasY);
+    if (hasConfiguredAxisBounds() && !isGraphValueWithinAxisBounds(graphX, graphY)) {
       return false;
     }
 
@@ -752,7 +785,11 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       lastCaptureClickRef.current = { x: canvasX, y: canvasY, ts: now };
     }
 
-    addDataPoint({ canvasX, canvasY });
+    addDataPoint({
+      canvasX,
+      canvasY,
+      ...(editingCurveOverlayId ? { overlayCurveId: editingCurveOverlayId } : {}),
+    });
     setBoxTransparent(true);
     return true;
   };
@@ -1073,8 +1110,12 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     const canvasX = (e.clientX - rect.left) * scaleX;
     const canvasY = (e.clientY - rect.top) * scaleY;
     
-    // Update preview mouse position for real-time preview line
-    setPreviewMousePos({ x: canvasX, y: canvasY });
+    // Preview line only inside the blue box so it matches where clicks are accepted.
+    if (isCanvasPointInsideGraphArea(canvasX, canvasY)) {
+      setPreviewMousePos({ x: canvasX, y: canvasY });
+    } else {
+      setPreviewMousePos({ x: null, y: null });
+    }
     
     // Check if mouse is directly over any resize handle
     const area = normalizeArea(graphArea);

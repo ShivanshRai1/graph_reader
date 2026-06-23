@@ -256,7 +256,7 @@ export const GraphProvider = ({ children }) => {
       canvasY: point.canvasY,
       x: graphCoords.x,
       y: graphCoords.y,
-      overlayCurveId: MANUAL_CAPTURE_OVERLAY_ID,
+      overlayCurveId: point.overlayCurveId || MANUAL_CAPTURE_OVERLAY_ID,
       // Mark this as an annotation if we know which curve we're working on
       isAnnotation: !!targetCurveId,
     };

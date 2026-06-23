@@ -245,12 +245,17 @@ export const buildGraphConfigAxisPatch = (axis = {}) => {
   };
 };
 
+/**
+ * Default AI thinning only — trims bulk imports above the default cap.
+ * Never reduces curves the user has edited or point sets already at/below the cap.
+ */
 export const applyAiPointLimitToCurve = (curve, { maxPoints = getAiMaxPointsLimit(), skipIfLocallyModified = true } = {}) => {
   if (!curve || typeof curve !== 'object') return curve;
-  if (skipIfLocallyModified && curve.locallyModified) return curve;
+  if (skipIfLocallyModified && (curve.locallyModified || curve.userAdjustedPoints)) return curve;
 
   const pointList = curve.points ?? curve.data_points ?? [];
   if (!Array.isArray(pointList) || pointList.length === 0) return curve;
+  if (pointList.length <= maxPoints) return curve;
 
   const limited = processAiImportedPoints(pointList, maxPoints);
   if (limited.length === pointList.length) return curve;
