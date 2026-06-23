@@ -13,7 +13,7 @@ function App() {
     <GraphProvider>
       {viewMode === 'curve' ? (
         <SavedGraphView curveId={curveId} />
-      ) : viewMode === 'tc-checker' ? (
+      ) : viewMode === 'plot-checker' || viewMode === 'tc-checker' ? (
         <TcPlotChecker />
       ) : (
         <GraphCapture />

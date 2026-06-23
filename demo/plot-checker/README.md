@@ -1,10 +1,10 @@
 # Plot checker demo files
 
-Use these with **Plot checker** (`?view=tc-checker` on Graph Capture).
+Use these with **Plot checker** (`?view=plot-checker` on Graph Capture).
 
 ## Quick test — single curve
 
-1. Open https://graph-capture.netlify.app/?view=tc-checker
+1. Open https://graph-capture.netlify.app/?view=plot-checker
 2. Paste or upload a datasheet image (e.g. LT7153 Figure 5 efficiency plot).
 3. Upload **captured** file: `efficiency-1mhz-captured.csv` or `.json`
 4. Optional **reference**: `efficiency-1mhz-reference.csv` or `.json`
@@ -13,7 +13,7 @@ These single-curve files use the **first series** (`data0` / **V_OUT = 0.5V**) f
 
 ## Quick test — all 3 curves (Figure 5)
 
-1. Open the plot checker (`?view=tc-checker`).
+1. Open the plot checker (`?view=plot-checker`).
 2. Paste or upload the Figure 5 image.
 3. **Captured export**: `efficiency-1mhz-captured-all_curves.csv` or `.json`
 4. **Reference export**: `efficiency-1mhz-reference-all_curves.csv` or `.json`

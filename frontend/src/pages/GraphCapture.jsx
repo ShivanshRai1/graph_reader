@@ -2916,7 +2916,7 @@ const hasCurveLineInAiResponse = (responsePayload) => {
 
 const buildTcCheckerUrl = () => {
   const params = new URLSearchParams(window.location.search);
-  params.set('view', 'tc-checker');
+  params.set('view', 'plot-checker');
   const query = params.toString();
   return `${window.location.pathname}?${query}`;
 };

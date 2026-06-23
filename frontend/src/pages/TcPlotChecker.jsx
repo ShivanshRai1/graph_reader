@@ -64,8 +64,8 @@ const SHOW_LAYOUT_OPTIONS = true;
 
 const LABEL_GRAPH_IMAGE = 'graph image from datasheet';
 const LABEL_REFERENCE = 'Reference export (optional)';
-const LABEL_CAPTURED = 'Captured export (.tc, .csv, .json, .jsonld)';
-const COMPARISON_FILE_ACCEPT = '.tc,.csv,.json,.jsonld,application/json,text/csv';
+const LABEL_CAPTURED = 'Captured export (.tc, .csv, .json)';
+const COMPARISON_FILE_ACCEPT = '.tc,.csv,.json,application/json,text/csv';
 
 const imagePanelStyle = {
   flex: '0 1 520px',
@@ -603,8 +603,8 @@ const TcPlotChecker = () => {
           <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>Plot checker</h1>
           <p style={{ marginTop: 8, color: '#475569', lineHeight: 1.5 }}>
             Cross-check captured graph data against the original datasheet figure.
-            Supports .tc, .csv, .json, and .jsonld files. Open this page with{' '}
-            <code style={{ fontSize: 13 }}>?view=tc-checker</code>
+            Supports .tc, .csv, and .json files. Open this page with{' '}
+            <code style={{ fontSize: 13 }}>?view=plot-checker</code>
             {' '}on your Graph Capture URL.
           </p>
           <a
@@ -970,7 +970,7 @@ const TcPlotChecker = () => {
 
         {!hasPlot && !hasImage && !error && (
           <p style={{ color: '#64748b' }}>
-            Upload an image and/or at least one captured file (.tc, .csv, .json, .jsonld) to begin.
+            Upload an image and/or at least one captured file (.tc, .csv, .json) to begin.
           </p>
         )}
       </div>
