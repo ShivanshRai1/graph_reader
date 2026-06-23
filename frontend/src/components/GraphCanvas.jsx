@@ -44,6 +44,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   const lastUserBoxRef = useRef(null); // Store last manually set box dimensions
   const potentialResizeHandleRef = useRef(null); // Track which handle was clicked
   const clickedOnHandleRef = useRef(false); // Track if this click originated on a handle
+  const clickedHandleKeyRef = useRef(null); // Which resize handle was clicked (for vertex/edge snap)
   const [editDragPointIndex, setEditDragPointIndex] = useState(null);
   const editDragPointIndexRef = useRef(null);
   const editDragMovedRef = useRef(false);
@@ -133,10 +134,11 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   const EPS = 1e-6;
   const WARN_CLEAR_DELAY = 180; // ms to hold warning before clearing
   const DRAG_THRESHOLD = 50; // Threshold to distinguish between click and drag
-  const RESIZE_ACTIVATION_THRESHOLD = 3; // pixels to move before activating resize
+  const RESIZE_ACTIVATION_THRESHOLD = 10; // pixels to move before activating resize (vs point capture)
   const DOUBLE_CLICK_GUARD_MS = 140; // Only suppress very rapid repeat clicks
   const DOUBLE_CLICK_GUARD_PX = 2; // Only suppress near-identical click locations
-  const CAPTURE_EDGE_TOLERANCE_PX = 3; // Accept clicks on the blue box border and corners
+  const BOX_STROKE_HALF_PX = 2; // blue box lineWidth is 4, stroke extends outside the rect
+  const CAPTURE_EDGE_TOLERANCE_PX = BOX_STROKE_HALF_PX + 4; // cover border stroke + slight aim error
   const EDIT_POINT_HIT_RADIUS = 12;
 
   const normalizeArea = (area) => {
@@ -721,6 +723,85 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     );
   };
 
+  const getSnappedCanvasPointForHandle = (handleKey) => {
+    const area = normalizeArea(graphArea);
+    const midX = area.x + area.width / 2;
+    const midY = area.y + area.height / 2;
+    const right = area.x + area.width;
+    const bottom = area.y + area.height;
+    switch (handleKey) {
+      case 'top-left':
+        return { canvasX: area.x, canvasY: area.y };
+      case 'top-right':
+        return { canvasX: right, canvasY: area.y };
+      case 'bottom-left':
+        return { canvasX: area.x, canvasY: bottom };
+      case 'bottom-right':
+        return { canvasX: right, canvasY: bottom };
+      case 'top':
+        return { canvasX: midX, canvasY: area.y };
+      case 'bottom':
+        return { canvasX: midX, canvasY: bottom };
+      case 'left':
+        return { canvasX: area.x, canvasY: midY };
+      case 'right':
+        return { canvasX: right, canvasY: midY };
+      default:
+        return null;
+    }
+  };
+
+  const snapCaptureCanvasPointToGraphArea = (canvasX, canvasY) => {
+    const area = normalizeArea(graphArea);
+    const tol = CAPTURE_EDGE_TOLERANCE_PX;
+    let x = canvasX;
+    let y = canvasY;
+
+    const nearLeft = Math.abs(canvasX - area.x) <= tol;
+    const nearRight = Math.abs(canvasX - (area.x + area.width)) <= tol;
+    const nearTop = Math.abs(canvasY - area.y) <= tol;
+    const nearBottom = Math.abs(canvasY - (area.y + area.height)) <= tol;
+
+    if (nearLeft && nearTop) {
+      return { canvasX: area.x, canvasY: area.y };
+    }
+    if (nearRight && nearTop) {
+      return { canvasX: area.x + area.width, canvasY: area.y };
+    }
+    if (nearLeft && nearBottom) {
+      return { canvasX: area.x, canvasY: area.y + area.height };
+    }
+    if (nearRight && nearBottom) {
+      return { canvasX: area.x + area.width, canvasY: area.y + area.height };
+    }
+
+    if (nearLeft) x = area.x;
+    else if (nearRight) x = area.x + area.width;
+    if (nearTop) y = area.y;
+    else if (nearBottom) y = area.y + area.height;
+
+    return { canvasX: x, canvasY: y };
+  };
+
+  const resolveCaptureCanvasPoint = (canvasX, canvasY, handleKey = null) => {
+    if (handleKey) {
+      const snapped = getSnappedCanvasPointForHandle(handleKey);
+      if (snapped) return snapped;
+    }
+    return snapCaptureCanvasPointToGraphArea(canvasX, canvasY);
+  };
+
+  const clampGraphCoordsToAxisBounds = (graphX, graphY) => {
+    const xMin = parseFloat(graphConfig.xMin);
+    const xMax = parseFloat(graphConfig.xMax);
+    const yMin = parseFloat(graphConfig.yMin);
+    const yMax = parseFloat(graphConfig.yMax);
+    return {
+      x: Number.isFinite(xMin) && Number.isFinite(xMax) ? Math.min(xMax, Math.max(xMin, graphX)) : graphX,
+      y: Number.isFinite(yMin) && Number.isFinite(yMax) ? Math.min(yMax, Math.max(yMin, graphY)) : graphY,
+    };
+  };
+
   const hasConfiguredAxisBounds = () => {
     const xMin = parseFloat(graphConfig.xMin);
     const xMax = parseFloat(graphConfig.xMax);
@@ -739,7 +820,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   const getAxisBoundTolerance = (min, max) => {
     const span = Math.abs(max - min);
     if (!Number.isFinite(span) || span <= 0) return 1e-6;
-    return Math.max(1e-6, span * 1e-8);
+    return Math.max(1e-6, span * 1e-6);
   };
 
   const isGraphValueWithinAxisBounds = (graphX, graphY) => {
@@ -757,7 +838,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     return true;
   };
 
-  const tryAddCapturedPoint = (canvasX, canvasY, { requireAxisConfirmed = true, applyDoubleClickGuard = true } = {}) => {
+  const tryAddCapturedPoint = (canvasX, canvasY, { requireAxisConfirmed = true, applyDoubleClickGuard = true, handleKey = null } = {}) => {
     if (graphArea.width === 0 || graphArea.height === 0) {
       setShowRedrawMsg(true);
       return false;
@@ -767,9 +848,18 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       return false;
     }
 
-    const { x: graphX, y: graphY } = convertCanvasToGraphCoordinates(canvasX, canvasY);
+    const resolved = resolveCaptureCanvasPoint(canvasX, canvasY, handleKey);
+    let captureX = resolved.canvasX;
+    let captureY = resolved.canvasY;
+    let { x: graphX, y: graphY } = convertCanvasToGraphCoordinates(captureX, captureY);
     if (hasConfiguredAxisBounds() && !isGraphValueWithinAxisBounds(graphX, graphY)) {
-      return false;
+      const clamped = clampGraphCoordsToAxisBounds(graphX, graphY);
+      if (!isGraphValueWithinAxisBounds(clamped.x, clamped.y)) {
+        return false;
+      }
+      const recanvas = convertGraphToCanvasCoordinates(clamped.x, clamped.y);
+      captureX = recanvas.canvasX;
+      captureY = recanvas.canvasY;
     }
 
     if (requireAxisConfirmed && !isAxisMappingConfirmed) {
@@ -782,8 +872,8 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       const last = lastCaptureClickRef.current;
       const hasLastPoint = Number.isFinite(last.x) && Number.isFinite(last.y);
       if (hasLastPoint) {
-        const dx = canvasX - last.x;
-        const dy = canvasY - last.y;
+        const dx = captureX - last.x;
+        const dy = captureY - last.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
         const deltaMs = now - Number(last.ts || 0);
         if (distance <= DOUBLE_CLICK_GUARD_PX && deltaMs <= DOUBLE_CLICK_GUARD_MS) {
@@ -791,12 +881,12 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
           return false;
         }
       }
-      lastCaptureClickRef.current = { x: canvasX, y: canvasY, ts: now };
+      lastCaptureClickRef.current = { x: captureX, y: captureY, ts: now };
     }
 
     addDataPoint({
-      canvasX,
-      canvasY,
+      canvasX: captureX,
+      canvasY: captureY,
       ...(editingCurveOverlayId ? { overlayCurveId: editingCurveOverlayId } : {}),
     });
     setBoxTransparent(true);
@@ -867,8 +957,18 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       // Store that a handle was clicked, but don't resize yet
       potentialResizeHandleRef.current = mode;
       clickedOnHandleRef.current = true;
+      clickedHandleKeyRef.current = mode;
       setInitialArea(area);
       setInitialMouse({ x, y });
+      return;
+    }
+
+    if (
+      graphArea.width > 0 &&
+      graphArea.height > 0 &&
+      isCanvasPointInsideGraphArea(x, y, CAPTURE_EDGE_TOLERANCE_PX)
+    ) {
+      // Inside the plot box: let click place a point instead of starting a box drag.
       return;
     }
 
@@ -1031,7 +1131,9 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
 
     // Track if this click came from a handle
     const isHandleClick = clickedOnHandleRef.current;
-    clickedOnHandleRef.current = false; // Reset flag
+    const handleKey = clickedHandleKeyRef.current;
+    clickedOnHandleRef.current = false;
+    clickedHandleKeyRef.current = null;
 
     // Skip point capture after resize/box draw (even when the interaction started on a handle).
     if (justFinishedResizingRef.current || isResizing) {
@@ -1046,7 +1148,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     }
 
     if (isHandleClick) {
-      tryAddCapturedPoint(canvasX, canvasY);
+      tryAddCapturedPoint(canvasX, canvasY, { handleKey });
       setDragDistance(0);
       return;
     }
@@ -1319,6 +1421,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     // Clean up potential resize handle and flag
     potentialResizeHandleRef.current = null;
     clickedOnHandleRef.current = false;
+    clickedHandleKeyRef.current = null;
     
     // Cancel any active resize operation when mouse leaves canvas
     if (isResizing) {
