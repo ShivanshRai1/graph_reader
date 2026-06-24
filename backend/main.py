@@ -1,6 +1,6 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, Response, FileResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from database import engine, get_db, Base
@@ -20,6 +20,8 @@ import re
 import base64
 import threading
 import time
+from pathlib import Path
+from urllib.parse import quote
 from sqlalchemy import inspect, text
 import requests
 
@@ -57,6 +59,41 @@ def ensure_optional_curve_columns():
 ensure_optional_curve_columns()
 
 MAX_GRAPH_IMAGE_MIRROR_CHARS = 1_500_000
+BACKEND_DIR = Path(__file__).resolve().parent
+TC_ROOT = BACKEND_DIR / "static" / "tc"
+
+
+def normalize_tc_part_number(part_number: str) -> str:
+    safe = re.sub(r"[^a-zA-Z0-9_-]", "", str(part_number or "").strip().lower())
+    if not safe:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid part number")
+    return safe
+
+
+def resolve_tc_part_dir(part_number: str) -> Path:
+    safe_part = normalize_tc_part_number(part_number)
+    part_dir = (TC_ROOT / safe_part).resolve()
+    if TC_ROOT.resolve() not in part_dir.parents and part_dir != TC_ROOT.resolve():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid part number path")
+    if not part_dir.is_dir():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"No TC files found for part '{safe_part}'")
+    return part_dir
+
+
+def resolve_tc_file_path(part_number: str, filename: str) -> Path:
+    safe_name = Path(str(filename or "").strip()).name
+    if not safe_name or safe_name != str(filename).strip() or ".." in safe_name:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid filename")
+    if not safe_name.lower().endswith(".tc"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only .tc files are available")
+
+    part_dir = resolve_tc_part_dir(part_number)
+    file_path = (part_dir / safe_name).resolve()
+    if part_dir.resolve() not in file_path.parents:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid filename path")
+    if not file_path.is_file():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="TC file not found")
+    return file_path
 
 
 def normalize_mirror_graph_image(value: Optional[str]) -> str:
@@ -195,6 +232,66 @@ def read_root():
 @app.head("/health")
 def health_check():
     return {"status": "healthy"}
+
+
+@app.get("/api/tc")
+def list_tc_parts():
+    """List part folders that have hosted .tc files."""
+    if not TC_ROOT.is_dir():
+        return {"parts": [], "tc_root": str(TC_ROOT)}
+
+    parts = []
+    for part_dir in sorted(TC_ROOT.iterdir(), key=lambda path: path.name.lower()):
+        if not part_dir.is_dir():
+            continue
+        tc_files = sorted(part_dir.glob("*.tc"), key=lambda path: path.name.lower())
+        if not tc_files:
+            continue
+        parts.append({
+            "part_number": part_dir.name,
+            "file_count": len(tc_files),
+            "list_url": f"/api/tc/{part_dir.name}",
+        })
+    return {"parts": parts, "count": len(parts)}
+
+
+@app.get("/api/tc/{part_number}")
+def list_tc_files(part_number: str, request: Request):
+    """List downloadable .tc files for a part number."""
+    part_dir = resolve_tc_part_dir(part_number)
+    base_url = str(request.base_url).rstrip("/")
+    safe_part = part_dir.name
+
+    files = []
+    for file_path in sorted(part_dir.glob("*.tc"), key=lambda path: path.name.lower()):
+        quoted_name = quote(file_path.name)
+        files.append({
+            "name": file_path.name,
+            "size_bytes": file_path.stat().st_size,
+            "url": f"{base_url}/api/tc/{safe_part}/{quoted_name}",
+        })
+
+    return {
+        "part_number": safe_part,
+        "count": len(files),
+        "files": files,
+    }
+
+
+@app.get("/api/tc/{part_number}/{filename}")
+def get_tc_file(part_number: str, filename: str, download: bool = False):
+    """Serve a .tc file by part number and filename."""
+    file_path = resolve_tc_file_path(part_number, filename)
+    headers = {}
+    if download:
+        headers["Content-Disposition"] = f'attachment; filename="{file_path.name}"'
+    return FileResponse(
+        path=file_path,
+        media_type="application/json",
+        filename=file_path.name,
+        headers=headers,
+    )
+
 
 @app.get("/api/debug/backend-ip")
 def debug_backend_ip():

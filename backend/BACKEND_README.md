@@ -74,6 +74,21 @@ Once running, visit:
 - `GET /` - API status
 - `GET /health` - Health check
 
+### Hosted TC files
+Static `.tc` files live under `backend/static/tc/{part_number}/`.
+
+- `GET /api/tc` - List available part folders
+- `GET /api/tc/{part_number}` - List files with full URLs for that part
+- `GET /api/tc/{part_number}/{filename}` - Download/open a `.tc` file
+
+Example (replace host with your Render service URL):
+
+```
+GET https://graph-reader-0e19.onrender.com/api/tc
+GET https://graph-reader-0e19.onrender.com/api/tc/max17640a
+GET https://graph-reader-0e19.onrender.com/api/tc/max17640a/Figure_5_Efficiency_Vs._Load_Current-all_curves-manual_edited.tc
+```
+
 ## Example Request
 
 ```bash
