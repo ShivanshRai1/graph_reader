@@ -79,14 +79,16 @@ Static `.tc` files live under `backend/static/tc/{part_number}/`.
 
 - `GET /api/tc` - List available part folders
 - `GET /api/tc/{part_number}` - List files with full URLs for that part
-- `GET /api/tc/{part_number}/{filename}` - Download/open a `.tc` file
+- `GET /api/tc/{part_number}/{filename}` - View a `.tc` file inline in the browser (JSON)
+- `GET /api/tc/{part_number}/{filename}?download=1` - Download the `.tc` file
 
 Example (replace host with your Render service URL):
 
 ```
-GET https://graph-reader-0e19.onrender.com/api/tc
-GET https://graph-reader-0e19.onrender.com/api/tc/max17640a
-GET https://graph-reader-0e19.onrender.com/api/tc/max17640a/Figure_5_Efficiency_Vs._Load_Current-all_curves-manual_edited.tc
+GET https://graph-reader-0ot9.onrender.com/api/tc
+GET https://graph-reader-0ot9.onrender.com/api/tc/max17640a
+GET https://graph-reader-0ot9.onrender.com/api/tc/max17640a/Figure_5_Efficiency_Vs._Load_Current-all_curves-manual_edited.tc
+GET https://graph-reader-0ot9.onrender.com/api/tc/max17640a/Figure_5_Efficiency_Vs._Load_Current-all_curves-manual_edited.tc?download=1
 ```
 
 ## Example Request

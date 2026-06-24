@@ -268,6 +268,8 @@ def list_tc_files(part_number: str, request: Request):
         files.append({
             "name": file_path.name,
             "size_bytes": file_path.stat().st_size,
+            "view_url": f"{base_url}/api/tc/{safe_part}/{quoted_name}",
+            "download_url": f"{base_url}/api/tc/{safe_part}/{quoted_name}?download=1",
             "url": f"{base_url}/api/tc/{safe_part}/{quoted_name}",
         })
 
@@ -280,16 +282,23 @@ def list_tc_files(part_number: str, request: Request):
 
 @app.get("/api/tc/{part_number}/{filename}")
 def get_tc_file(part_number: str, filename: str, download: bool = False):
-    """Serve a .tc file by part number and filename."""
+    """Serve a .tc file by part number and filename.
+
+    Default: display JSON inline in the browser.
+    Add ?download=1 to force a file download.
+    """
     file_path = resolve_tc_file_path(part_number, filename)
-    headers = {}
     if download:
-        headers["Content-Disposition"] = f'attachment; filename="{file_path.name}"'
+        return FileResponse(
+            path=file_path,
+            media_type="application/json",
+            filename=file_path.name,
+            content_disposition_type="attachment",
+        )
     return FileResponse(
         path=file_path,
         media_type="application/json",
-        filename=file_path.name,
-        headers=headers,
+        content_disposition_type="inline",
     )
 
 
