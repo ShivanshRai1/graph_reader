@@ -593,8 +593,8 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       
       const isAnnotation = point.isAnnotation === true;
       const isActiveEditPoint = isEditingCurve && editDragPointIndex === index;
-      const pointRadius = isActiveEditPoint ? 2 : 1;
-      const strokeWidth = isActiveEditPoint ? 1.25 : 0.5;
+      const pointRadius = isActiveEditPoint ? 3 : 2;
+      const strokeWidth = isActiveEditPoint ? 1.5 : 1;
 
       // Different colors for different point types:
       // - Red for imported points
@@ -603,7 +603,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
         ? '#FFD700'
         : (isAnnotation ? '#FFD700' : (point.overlayColor || 'red'));
       
-      ctx.strokeStyle = isActiveEditPoint ? '#1976d2' : '#333333';
+      ctx.strokeStyle = isActiveEditPoint ? '#1976d2' : '#ffffff';
       ctx.lineWidth = strokeWidth;
       ctx.beginPath();
       ctx.arc(drawX, drawY, pointRadius, 0, 2 * Math.PI);
