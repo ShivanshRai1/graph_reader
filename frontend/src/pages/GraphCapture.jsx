@@ -3995,6 +3995,7 @@ const GraphCapture = () => {
   const editSessionAxisRef = useRef(null);
   const [editCurveSymbolValues, setEditCurveSymbolValues] = useState({});
   const [editCurveName, setEditCurveName] = useState('');
+  const [editPartNumber, setEditPartNumber] = useState('');
   // State for axis confirmation and freezing (Issue 5 & 7)
   const [isAxisMappingConfirmed, setIsAxisMappingConfirmed] = useState(false);
   const [frozenGraphConfig, setFrozenGraphConfig] = useState(null);
@@ -4226,6 +4227,14 @@ const GraphCapture = () => {
     } catch (error) {
       console.warn('[DEBUG] Failed to persist graph image:', error);
     }
+  };
+
+  const resolveSavedPartNumber = (...candidates) => {
+    for (const candidate of candidates) {
+      const value = String(candidate || '').trim();
+      if (value) return value;
+    }
+    return '';
   };
 
   const buildCurveConfigFromSaved = (curve, prevConfig = {}, persistedAxis = null) => ({
@@ -4674,6 +4683,22 @@ const GraphCapture = () => {
     });
     setEditCurveSymbolValues(normalizeCurveSymbolValues(curve));
     setEditCurveName(curve.config?.curveName || curve.curve_name || curve.name || '');
+    const graphIdForEdit = String(curve.graphId || getGraphIdForCurve(curve) || urlParams.graph_id || '').trim();
+    const siblingCurves = savedCurves.filter(
+      (savedCurve) => String(savedCurve.graphId || getGraphIdForCurve(savedCurve) || '') === graphIdForEdit
+    );
+    const partNumberFromSiblings = siblingCurves
+      .map((savedCurve) => resolveSavedPartNumber(savedCurve.part_number, savedCurve.config?.partNumber))
+      .find(Boolean);
+    setEditPartNumber(
+      resolveSavedPartNumber(
+        curve.part_number,
+        curve.config?.partNumber,
+        partNumberFromSiblings,
+        graphConfig.partNumber,
+        urlParams.partno
+      )
+    );
   };
 
   const handleEditAxisBoundChange = (field, value) => {
@@ -4692,6 +4717,7 @@ const GraphCapture = () => {
     setEditingCurveId('');
     setEditCurveSymbolValues({});
     setEditCurveName('');
+    setEditPartNumber('');
     clearDataPoints();
   };
 
@@ -5073,6 +5099,7 @@ const GraphCapture = () => {
       axisBoundsOverride = null,
       axisBaseline = null,
       isCompanionAxisSync = false,
+      partNumberOverride = undefined,
     } = options;
     const currentSymbolPayload = buildDynamicSymbolPayload(
       normalizeCurveSymbolValues(curve),
@@ -5140,15 +5167,32 @@ const GraphCapture = () => {
 
     const oldCurveName = String(curve?.config?.curveName || curve?.curve_name || curve?.name || '');
     const hasCurveNameChange = newCurveName !== '' && newCurveName !== oldCurveName;
+    const currentPartNumber = resolveSavedPartNumber(
+      curve?.part_number,
+      curve?.config?.partNumber,
+      graphConfig.partNumber,
+      urlParams.partno
+    );
+    const nextPartNumber =
+      partNumberOverride !== undefined
+        ? String(partNumberOverride || '').trim()
+        : currentPartNumber;
+    const hasPartNumberChange = nextPartNumber !== currentPartNumber;
     const hasLocalChanges =
-      hasMetaChanges || hasAxisBoundsChanges || hasLegacyTemperatureChange || hasXyChanges || hasCurveNameChange;
+      hasMetaChanges ||
+      hasAxisBoundsChanges ||
+      hasLegacyTemperatureChange ||
+      hasXyChanges ||
+      hasCurveNameChange ||
+      hasPartNumberChange;
     const hasCompanyChanges =
       hasMetaChanges ||
       hasAxisBoundsChanges ||
       hasLegacyTemperatureChange ||
       hasSymbolValueChanges ||
       hasXyChanges ||
-      hasCurveNameChange;
+      hasCurveNameChange ||
+      hasPartNumberChange;
 
     if (
       !isCompanionAxisSync &&
@@ -5186,6 +5230,7 @@ const GraphCapture = () => {
       if (currentMeta.yUnitPrefix !== nextMeta.yUnitPrefix) localPayload.y_unit = nextMeta.yUnitPrefix;
       if (hasLegacyTemperatureChange) localPayload.temperature = tctjValue;
       if (hasCurveNameChange) localPayload.curve_name = newCurveName;
+      if (hasPartNumberChange) localPayload.part_number = nextPartNumber;
       if (hasAxisBoundsChanges) {
         localPayload.x_min = parseFloat(resolvedEditAxis.xMin);
         localPayload.x_max = parseFloat(resolvedEditAxis.xMax);
@@ -5289,7 +5334,7 @@ const GraphCapture = () => {
         graph_id: String(companyGraphId),
         discoveree_cat_id: String(curve?.discoveree_cat_id || urlParams.discoveree_cat_id || ''),
         identifier: resolvedEditIdentifier,
-        partno: urlParams.partno || graphConfig.partNumber || curve.config?.partNumber || '',
+        partno: nextPartNumber,
         manf: urlParams.manf || urlParams.manufacturer || graphConfig.manufacturer || '',
         manufacturer: urlParams.manufacturer || graphConfig.manufacturer || '',
         graph_title: graphConfig.graphTitle || urlParams.graph_title || curve.config?.graphTitle || '',
@@ -5419,6 +5464,14 @@ const GraphCapture = () => {
 
     const axisBaseline = editSessionAxisRef.current || resolveAxisBoundFields(graphConfig);
     const hasAxisChange = haveAxisBoundsChanged(axisBaseline, nextAxisBounds);
+    const currentPartNumber = resolveSavedPartNumber(
+      targetCurve.part_number,
+      targetCurve.config?.partNumber,
+      graphConfig.partNumber,
+      urlParams.partno
+    );
+    const nextPartNumber = String(editPartNumber || '').trim();
+    const hasPartNumberChange = nextPartNumber !== currentPartNumber;
 
     const editPlans = curvesOnGraph.map((curve) => {
       const isTarget = curve.id === curveId;
@@ -5437,6 +5490,12 @@ const GraphCapture = () => {
     }
 
     let confirmMessage = 'Are you sure you want to update this curve?';
+    if (hasPartNumberChange) {
+      confirmMessage =
+        `Part number will be updated to "${nextPartNumber || '(empty)'}" for all curves on this graph.` +
+        '\n\n' +
+        confirmMessage;
+    }
     if (totalRemoved > 0) {
       confirmMessage =
         `${totalRemoved} point(s) fall outside the new axis range and will be removed.` +
@@ -5488,6 +5547,7 @@ const GraphCapture = () => {
           pointsOverride: targetPlan.points,
           axisBoundsOverride: nextAxisBounds,
           axisBaseline,
+          partNumberOverride: editPartNumber,
         }
       );
 
@@ -5511,6 +5571,7 @@ const GraphCapture = () => {
               axisBoundsOverride: nextAxisBounds,
               axisBaseline: resolveAxisBoundFields(plan.curve.config || plan.curve),
               isCompanionAxisSync: true,
+              ...(hasPartNumberChange ? { partNumberOverride: nextPartNumber } : {}),
             }
           );
           saveResults.set(plan.curve.id, {
@@ -5538,6 +5599,7 @@ const GraphCapture = () => {
 
           return {
             ...curve,
+            ...(hasPartNumberChange ? { part_number: nextPartNumber } : {}),
             ...(result?.detailId && graphIdForCurve
               ? {
                   detailId: result.detailId,
@@ -5551,6 +5613,7 @@ const GraphCapture = () => {
             })),
             config: {
               ...(curve.config || {}),
+              ...(hasPartNumberChange ? { partNumber: nextPartNumber } : {}),
               ...(isTarget
                 ? {
                     curveName: updatedName,
@@ -5661,9 +5724,14 @@ const GraphCapture = () => {
         }
       }
 
+      if (hasPartNumberChange) {
+        setGraphConfig((prev) => ({ ...prev, partNumber: nextPartNumber }));
+      }
+
       setEditingCurveId('');
       setEditCurveSymbolValues({});
       setEditCurveName('');
+      setEditPartNumber('');
       editSessionAxisRef.current = null;
       clearDataPoints();
 
@@ -6131,12 +6199,16 @@ const GraphCapture = () => {
                 ...detailSymbolValues,
               };
               const resolvedCurveTitle = detail.curve_title || discovereeGraph.curve_title || '';
+              const resolvedPartNumber = String(
+                discovereeGraph.partno || urlParams.partno || graphConfig.partNumber || ''
+              ).trim();
               console.log('[DEBUG] Parsed detail', i, 'xy:', detail.xy, 'points count:', points.length);
               return {
                 id: `${discovereeGraph.graph_id}_${detail.id || i}`,
                 detailId: detail.id ? String(detail.id) : '',
                 graphId: String(discovereeGraph.graph_id || ''),
                 identifier: String(discovereeGraph.identifier || ''),
+                part_number: resolvedPartNumber,
                 discoveree_cat_id: String(
                   discovereeGraph.discoveree_cat_id ||
                   result?.discoveree_cat_id ||
@@ -6157,6 +6229,7 @@ const GraphCapture = () => {
                 config: {
                   graphTitle: resolvedGraphTitle,
                   curveName: resolvedCurveTitle,
+                  partNumber: resolvedPartNumber,
                   xScale: resolvedXScale,
                   yScale: resolvedYScale,
                   xUnitPrefix: axisFields.xUnitPrefix || detail.xunit || '1',
@@ -7823,6 +7896,14 @@ const GraphCapture = () => {
                                   : (curve.points?.length ?? curve.data_points?.length ?? 0)}
                               </div>
                               <div className="text-xs mb-2 text-gray-700">
+                                Part number:{' '}
+                                {resolveSavedPartNumber(
+                                  curve.part_number,
+                                  curve.config?.partNumber,
+                                  graphConfig.partNumber,
+                                  urlParams.partno
+                                ) || '-'}
+                                <br />
                                 X unit: {getUnitLabel(curve.config?.xUnitPrefix || curve.x_unit) || '-'} | Y unit: {getUnitLabel(curve.config?.yUnitPrefix || curve.y_unit) || '-'}<br />
                                 X scale: {curve.config?.xScale || curve.x_scale || '-'} | Y scale: {curve.config?.yScale || curve.y_scale || '-'}
                               </div>
@@ -7842,6 +7923,19 @@ const GraphCapture = () => {
                               })()}
                               {editingCurveId === curve.id ? (
                                 <div className="mt-2">
+                                  <label className="text-sm font-semibold text-gray-700 block mb-3">
+                                    Part Number
+                                    <input
+                                      type="text"
+                                      className="w-full mt-1 px-2 py-1.5 border border-gray-300 rounded text-sm font-medium"
+                                      value={editPartNumber}
+                                      onChange={(e) => setEditPartNumber(e.target.value)}
+                                      placeholder="Enter part number"
+                                    />
+                                    <span className="block mt-1 text-xs font-normal text-gray-500">
+                                      Applies to all curves on this graph.
+                                    </span>
+                                  </label>
                                   <label className="text-sm font-semibold text-gray-700 block mb-3">
                                     Curve Name
                                     <input
