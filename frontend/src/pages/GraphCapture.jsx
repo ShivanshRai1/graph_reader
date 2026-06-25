@@ -33,6 +33,7 @@ import {
 } from '../utils/graphAreaHelpers';
 import { useGraph, graphToCanvasWithBounds, getManualCapturePoints, MANUAL_CAPTURE_OVERLAY_ID } from '../context/GraphContext';
 import { clearAnnotationsForCurve } from '../utils/annotationStorage';
+import { applyInferredAxisSettingsFromTitles } from '../utils/quantityUnitGuidance';
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 
 const MiniGraphCanvas = ({ points }) => {
@@ -3033,19 +3034,24 @@ const GraphCapture = () => {
     const metadata = normalizeAiExtractedMetadata(rawMetadata);
     aiLogVerbose('[AI METADATA] Restoring extracted metadata to form:', metadata);
 
-    setGraphConfig((prev) => ({
-      ...prev,
-      ...(metadata.graphTitle ? { graphTitle: metadata.graphTitle } : {}),
-      ...(metadata.curveName ? { curveName: metadata.curveName } : {}),
-      ...(metadata.xLabel ? { xLabel: metadata.xLabel } : {}),
-      ...(metadata.yLabel ? { yLabel: metadata.yLabel } : {}),
-      ...(metadata.xScale ? { xScale: metadata.xScale } : {}),
-      ...(metadata.yScale ? { yScale: metadata.yScale } : {}),
-      ...(metadata.xUnitPrefix ? { xUnitPrefix: metadata.xUnitPrefix } : {}),
-      ...(metadata.yUnitPrefix ? { yUnitPrefix: metadata.yUnitPrefix } : {}),
-      ...buildGraphConfigAxisPatch(metadata),
-      ...(metadata.tctj ? { temperature: metadata.tctj } : {}),
-    }));
+    setGraphConfig((prev) =>
+      applyInferredAxisSettingsFromTitles(
+        {
+          ...prev,
+          ...(metadata.graphTitle ? { graphTitle: metadata.graphTitle } : {}),
+          ...(metadata.curveName ? { curveName: metadata.curveName } : {}),
+          ...(metadata.xLabel ? { xLabel: metadata.xLabel } : {}),
+          ...(metadata.yLabel ? { yLabel: metadata.yLabel } : {}),
+          ...(metadata.xScale ? { xScale: metadata.xScale } : {}),
+          ...(metadata.yScale ? { yScale: metadata.yScale } : {}),
+          ...(metadata.xUnitPrefix ? { xUnitPrefix: metadata.xUnitPrefix } : {}),
+          ...(metadata.yUnitPrefix ? { yUnitPrefix: metadata.yUnitPrefix } : {}),
+          ...buildGraphConfigAxisPatch(metadata),
+          ...(metadata.tctj ? { temperature: metadata.tctj } : {}),
+        },
+        { onlyFillDefaults: true, allowOverrideDefaultUnit: true }
+      )
+    );
 
     aiLogVerbose('[AI METADATA] Form values restored from extracted metadata');
     clearAiExtractedMetadata();
@@ -5907,6 +5913,10 @@ const GraphCapture = () => {
         ...(axisFields.xUnitPrefix ? { xUnitPrefix: axisFields.xUnitPrefix } : {}),
         ...(axisFields.yUnitPrefix ? { yUnitPrefix: axisFields.yUnitPrefix } : {}),
       };
+      next = applyInferredAxisSettingsFromTitles(next, {
+        onlyFillDefaults: true,
+        allowOverrideDefaultUnit: true,
+      });
       return applyComputedAxisBounds(next, curveList);
     });
   };

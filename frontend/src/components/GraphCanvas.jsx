@@ -1,6 +1,10 @@
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useMemo } from 'react';
 import { useGraph, isManualCapturePoint, getManualCapturePoints } from '../context/GraphContext';
 import { buildDefaultGraphArea } from '../utils/graphAreaHelpers';
+import {
+  shouldShowScaleAndUnitCrossCheck,
+  SCALE_AND_UNIT_CROSS_CHECK_MESSAGE,
+} from '../utils/quantityUnitGuidance';
 
 const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', isAxisMappingConfirmed = false, hasReturnUrl = false, isEditingCurve = false, editingCurveOverlayId = '', savedCurveViewActive = false, hasAiSavedCurves = false, showAiCaptureGuidance = false, useInsetDefaultAxisBox = false, onGraphAreaManuallyAdjusted }) => {
   const { uploadedImage, graphArea, setGraphArea, dataPoints, addDataPoint, clearDataPoints, graphConfig, deleteDataPoint, convertGraphToCanvasCoordinates, convertCanvasToGraphCoordinates, replaceDataPoints, updateDataPointFromCanvas } = useGraph();
@@ -119,6 +123,16 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
 
   const showAiAlignmentGuidance = () =>
     showAiCaptureGuidance && hasImportedCurvePoints() && !canShowImportedCurveOverlay();
+
+  const showScaleAndUnitCrossCheck = useMemo(
+    () =>
+      shouldShowScaleAndUnitCrossCheck({
+        graphTitle: graphConfig.graphTitle,
+        xTitle: graphConfig.xLabel,
+        yTitle: graphConfig.yLabel,
+      }),
+    [graphConfig.graphTitle, graphConfig.xLabel, graphConfig.yLabel]
+  );
 
   const isSavedViewCrosscheckActive = () =>
     savedCurveViewActive &&
@@ -1572,8 +1586,21 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
         {showAiAlignmentGuidance() && (
           <div className="text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2 mt-2 text-sm">
             <p className="font-semibold mb-1.5">AI points loaded — follow these steps:</p>
+            {showScaleAndUnitCrossCheck ? (
+              <div className="mb-2 flex items-start gap-2 rounded border-2 border-orange-400 bg-orange-50 px-2.5 py-2">
+                <span className="text-lg font-bold leading-none text-orange-500" aria-hidden="true">
+                  !
+                </span>
+                <p className="text-sm font-semibold text-orange-900 leading-snug m-0">
+                  {SCALE_AND_UNIT_CROSS_CHECK_MESSAGE}
+                </p>
+              </div>
+            ) : null}
             <ol className="list-decimal list-inside space-y-1 m-0 pl-0.5">
               <li>Set <strong>X/Y min and max</strong> to match the graph axis labels.</li>
+              <li>
+                Verify <strong>scale (Linear/Logarithmic)</strong> and <strong>unit</strong> in the configuration panel match the printed graph axes.
+              </li>
               <li>
                 Drag the <strong>blue box</strong> to align with the plot area
                 (bottom-left near ({graphConfig.xMin}, {graphConfig.yMin}), top-right near ({graphConfig.xMax}, {graphConfig.yMax})).
@@ -1583,7 +1610,6 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
                   </span>
                 ) : null}
               </li>
-              <li>Click <strong>Final Check</strong> in the configuration panel.</li>
             </ol>
           </div>
         )}
@@ -1595,6 +1621,16 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
         {showAiCaptureGuidance && hasImportedCurvePoints() && canShowImportedCurveOverlay() && isAxisMappingConfirmed && !isEditingCurve && !savedViewCrosscheckActive && (
           <div className="text-blue-800 bg-blue-50 border border-blue-200 rounded px-3 py-2 mt-2 text-sm">
             <p className="font-semibold mb-1.5">AI points loaded — fine-tune and save:</p>
+            {showScaleAndUnitCrossCheck ? (
+              <div className="mb-2 flex items-start gap-2 rounded border-2 border-orange-400 bg-orange-50 px-2.5 py-2">
+                <span className="text-lg font-bold leading-none text-orange-500" aria-hidden="true">
+                  !
+                </span>
+                <p className="text-sm font-semibold text-orange-900 leading-snug m-0">
+                  {SCALE_AND_UNIT_CROSS_CHECK_MESSAGE}
+                </p>
+              </div>
+            ) : null}
             <ol className="list-decimal list-inside space-y-1 m-0 pl-0.5">
               <li>Drag the <strong>blue box</strong> if the plot area needs alignment (AI points move with the box).
                 {axisTickGuideContext ? (

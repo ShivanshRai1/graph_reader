@@ -1,7 +1,14 @@
 import { useGraph } from '../context/GraphContext';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { flushSync } from 'react-dom';
-import { detectQuantityUnitGuidance, getAxisUnitMismatchWarning } from '../utils/quantityUnitGuidance';
+import {
+  detectQuantityUnitGuidance,
+  getAxisUnitMismatchWarning,
+  getAxisScaleMismatchWarning,
+  applyInferredAxisSettingsFromTitles,
+  shouldShowScaleAndUnitCrossCheck,
+  SCALE_AND_UNIT_CROSS_CHECK_MESSAGE,
+} from '../utils/quantityUnitGuidance';
 
 const LOG_FIELDS = ['xMin', 'xMax', 'yMin', 'yMax'];
 
@@ -102,7 +109,39 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
     [graphConfig.xLabel, graphConfig.yLabel, graphConfig.graphTitle, graphConfig.xUnitPrefix]
   );
 
-  const showUnitCrossCheckInModal = Boolean(xAxisUnitWarning || yAxisUnitWarning);
+  const xAxisScaleWarning = useMemo(
+    () =>
+      getAxisScaleMismatchWarning('x', {
+        xTitle: graphConfig.xLabel,
+        yTitle: graphConfig.yLabel,
+        graphTitle: graphConfig.graphTitle,
+        scale: graphConfig.xScale,
+      }),
+    [graphConfig.xLabel, graphConfig.yLabel, graphConfig.graphTitle, graphConfig.xScale]
+  );
+
+  const yAxisScaleWarning = useMemo(
+    () =>
+      getAxisScaleMismatchWarning('y', {
+        xTitle: graphConfig.xLabel,
+        yTitle: graphConfig.yLabel,
+        graphTitle: graphConfig.graphTitle,
+        scale: graphConfig.yScale,
+      }),
+    [graphConfig.xLabel, graphConfig.yLabel, graphConfig.graphTitle, graphConfig.yScale]
+  );
+
+  const showScaleAndUnitCrossCheckInModal = Boolean(
+    shouldShowScaleAndUnitCrossCheck({
+      graphTitle: graphConfig.graphTitle,
+      xTitle: graphConfig.xLabel,
+      yTitle: graphConfig.yLabel,
+    }) ||
+    xAxisUnitWarning ||
+    yAxisUnitWarning ||
+    xAxisScaleWarning ||
+    yAxisScaleWarning
+  );
   
   // Apply initial values from props when component mounts
   useEffect(() => {
@@ -116,6 +155,22 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
       }));
     }
   }, [initialCurveName, initialGraphTitle, initialXTitle, initialYTitle, setGraphConfig]);
+
+  useEffect(() => {
+    if (isMetadataLocked) return;
+    setGraphConfig((prev) => {
+      const next = applyInferredAxisSettingsFromTitles(prev);
+      if (
+        prev.xUnitPrefix === next.xUnitPrefix &&
+        prev.yUnitPrefix === next.yUnitPrefix &&
+        prev.xScale === next.xScale &&
+        prev.yScale === next.yScale
+      ) {
+        return prev;
+      }
+      return next;
+    });
+  }, [graphConfig.graphTitle, graphConfig.xLabel, graphConfig.yLabel, isMetadataLocked, setGraphConfig]);
   
 
   // Validate min/max values
@@ -545,8 +600,11 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
           role="note"
           aria-live="polite"
         >
-          <p className="text-base font-bold text-amber-950 mb-3">
+          <p className="text-base font-bold text-amber-950 mb-2">
             Be careful while choosing scale and unit
+          </p>
+          <p className="text-sm sm:text-base text-amber-900 mb-3 leading-relaxed">
+            Suggested scale and unit are based on the graph titles. Please verify they match the printed graph axes.
           </p>
           <div className="space-y-2">
             {quantityUnitGuidance.map((entry) => (
@@ -848,13 +906,13 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             <div className="text-sm mb-4" style={{ color: '#4b5563' }}>
               Confirm the values below. If you continue, axis mapping is locked and point capture begins.
             </div>
-            {showUnitCrossCheckInModal ? (
+            {showScaleAndUnitCrossCheckInModal ? (
               <div className="mb-4 flex items-start gap-2 rounded-lg border-2 border-orange-400 bg-orange-50 px-3 py-2.5">
                 <span className="text-xl font-bold leading-none text-orange-500" aria-hidden="true">
                   !
                 </span>
                 <p className="text-sm font-semibold text-orange-900 leading-snug">
-                  Please cross check the unit based on graph type
+                  {SCALE_AND_UNIT_CROSS_CHECK_MESSAGE}
                 </p>
               </div>
             ) : null}
