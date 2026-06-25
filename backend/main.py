@@ -13,6 +13,7 @@ from schemas import (
     DataPointResponse,
     GraphImageMirrorUpsert,
     GraphImageMirrorResponse,
+    ScaleSuggestionResponse,
 )
 import json
 import os
@@ -24,6 +25,7 @@ from pathlib import Path
 from urllib.parse import quote
 from sqlalchemy import inspect, text
 import requests
+from scale_suggestions import build_scale_suggestion
 
 # Create tables
 Base.metadata.create_all(bind=engine)
@@ -581,6 +583,32 @@ def create_curve(curve: CurveCreate, db: Session = Depends(get_db)):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Error creating curve: {str(e)}"
         )
+
+@app.get("/api/scale-suggestions", response_model=ScaleSuggestionResponse)
+def get_scale_suggestions(
+    graph_title: str = "",
+    x_label: str = "",
+    y_label: str = "",
+    part_number: str = "",
+    manufacturer: str = "",
+    db: Session = Depends(get_db),
+):
+    """Suggest axis scales from similar past captures (informational only)."""
+    try:
+        return build_scale_suggestion(
+            db,
+            graph_title=graph_title,
+            x_label=x_label,
+            y_label=y_label,
+            part_number=part_number,
+            manufacturer=manufacturer,
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error building scale suggestion: {str(e)}",
+        )
+
 
 @app.get("/api/curves", response_model=List[CurveResponse])
 def list_curves(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):

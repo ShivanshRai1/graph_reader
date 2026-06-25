@@ -1,3 +1,8 @@
+import {
+  detectGraphScalePattern,
+  getPatternAxisDefaults,
+} from './graphScalePatterns';
+
 const PICO = '1e-12';
 const NANO = '1e-9';
 const MICRO = '1e-6';
@@ -309,7 +314,8 @@ export const detectQuantityUnitGuidance = ({
 };
 
 export const shouldShowScaleAndUnitCrossCheck = (titles = {}) =>
-  detectQuantityUnitGuidance(titles).length > 0;
+  detectQuantityUnitGuidance(titles).length > 0 ||
+  Boolean(detectGraphScalePattern(titles));
 
 export const applyInferredAxisSettingsFromTitles = (
   config = {},
@@ -320,6 +326,7 @@ export const applyInferredAxisSettingsFromTitles = (
     xTitle: config.xLabel,
     yTitle: config.yLabel,
   };
+  const graphPattern = detectGraphScalePattern(titles);
 
   const next = { ...config };
   let changed = false;
@@ -330,8 +337,11 @@ export const applyInferredAxisSettingsFromTitles = (
     const currentUnit = String(next[unitKey] ?? '').trim();
     const currentScale = String(next[scaleKey] || 'Linear').trim();
 
-    const suggestedUnit = inferSuggestedUnitPrefixForAxis(axis, titles);
-    const suggestedScale = inferSuggestedScaleForAxis(axis, titles);
+    const patternDefaults = getPatternAxisDefaults(graphPattern, axis);
+    const suggestedUnit =
+      patternDefaults.unitPrefix || inferSuggestedUnitPrefixForAxis(axis, titles);
+    const suggestedScale =
+      patternDefaults.scale || inferSuggestedScaleForAxis(axis, titles);
 
     const canSetUnit =
       suggestedUnit &&
@@ -347,10 +357,11 @@ export const applyInferredAxisSettingsFromTitles = (
     }
 
     const canSetScale =
-      suggestedScale === 'Logarithmic' &&
+      suggestedScale &&
+      suggestedScale !== currentScale &&
       (!onlyFillDefaults || isDefaultLinearScale(currentScale));
 
-    if (canSetScale && currentScale !== suggestedScale) {
+    if (canSetScale) {
       next[scaleKey] = suggestedScale;
       changed = true;
     }
@@ -406,7 +417,22 @@ export const getAxisScaleMismatchWarning = (
   const titleText = resolveAxisTitleText(axis, { xTitle, yTitle, graphTitle });
   if (!titleText) return null;
 
-  const suggestsLog = titleSuggestsLogScale(titleText) || titleSuggestsLogScale(graphTitle);
+  const pattern = detectGraphScalePattern({ graphTitle, xTitle, yTitle });
+  const patternScale = getPatternAxisDefaults(pattern, axis).scale;
+  const suggestsLog =
+    patternScale === 'Logarithmic' ||
+    titleSuggestsLogScale(titleText) ||
+    titleSuggestsLogScale(graphTitle);
+  const suggestsLinear = patternScale === 'Linear';
+
+  if (suggestsLinear && selectedScale === 'Logarithmic') {
+    return {
+      message: SCALE_CROSS_CHECK_MESSAGE,
+      axis,
+      suggestedScale: 'Linear',
+    };
+  }
+
   if (!suggestsLog) return null;
   if (selectedScale === 'Logarithmic') return null;
 
@@ -416,3 +442,5 @@ export const getAxisScaleMismatchWarning = (
     suggestedScale: 'Logarithmic',
   };
 };
+
+export { detectGraphScalePattern, getGraphPatternGuidance } from './graphScalePatterns';

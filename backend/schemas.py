@@ -100,3 +100,11 @@ class GraphImageMirrorResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class ScaleSuggestionResponse(BaseModel):
+    suggestion: Optional[dict] = None
+    pattern_id: Optional[str] = None
+    pattern_label: Optional[str] = None
+    sample_count: int = 0
+    message: Optional[str] = None

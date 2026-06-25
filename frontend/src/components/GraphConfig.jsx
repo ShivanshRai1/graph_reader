@@ -8,7 +8,14 @@ import {
   applyInferredAxisSettingsFromTitles,
   shouldShowScaleAndUnitCrossCheck,
   SCALE_AND_UNIT_CROSS_CHECK_MESSAGE,
+  getGraphPatternGuidance,
 } from '../utils/quantityUnitGuidance';
+import {
+  applyHistoricalScaleHints,
+  fetchHistoricalScaleSuggestion,
+} from '../utils/graphScaleHistory';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 const LOG_FIELDS = ['xMin', 'xMax', 'yMin', 'yMax'];
 
@@ -142,6 +149,30 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
     xAxisScaleWarning ||
     yAxisScaleWarning
   );
+
+  const graphPatternGuidance = useMemo(
+    () =>
+      getGraphPatternGuidance({
+        graphTitle: graphConfig.graphTitle,
+        xTitle: graphConfig.xLabel,
+        yTitle: graphConfig.yLabel,
+        partNumber: graphConfig.partNumber,
+        manufacturer: graphConfig.manufacturer,
+      }),
+    [
+      graphConfig.graphTitle,
+      graphConfig.xLabel,
+      graphConfig.yLabel,
+      graphConfig.partNumber,
+      graphConfig.manufacturer,
+    ]
+  );
+
+  const [historicalScaleHint, setHistoricalScaleHint] = useState(null);
+
+  const showScaleGuidancePanel = Boolean(
+    quantityUnitGuidance.length > 0 || graphPatternGuidance || historicalScaleHint?.message
+  );
   
   // Apply initial values from props when component mounts
   useEffect(() => {
@@ -157,9 +188,43 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
   }, [initialCurveName, initialGraphTitle, initialXTitle, initialYTitle, setGraphConfig]);
 
   useEffect(() => {
+    if (isMetadataLocked) {
+      setHistoricalScaleHint(null);
+      return undefined;
+    }
+
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      const result = await fetchHistoricalScaleSuggestion(API_URL, {
+        graphTitle: graphConfig.graphTitle,
+        xLabel: graphConfig.xLabel,
+        yLabel: graphConfig.yLabel,
+        partNumber: graphConfig.partNumber,
+        manufacturer: graphConfig.manufacturer,
+      });
+      if (!cancelled) {
+        setHistoricalScaleHint(result);
+      }
+    }, 350);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [
+    graphConfig.graphTitle,
+    graphConfig.xLabel,
+    graphConfig.yLabel,
+    graphConfig.partNumber,
+    graphConfig.manufacturer,
+    isMetadataLocked,
+  ]);
+
+  useEffect(() => {
     if (isMetadataLocked) return;
     setGraphConfig((prev) => {
-      const next = applyInferredAxisSettingsFromTitles(prev);
+      let next = applyInferredAxisSettingsFromTitles(prev);
+      next = applyHistoricalScaleHints(next, historicalScaleHint, { onlyFillDefaults: true });
       if (
         prev.xUnitPrefix === next.xUnitPrefix &&
         prev.yUnitPrefix === next.yUnitPrefix &&
@@ -170,7 +235,14 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
       }
       return next;
     });
-  }, [graphConfig.graphTitle, graphConfig.xLabel, graphConfig.yLabel, isMetadataLocked, setGraphConfig]);
+  }, [
+    graphConfig.graphTitle,
+    graphConfig.xLabel,
+    graphConfig.yLabel,
+    isMetadataLocked,
+    setGraphConfig,
+    historicalScaleHint,
+  ]);
   
 
   // Validate min/max values
@@ -594,7 +666,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
         </label>
       </div>
 
-      {quantityUnitGuidance.length > 0 ? (
+      {showScaleGuidancePanel ? (
         <div
           className="mb-6 rounded-lg border-2 border-amber-400 bg-amber-50 px-4 py-4 shadow-sm"
           role="note"
@@ -604,8 +676,22 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             Be careful while choosing scale and unit
           </p>
           <p className="text-sm sm:text-base text-amber-900 mb-3 leading-relaxed">
-            Suggested scale and unit are based on the graph titles. Please verify they match the printed graph axes.
+            Suggested scale and unit are based on graph type and past captures. Please verify they match the printed graph axes.
           </p>
+          {graphPatternGuidance ? (
+            <p className="text-sm sm:text-base text-amber-900 mb-3 leading-relaxed">
+              <span className="font-semibold">{graphPatternGuidance.label}</span>
+              {': '}
+              {graphPatternGuidance.detail}
+            </p>
+          ) : null}
+          {historicalScaleHint?.message ? (
+            <p className="text-sm sm:text-base text-amber-900 mb-3 leading-relaxed">
+              <span className="font-semibold">Past captures:</span>
+              {' '}
+              {historicalScaleHint.message}
+            </p>
+          ) : null}
           <div className="space-y-2">
             {quantityUnitGuidance.map((entry) => (
               <p
