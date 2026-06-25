@@ -1,6 +1,7 @@
 import { useGraph } from '../context/GraphContext';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { flushSync } from 'react-dom';
+import { detectQuantityUnitGuidance } from '../utils/quantityUnitGuidance';
 
 const LOG_FIELDS = ['xMin', 'xMax', 'yMin', 'yMax'];
 
@@ -67,6 +68,16 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
   const isMetadataLocked = Boolean(isEditingCurve || isAxisMappingConfirmed);
   const isCurveNameFieldLocked = Boolean(
     isEditingCurve || isCurveNameReadOnly || (isAxisMappingConfirmed && !allowNextCurveNameEntry)
+  );
+
+  const quantityUnitGuidance = useMemo(
+    () =>
+      detectQuantityUnitGuidance({
+        graphTitle: graphConfig.graphTitle,
+        xTitle: graphConfig.xLabel,
+        yTitle: graphConfig.yLabel,
+      }),
+    [graphConfig.graphTitle, graphConfig.xLabel, graphConfig.yLabel]
   );
   
   // Apply initial values from props when component mounts
@@ -503,6 +514,32 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
           />
         </label>
       </div>
+
+      {quantityUnitGuidance.length > 0 ? (
+        <div
+          className="mb-6 rounded-lg border-2 border-amber-400 bg-amber-50 px-4 py-4 shadow-sm"
+          role="note"
+          aria-live="polite"
+        >
+          <p className="text-base font-bold text-amber-950 mb-3">
+            Be careful while choosing scale and unit
+          </p>
+          <div className="space-y-2">
+            {quantityUnitGuidance.map((entry) => (
+              <p
+                key={`${entry.source}_${entry.quantity}`}
+                className="text-sm sm:text-base text-amber-900 leading-relaxed"
+              >
+                <span className="font-semibold">{entry.source}</span>
+                {' — detected '}
+                <span className="font-semibold">{entry.quantity}</span>
+                {': expected units '}
+                <span className="font-semibold">{entry.expectedUnits}</span>
+              </p>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6" style={{ opacity: (isAxisMappingConfirmed || isEditingCurve) ? 0.5 : 1, pointerEvents: (isAxisMappingConfirmed || isEditingCurve) ? 'none' : 'auto' }}>
         <div>
