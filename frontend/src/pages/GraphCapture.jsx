@@ -33,7 +33,6 @@ import {
 } from '../utils/graphAreaHelpers';
 import { useGraph, graphToCanvasWithBounds, getManualCapturePoints, MANUAL_CAPTURE_OVERLAY_ID } from '../context/GraphContext';
 import { clearAnnotationsForCurve } from '../utils/annotationStorage';
-import { applyInferredAxisSettingsFromTitles } from '../utils/quantityUnitGuidance';
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 
 const MiniGraphCanvas = ({ points }) => {
@@ -3034,24 +3033,19 @@ const GraphCapture = () => {
     const metadata = normalizeAiExtractedMetadata(rawMetadata);
     aiLogVerbose('[AI METADATA] Restoring extracted metadata to form:', metadata);
 
-    setGraphConfig((prev) =>
-      applyInferredAxisSettingsFromTitles(
-        {
-          ...prev,
-          ...(metadata.graphTitle ? { graphTitle: metadata.graphTitle } : {}),
-          ...(metadata.curveName ? { curveName: metadata.curveName } : {}),
-          ...(metadata.xLabel ? { xLabel: metadata.xLabel } : {}),
-          ...(metadata.yLabel ? { yLabel: metadata.yLabel } : {}),
-          ...(metadata.xScale ? { xScale: metadata.xScale } : {}),
-          ...(metadata.yScale ? { yScale: metadata.yScale } : {}),
-          ...(metadata.xUnitPrefix ? { xUnitPrefix: metadata.xUnitPrefix } : {}),
-          ...(metadata.yUnitPrefix ? { yUnitPrefix: metadata.yUnitPrefix } : {}),
-          ...buildGraphConfigAxisPatch(metadata),
-          ...(metadata.tctj ? { temperature: metadata.tctj } : {}),
-        },
-        { onlyFillDefaults: true, allowOverrideDefaultUnit: true }
-      )
-    );
+    setGraphConfig((prev) => ({
+      ...prev,
+      ...(metadata.graphTitle ? { graphTitle: metadata.graphTitle } : {}),
+      ...(metadata.curveName ? { curveName: metadata.curveName } : {}),
+      ...(metadata.xLabel ? { xLabel: metadata.xLabel } : {}),
+      ...(metadata.yLabel ? { yLabel: metadata.yLabel } : {}),
+      ...(metadata.xScale ? { xScale: metadata.xScale } : {}),
+      ...(metadata.yScale ? { yScale: metadata.yScale } : {}),
+      ...(metadata.xUnitPrefix ? { xUnitPrefix: metadata.xUnitPrefix } : {}),
+      ...(metadata.yUnitPrefix ? { yUnitPrefix: metadata.yUnitPrefix } : {}),
+      ...buildGraphConfigAxisPatch(metadata),
+      ...(metadata.tctj ? { temperature: metadata.tctj } : {}),
+    }));
 
     aiLogVerbose('[AI METADATA] Form values restored from extracted metadata');
     clearAiExtractedMetadata();
@@ -4395,7 +4389,7 @@ const GraphCapture = () => {
     if (Object.keys(curveSymbols).length > 0) {
       setSymbolValues((prev) => ({ ...prev, ...curveSymbols }));
     }
-
+    
     setIsReadOnly(true);
   };
 
@@ -5622,21 +5616,21 @@ const GraphCapture = () => {
               ...(hasPartNumberChange ? { partNumber: nextPartNumber } : {}),
               ...(isTarget
                 ? {
-                    curveName: updatedName,
-                    xScale: editCurveMeta.xScale,
-                    yScale: editCurveMeta.yScale,
-                    xUnitPrefix: editCurveMeta.xUnitPrefix,
-                    yUnitPrefix: editCurveMeta.yUnitPrefix,
+              curveName: updatedName,
+              xScale: editCurveMeta.xScale,
+              yScale: editCurveMeta.yScale,
+              xUnitPrefix: editCurveMeta.xUnitPrefix,
+              yUnitPrefix: editCurveMeta.yUnitPrefix,
                   }
                 : {}),
             },
             ...(isTarget
               ? {
-                  symbolValues: { ...editCurveSymbolValues },
-                  x_scale: editCurveMeta.xScale,
-                  y_scale: editCurveMeta.yScale,
-                  x_unit: editCurveMeta.xUnitPrefix,
-                  y_unit: editCurveMeta.yUnitPrefix,
+            symbolValues: { ...editCurveSymbolValues },
+            x_scale: editCurveMeta.xScale,
+            y_scale: editCurveMeta.yScale,
+            x_unit: editCurveMeta.xUnitPrefix,
+            y_unit: editCurveMeta.yUnitPrefix,
                 }
               : {}),
             updatedAt: Date.now(),
@@ -5799,7 +5793,7 @@ const GraphCapture = () => {
       if (Number.isFinite(localCurveId) && localCurveId > 0) {
         try {
           await fetch(`${apiUrl}/api/curves/${localCurveId}`, { method: 'DELETE' });
-        } catch {
+      } catch {
           // Best-effort cleanup for unsynced local-only curves.
         }
       }
@@ -5913,10 +5907,6 @@ const GraphCapture = () => {
         ...(axisFields.xUnitPrefix ? { xUnitPrefix: axisFields.xUnitPrefix } : {}),
         ...(axisFields.yUnitPrefix ? { yUnitPrefix: axisFields.yUnitPrefix } : {}),
       };
-      next = applyInferredAxisSettingsFromTitles(next, {
-        onlyFillDefaults: true,
-        allowOverrideDefaultUnit: true,
-      });
       return applyComputedAxisBounds(next, curveList);
     });
   };
@@ -6344,9 +6334,9 @@ const GraphCapture = () => {
         // DiscoverEE graph_id sessions: saved curves come from DiscoverEE only (no Render/local restore).
         console.log('[DEBUG] DiscoverEE unavailable or incomplete for graph_id; skipping Render/local saved curves.');
         logGraphImageAvailability(graphId, '', 'discoveree-fallback-skipped', {
-          discovereeResponse: 'failed-or-empty',
-        });
-        setShouldSkipCaptureChoiceAfterAi(false);
+            discovereeResponse: 'failed-or-empty',
+          });
+          setShouldSkipCaptureChoiceAfterAi(false);
       } catch (error) {
         console.error('[DEBUG] Error in fetchGraphById:', error);
       }
@@ -6398,13 +6388,13 @@ const GraphCapture = () => {
             backendMirroredImage ? [backendMirroredImage, ...autoLoadCandidates] : autoLoadCandidates
           );
 
-          logGraphImageAvailability(graphId || firstCurve.graphId || getGraphIdForCurve(firstCurve), resolvedSavedImage, 'auto-load-graph-context', {
-            firstCurveId: firstCurve.id,
-          });
-
-          if (resolvedSavedImage) {
-            console.log('[DEBUG] Setting graph image:', resolvedSavedImage);
-            setUploadedImageFromExistingGraph(resolvedSavedImage);
+      logGraphImageAvailability(graphId || firstCurve.graphId || getGraphIdForCurve(firstCurve), resolvedSavedImage, 'auto-load-graph-context', {
+        firstCurveId: firstCurve.id,
+      });
+      
+      if (resolvedSavedImage) {
+        console.log('[DEBUG] Setting graph image:', resolvedSavedImage);
+        setUploadedImageFromExistingGraph(resolvedSavedImage);
             if (isEmbeddedGraphImage(resolvedSavedImage)) {
               persistGraphImage(graphId, resolvedSavedImage);
             }
@@ -6751,18 +6741,18 @@ const GraphCapture = () => {
           );
           if (refetchResult) {
             console.log('[RE-FETCH] Full API response:', refetchResult);
-          }
-
-          console.log('[RE-FETCH] Parsed details array:', {
-            totalDetails: refetchDetails.length,
-            details: refetchDetails.map((d, idx) => ({
-              idx,
-              id: d?.id,
-              curve_title: d?.curve_title,
+            }
+            
+            console.log('[RE-FETCH] Parsed details array:', {
+              totalDetails: refetchDetails.length,
+              details: refetchDetails.map((d, idx) => ({ 
+                idx, 
+                id: d?.id, 
+                curve_title: d?.curve_title,
               xy: d?.xy ? d.xy.substring(0, 50) + '...' : 'no xy',
-            })),
-          });
-
+              })),
+            });
+            
           if (refetchDetails.length === 0) {
             console.warn('[CAPTURE MANUALLY DEBUG]', {
               graph_id: String(companyGraphId || ''),
@@ -6773,45 +6763,45 @@ const GraphCapture = () => {
           } else {
             detailsVerifiedOnDiscoveree = true;
 
-            // Try to match by XY data first
-            const savedPoints = payload?.data_points || [];
-            const savedXyStr = savedPoints.map((p) => `{x:${p.x_value},y:${p.y_value}}`).join(',');
-
-            console.log('[RE-FETCH] Attempting XY match with:', {
-              pointCount: savedPoints.length,
-              xyLength: savedXyStr.length,
-            });
-
-            let matchedDetail = refetchDetails.find((d) => {
-              if (!savedXyStr || !d?.xy) return false;
-              const normalizedSavedXy = savedXyStr.replace(/\s/g, '').toLowerCase();
-              const normalizedApiXy = d.xy.replace(/\s/g, '').toLowerCase();
-              const matches = normalizedSavedXy === normalizedApiXy;
-              if (matches) {
-                console.log('[RE-FETCH] XY MATCH FOUND for detail:', d?.id);
+              // Try to match by XY data first
+              const savedPoints = payload?.data_points || [];
+              const savedXyStr = savedPoints.map((p) => `{x:${p.x_value},y:${p.y_value}}`).join(',');
+              
+              console.log('[RE-FETCH] Attempting XY match with:', {
+                pointCount: savedPoints.length,
+                xyLength: savedXyStr.length,
+              });
+              
+              let matchedDetail = refetchDetails.find((d) => {
+                if (!savedXyStr || !d?.xy) return false;
+                const normalizedSavedXy = savedXyStr.replace(/\s/g, '').toLowerCase();
+                const normalizedApiXy = d.xy.replace(/\s/g, '').toLowerCase();
+                const matches = normalizedSavedXy === normalizedApiXy;
+                if (matches) {
+                  console.log('[RE-FETCH] XY MATCH FOUND for detail:', d?.id);
+                }
+                return matches;
+              });
+              
+              // If no XY match, use the LAST detail (most recently added)
+              if (!matchedDetail && refetchDetails.length > 0) {
+                matchedDetail = refetchDetails[refetchDetails.length - 1];
+                console.log('[RE-FETCH] No XY match, using last (newest) detail:', {
+                  id: matchedDetail?.id,
+                  curve_title: matchedDetail?.curve_title,
+                });
               }
-              return matches;
-            });
-
-            // If no XY match, use the LAST detail (most recently added)
-            if (!matchedDetail && refetchDetails.length > 0) {
-              matchedDetail = refetchDetails[refetchDetails.length - 1];
-              console.log('[RE-FETCH] No XY match, using last (newest) detail:', {
-                id: matchedDetail?.id,
-                curve_title: matchedDetail?.curve_title,
-              });
-            }
-
-            // Extract the detail_id
-            if (matchedDetail && matchedDetail.id) {
-              realDetailId = String(matchedDetail.id);
-              console.log('[RE-FETCH] ✓ Successfully extracted detail_id:', realDetailId);
-            } else {
-              console.warn('[RE-FETCH] Matched detail has no id field', {
-                matchedDetail,
-                keys: matchedDetail ? Object.keys(matchedDetail) : 'null',
-              });
-            }
+              
+              // Extract the detail_id
+              if (matchedDetail && matchedDetail.id) {
+                realDetailId = String(matchedDetail.id);
+                console.log('[RE-FETCH] ✓ Successfully extracted detail_id:', realDetailId);
+              } else {
+                console.warn('[RE-FETCH] Matched detail has no id field', {
+                  matchedDetail,
+                  keys: matchedDetail ? Object.keys(matchedDetail) : 'null',
+                });
+              }
           }
         } catch (refetchErr) {
           console.error('[RE-FETCH] Error fetching details:', refetchErr.message);
@@ -6944,10 +6934,10 @@ const GraphCapture = () => {
       ...prevConfig,
       curveName: '',
     }));
-
+    
     // Clear data points to show a clean canvas for the next curve
     clearDataPoints();
-
+    
     // Clear the selected curve details modal if any is open
     setSelectedCurveId('');
     setCombinedGroupId('');
@@ -7687,7 +7677,7 @@ const GraphCapture = () => {
                   )}
                 </div>
               ) : null}
-              <GraphConfig
+              <GraphConfig 
                 showTctj={shouldShowTemperatureInput} 
                 isGraphTitleReadOnly={Boolean(urlParams.graph_id || urlParams.graph_title) && !graphTitleUnlocked} 
                 isCurveNameReadOnly={false} 
@@ -7860,12 +7850,12 @@ const GraphCapture = () => {
                             {group.curves[0]?.config?.graphTitle || group.curves[0]?.graph_title || `Graph ${groupIndex + 1}`} ({group.curves.length} curves)
                           </div>
                           <div className="flex flex-wrap gap-2">
-                            <button
-                              className="px-3 py-1 rounded bg-gray-900 text-white text-xs"
+                          <button
+                            className="px-3 py-1 rounded bg-gray-900 text-white text-xs"
                               onClick={() => handleViewCombinedGroup(group)}
-                            >
-                              View combined graph
-                            </button>
+                          >
+                            View combined graph
+                          </button>
                             <button
                               className="px-3 py-1 rounded bg-gray-700 text-white text-xs"
                               onClick={() => handleExportGroupToTC(group)}
@@ -8278,7 +8268,7 @@ const GraphCapture = () => {
             interactionRef={singleDragRef}
             onClose={() => {
               setSingleModalLayout(null);
-              setSelectedCurveId('');
+            setSelectedCurveId('');
               setViewModalTableVisible(true);
               clearSavedViewOverlay();
             }}
@@ -8529,7 +8519,7 @@ const GraphCapture = () => {
             interactionRef={combinedDragRef}
             onClose={() => {
               setCombinedModalLayout(null);
-              setCombinedGroupId('');
+            setCombinedGroupId('');
               clearSavedViewOverlay();
             }}
             defaultWidth={700}

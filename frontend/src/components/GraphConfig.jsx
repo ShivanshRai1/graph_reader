@@ -1,18 +1,13 @@
 import { useGraph } from '../context/GraphContext';
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { flushSync } from 'react-dom';
 import {
   detectQuantityUnitGuidance,
   getAxisUnitMismatchWarning,
   getAxisScaleMismatchWarning,
-  applyInferredAxisSettingsFromTitles,
   SCALE_AND_UNIT_CROSS_CHECK_MESSAGE,
   getGraphPatternGuidance,
 } from '../utils/quantityUnitGuidance';
-import {
-  applyHistoricalScaleHints,
-  fetchHistoricalScaleSuggestion,
-} from '../utils/graphScaleHistory';
+import { fetchHistoricalScaleSuggestion } from '../utils/graphScaleHistory';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -164,23 +159,10 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
 
   const [historicalScaleHint, setHistoricalScaleHint] = useState(null);
 
-  const showScaleGuidancePanel = Boolean(
-    quantityUnitGuidance.length > 0 || graphPatternGuidance || historicalScaleHint?.message
-  );
+  const showScaleGuidancePanel =
+    !isMetadataLocked &&
+    Boolean(quantityUnitGuidance.length > 0 || graphPatternGuidance || historicalScaleHint?.message);
 
-  const handleOpenFinalCheck = () => {
-    flushSync(() => {
-      setGraphConfig((prev) => {
-        let next = applyInferredAxisSettingsFromTitles(prev, {
-          onlyFillDefaults: true,
-          allowOverrideDefaultUnit: true,
-        });
-        next = applyHistoricalScaleHints(next, historicalScaleHint, { onlyFillDefaults: true });
-        return next;
-      });
-    });
-    setShowConfirmModal(true);
-  };
   useEffect(() => {
     if (initialCurveName || initialGraphTitle || initialXTitle || initialYTitle) {
       setGraphConfig((prevConfig) => ({
@@ -225,31 +207,6 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
     graphConfig.manufacturer,
     isMetadataLocked,
   ]);
-
-  useEffect(() => {
-    if (isMetadataLocked) return;
-    setGraphConfig((prev) => {
-      let next = applyInferredAxisSettingsFromTitles(prev);
-      next = applyHistoricalScaleHints(next, historicalScaleHint, { onlyFillDefaults: true });
-      if (
-        prev.xUnitPrefix === next.xUnitPrefix &&
-        prev.yUnitPrefix === next.yUnitPrefix &&
-        prev.xScale === next.xScale &&
-        prev.yScale === next.yScale
-      ) {
-        return prev;
-      }
-      return next;
-    });
-  }, [
-    graphConfig.graphTitle,
-    graphConfig.xLabel,
-    graphConfig.yLabel,
-    isMetadataLocked,
-    setGraphConfig,
-    historicalScaleHint,
-  ]);
-  
 
   // Validate min/max values
   useEffect(() => {
@@ -682,7 +639,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             Be careful while choosing scale and unit
           </p>
           <p className="text-sm sm:text-base text-amber-900 mb-3 leading-relaxed">
-            Suggested scale and unit are based on graph type and past captures. Please verify they match the printed graph axes.
+            Please choose scale and unit based on graph type and past captures. Verify they match the printed graph axes.
           </p>
           {graphPatternGuidance ? (
             <p className="text-sm sm:text-base text-amber-900 mb-3 leading-relaxed">
@@ -940,7 +897,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
                     </div>
                   )}
                   <button
-                    onClick={handleOpenFinalCheck}
+                    onClick={() => setShowConfirmModal(true)}
                     disabled={isDisabled}
                     className={`w-full px-4 py-2 rounded font-medium text-sm transition ${
                       isDisabled
