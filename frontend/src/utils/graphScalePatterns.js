@@ -32,13 +32,15 @@ const hasCurrentSignal = (text) =>
   /\[\s*a\s*\]/i.test(text) ||
   /\bi\s*\(/i.test(text);
 
+const CV_TYPICAL_NOTE =
+  'C–V (capacitance vs reverse voltage) is a diode curve and is usually shown on logarithmic axes — verify against the printed graph.';
+
 const GRAPH_SCALE_PATTERNS = [
   {
     id: 'capacitance_vs_vr',
     label: 'Capacitance vs reverse voltage (C–V)',
-    typicalNote:
-      'C–V plots on diodes and MOSFETs are usually shown on logarithmic axes — verify against the printed graph.',
-    componentFamilies: ['diode', 'mosfet', 'generic'],
+    typicalNote: CV_TYPICAL_NOTE,
+    componentFamilies: ['diode', 'generic'],
     defaultScales: { x: 'Logarithmic', y: 'Logarithmic' },
     defaultUnits: { x: BASE, y: PICO },
     matches: ({ combined, xTitle, yTitle }) => {
@@ -143,6 +145,18 @@ export const getGraphPatternGuidance = ({
 } = {}) => {
   const pattern = detectGraphScalePattern({ graphTitle, xTitle, yTitle });
   if (!pattern) return null;
+
+  if (pattern.id === 'capacitance_vs_vr') {
+    return {
+      patternId: pattern.id,
+      label: pattern.label,
+      componentFamily: 'diode',
+      message: pattern.typicalNote,
+      detail: pattern.typicalNote,
+      defaultScales: { ...pattern.defaultScales },
+      defaultUnits: { ...pattern.defaultUnits },
+    };
+  }
 
   const componentFamily = detectComponentFamily({ partNumber, manufacturer, categoryTitle });
   const familyLabel =
