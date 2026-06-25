@@ -7,6 +7,7 @@ from models import Curve
 
 PATTERN_LABELS = {
     "capacitance_vs_vr": "Capacitance vs reverse voltage (C–V)",
+    "forward_if_vs_vf": "Forward current vs forward voltage (IF vs VF)",
     "output_iv": "Output / transfer characteristics (I–V)",
     "rds_on_vs_vgs": "On-resistance vs gate voltage",
     "safe_operating_area": "Safe operating area (SOA)",
@@ -43,6 +44,21 @@ def classify_graph_pattern(
     )
     if has_capacitance and has_voltage:
         return "capacitance_vs_vr"
+
+    has_forward_voltage = bool(
+        re.search(r"\bforward\s+voltage\b", combined)
+        or re.search(r"\bvf\b", combined)
+        or re.search(r"\bvf\s*\[", combined)
+    )
+    has_forward_current = bool(
+        re.search(r"\bforward\s+current\b", combined)
+        or re.search(r"\bif\b", combined)
+        or re.search(r"\bif\s*\[", combined)
+    )
+    if has_forward_current and has_forward_voltage:
+        return "forward_if_vs_vf"
+    if re.search(r"\bif\s+vs\.?\s*vf\b", combined):
+        return "forward_if_vs_vf"
 
     has_current = bool(
         re.search(r"\bcurrent\b", combined)

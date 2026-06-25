@@ -21,8 +21,19 @@ const hasReverseVoltageSignal = (text) =>
   /\bv\s*r\b/i.test(text) ||
   /\bvr\s*\[/i.test(text);
 
+const hasForwardVoltageSignal = (text) =>
+  /\bforward\s+voltage\b/i.test(text) ||
+  /\bv\s*f\b/i.test(text) ||
+  /\bvf\s*\[/i.test(text);
+
+const hasForwardCurrentSignal = (text) =>
+  /\bforward\s+current\b/i.test(text) ||
+  /\bi\s*f\b/i.test(text) ||
+  /\bif\s*\[/i.test(text);
+
 const hasVoltageSignal = (text) =>
   hasReverseVoltageSignal(text) ||
+  hasForwardVoltageSignal(text) ||
   /\bvoltage\b/i.test(text) ||
   /\[\s*v\s*\]/i.test(text);
 
@@ -34,6 +45,9 @@ const hasCurrentSignal = (text) =>
 
 const CV_TYPICAL_NOTE =
   'C–V (capacitance vs reverse voltage) is a diode curve and is usually shown on logarithmic axes — verify against the printed graph.';
+
+const IF_VF_TYPICAL_NOTE =
+  'IF vs VF (forward current vs forward voltage) is a diode curve and is usually shown on linear axes — verify against the printed graph.';
 
 const GRAPH_SCALE_PATTERNS = [
   {
@@ -49,6 +63,26 @@ const GRAPH_SCALE_PATTERNS = [
       const axisText = `${xTitle} ${yTitle}`;
       if (hasCapacitanceSignal(yTitle) && hasVoltageSignal(xTitle)) return true;
       if (hasCapacitanceSignal(combined) && (hasReverseVoltageSignal(combined) || hasVoltageSignal(axisText))) {
+        return true;
+      }
+      return false;
+    },
+  },
+  {
+    id: 'forward_if_vs_vf',
+    label: 'Forward current vs forward voltage (IF vs VF)',
+    typicalNote: IF_VF_TYPICAL_NOTE,
+    componentFamilies: ['diode', 'generic'],
+    defaultScales: { x: 'Linear', y: 'Linear' },
+    defaultUnits: { x: BASE, y: MILLI },
+    matches: ({ combined, xTitle, yTitle }) => {
+      const axisText = `${xTitle} ${yTitle}`;
+      const hasIfVfPair =
+        (hasForwardCurrentSignal(yTitle) && hasForwardVoltageSignal(xTitle)) ||
+        (hasForwardCurrentSignal(combined) && hasForwardVoltageSignal(combined));
+      if (hasIfVfPair) return true;
+      if (/\bif\s+vs\.?\s*vf\b/i.test(combined)) return true;
+      if (/\bforward\s+characteristic/i.test(combined) && hasCurrentSignal(yTitle || combined) && hasVoltageSignal(xTitle || combined)) {
         return true;
       }
       return false;
@@ -146,31 +180,12 @@ export const getGraphPatternGuidance = ({
   const pattern = detectGraphScalePattern({ graphTitle, xTitle, yTitle });
   if (!pattern) return null;
 
-  if (pattern.id === 'capacitance_vs_vr') {
-    return {
-      patternId: pattern.id,
-      label: pattern.label,
-      componentFamily: 'diode',
-      message: pattern.typicalNote,
-      detail: pattern.typicalNote,
-      defaultScales: { ...pattern.defaultScales },
-      defaultUnits: { ...pattern.defaultUnits },
-    };
-  }
-
-  const componentFamily = detectComponentFamily({ partNumber, manufacturer, categoryTitle });
-  const familyLabel =
-    componentFamily === 'diode' ? 'diode' : componentFamily === 'mosfet' ? 'MOSFET' : 'this device type';
-
   return {
     patternId: pattern.id,
     label: pattern.label,
-    componentFamily,
+    componentFamily: pattern.componentFamilies?.includes('diode') ? 'diode' : 'generic',
     message: pattern.typicalNote,
-    detail:
-      componentFamily === 'generic'
-        ? pattern.typicalNote
-        : `${pattern.label} graphs for ${familyLabel} datasheets: ${pattern.typicalNote}`,
+    detail: pattern.typicalNote,
     defaultScales: { ...pattern.defaultScales },
     defaultUnits: { ...pattern.defaultUnits },
   };
