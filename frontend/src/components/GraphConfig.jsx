@@ -6,7 +6,6 @@ import {
   getAxisUnitMismatchWarning,
   getAxisScaleMismatchWarning,
   applyInferredAxisSettingsFromTitles,
-  shouldShowScaleAndUnitCrossCheck,
   SCALE_AND_UNIT_CROSS_CHECK_MESSAGE,
   getGraphPatternGuidance,
 } from '../utils/quantityUnitGuidance';
@@ -139,11 +138,6 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
   );
 
   const showScaleAndUnitCrossCheckInModal = Boolean(
-    shouldShowScaleAndUnitCrossCheck({
-      graphTitle: graphConfig.graphTitle,
-      xTitle: graphConfig.xLabel,
-      yTitle: graphConfig.yLabel,
-    }) ||
     xAxisUnitWarning ||
     yAxisUnitWarning ||
     xAxisScaleWarning ||
@@ -173,8 +167,20 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
   const showScaleGuidancePanel = Boolean(
     quantityUnitGuidance.length > 0 || graphPatternGuidance || historicalScaleHint?.message
   );
-  
-  // Apply initial values from props when component mounts
+
+  const handleOpenFinalCheck = () => {
+    flushSync(() => {
+      setGraphConfig((prev) => {
+        let next = applyInferredAxisSettingsFromTitles(prev, {
+          onlyFillDefaults: true,
+          allowOverrideDefaultUnit: true,
+        });
+        next = applyHistoricalScaleHints(next, historicalScaleHint, { onlyFillDefaults: true });
+        return next;
+      });
+    });
+    setShowConfirmModal(true);
+  };
   useEffect(() => {
     if (initialCurveName || initialGraphTitle || initialXTitle || initialYTitle) {
       setGraphConfig((prevConfig) => ({
@@ -934,7 +940,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
                     </div>
                   )}
                   <button
-                    onClick={() => setShowConfirmModal(true)}
+                    onClick={handleOpenFinalCheck}
                     disabled={isDisabled}
                     className={`w-full px-4 py-2 rounded font-medium text-sm transition ${
                       isDisabled
