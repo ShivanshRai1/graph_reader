@@ -1,7 +1,7 @@
 import { useGraph } from '../context/GraphContext';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { flushSync } from 'react-dom';
-import { detectQuantityUnitGuidance } from '../utils/quantityUnitGuidance';
+import { detectQuantityUnitGuidance, getAxisUnitMismatchWarning } from '../utils/quantityUnitGuidance';
 
 const LOG_FIELDS = ['xMin', 'xMax', 'yMin', 'yMax'];
 
@@ -79,6 +79,30 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
       }),
     [graphConfig.graphTitle, graphConfig.xLabel, graphConfig.yLabel]
   );
+
+  const yAxisUnitWarning = useMemo(
+    () =>
+      getAxisUnitMismatchWarning('y', {
+        xTitle: graphConfig.xLabel,
+        yTitle: graphConfig.yLabel,
+        graphTitle: graphConfig.graphTitle,
+        unitPrefix: graphConfig.yUnitPrefix,
+      }),
+    [graphConfig.xLabel, graphConfig.yLabel, graphConfig.graphTitle, graphConfig.yUnitPrefix]
+  );
+
+  const xAxisUnitWarning = useMemo(
+    () =>
+      getAxisUnitMismatchWarning('x', {
+        xTitle: graphConfig.xLabel,
+        yTitle: graphConfig.yLabel,
+        graphTitle: graphConfig.graphTitle,
+        unitPrefix: graphConfig.xUnitPrefix,
+      }),
+    [graphConfig.xLabel, graphConfig.yLabel, graphConfig.graphTitle, graphConfig.xUnitPrefix]
+  );
+
+  const showUnitCrossCheckInModal = Boolean(xAxisUnitWarning || yAxisUnitWarning);
   
   // Apply initial values from props when component mounts
   useEffect(() => {
@@ -824,6 +848,16 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             <div className="text-sm mb-4" style={{ color: '#4b5563' }}>
               Confirm the values below. If you continue, axis mapping is locked and point capture begins.
             </div>
+            {showUnitCrossCheckInModal ? (
+              <div className="mb-4 flex items-start gap-2 rounded-lg border-2 border-orange-400 bg-orange-50 px-3 py-2.5">
+                <span className="text-xl font-bold leading-none text-orange-500" aria-hidden="true">
+                  !
+                </span>
+                <p className="text-sm font-semibold text-orange-900 leading-snug">
+                  Please cross check the unit based on graph type
+                </p>
+              </div>
+            ) : null}
             <div className="text-sm" style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: 12 }}>
               <div className="mb-2"><strong>Graph Title:</strong> {graphConfig.graphTitle || '-'}</div>
               <div className="mb-2"><strong>Curve or Line Name:</strong> {graphConfig.curveName || '-'}</div>
