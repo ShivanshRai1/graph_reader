@@ -54,6 +54,17 @@ export const resolvePlotExtents = ({
   };
 };
 
+/** True when a point is the common (0,0) anchor used before tracing the real curve. */
+const looksLikeOriginAnchor = (point, xSpan, ySpan) => {
+  const x = Number(point?.x);
+  const y = Number(point?.y);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+  if (x === 0 && y === 0) return true;
+  const safeXSpan = Math.max(xSpan, 1e-9);
+  const safeYSpan = Math.max(ySpan, 1e-9);
+  return Math.abs(x) <= safeXSpan * 0.03 && Math.abs(y) <= safeYSpan * 0.03;
+};
+
 /** Split a point series so we do not draw one long connector across large X gaps (e.g. origin anchor → curve). */
 export const buildPolylinePointGroups = (points = [], { gapFraction = 0.2 } = {}) => {
   if (!Array.isArray(points) || points.length < 2) {
@@ -64,6 +75,11 @@ export const buildPolylinePointGroups = (points = [], { gapFraction = 0.2 } = {}
   const span = Math.max(Math.max(...xs) - Math.min(...xs), 1e-9);
   const gapThreshold = span * gapFraction;
 
+  const dataXs = points.map((point) => Number(point.x)).filter(Number.isFinite);
+  const dataYs = points.map((point) => Number(point.y)).filter(Number.isFinite);
+  const dataXSpan = dataXs.length ? Math.max(...dataXs) - Math.min(...dataXs) : 1;
+  const dataYSpan = dataYs.length ? Math.max(...dataYs) - Math.min(...dataYs) : 1;
+
   const groups = [];
   let current = [points[0]];
 
@@ -71,7 +87,11 @@ export const buildPolylinePointGroups = (points = [], { gapFraction = 0.2 } = {}
     const prev = points[i - 1];
     const next = points[i];
     const gap = Math.abs(next.plotX - prev.plotX);
-    if (gap > gapThreshold && current.length >= 1) {
+    const shouldSplit =
+      gap > gapThreshold &&
+      (looksLikeOriginAnchor(prev, dataXSpan, dataYSpan) ||
+        looksLikeOriginAnchor(next, dataXSpan, dataYSpan));
+    if (shouldSplit && current.length >= 1) {
       if (current.length >= 2) groups.push(current);
       current = [next];
     } else {
