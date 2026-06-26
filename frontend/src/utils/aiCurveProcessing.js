@@ -207,8 +207,8 @@ export const resolveDiscovereeAxisFields = (graph = {}, detail = {}) => {
     yMax,
     xScale: normalizeScale(detail?.xscale ?? detail?.x_scale ?? detail?.xScale ?? graph?.x_scale ?? graph?.xscale, 'Linear'),
     yScale: normalizeScale(detail?.yscale ?? detail?.y_scale ?? detail?.yScale ?? graph?.y_scale ?? graph?.yscale, 'Linear'),
-    xUnitPrefix: pickAxisValue(detail?.xunit, detail?.x_unit, detail?.xUnitPrefix, graph?.x_unit, graph?.xunit) || '1',
-    yUnitPrefix: pickAxisValue(detail?.yunit, detail?.y_unit, detail?.yUnitPrefix, graph?.y_unit, graph?.yunit) || '1',
+    xUnitPrefix: pickAxisValue(detail?.xunit, detail?.x_unit, detail?.xUnitPrefix, detail?.xUnit, graph?.x_unit, graph?.xunit) || '1',
+    yUnitPrefix: pickAxisValue(detail?.yunit, detail?.y_unit, detail?.yUnitPrefix, detail?.yUnit, graph?.y_unit, graph?.yunit) || '1',
     xLabel: pickAxisValue(detail?.x_title, detail?.x_label, detail?.xLabel, graph?.x_title, graph?.x_label),
     yLabel: pickAxisValue(detail?.y_title, detail?.y_label, detail?.yLabel, graph?.y_title, graph?.y_label),
   };

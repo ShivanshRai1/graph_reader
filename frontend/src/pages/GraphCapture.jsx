@@ -1159,6 +1159,10 @@ const normalizeCurveConfigFields = (curve) => ({
   yScale: curve?.config?.yScale ?? curve?.y_scale,
   xUnit: curve?.config?.xUnitPrefix ?? curve?.x_unit,
   yUnit: curve?.config?.yUnitPrefix ?? curve?.y_unit,
+  xUnitPrefix: curve?.config?.xUnitPrefix ?? curve?.x_unit,
+  yUnitPrefix: curve?.config?.yUnitPrefix ?? curve?.y_unit,
+  xunit: curve?.config?.xUnitPrefix ?? curve?.x_unit,
+  yunit: curve?.config?.yUnitPrefix ?? curve?.y_unit,
   logDataModeX: curve?.config?.logDataModeX ?? curve?.logDataModeX,
   logDataModeY: curve?.config?.logDataModeY ?? curve?.logDataModeY,
   xLabel: curve?.config?.xLabel ?? curve?.x_label,
@@ -5299,12 +5303,14 @@ const GraphCapture = () => {
     const resolvedGraphImageForEdit = normalizeImageCandidate(
       curve?.graphImageUrl || curve?.graph_img || uploadedImage || ''
     );
-    const resolvedEditMeta = {
-      xScale: nextMeta.xScale || currentMeta.xScale || 'Linear',
-      yScale: nextMeta.yScale || currentMeta.yScale || 'Linear',
-      xUnitPrefix: nextMeta.xUnitPrefix || currentMeta.xUnitPrefix || '1',
-      yUnitPrefix: nextMeta.yUnitPrefix || currentMeta.yUnitPrefix || '1',
-    };
+    const resolvedEditMeta = hasMetaChanges
+      ? {
+          xScale: nextMeta.xScale || currentMeta.xScale || 'Linear',
+          yScale: nextMeta.yScale || currentMeta.yScale || 'Linear',
+          xUnitPrefix: nextMeta.xUnitPrefix || currentMeta.xUnitPrefix || '1',
+          yUnitPrefix: nextMeta.yUnitPrefix || currentMeta.yUnitPrefix || '1',
+        }
+      : { ...currentMeta };
     const resolvedEditIdentifier = normalizeSessionIdentifier(
       activeSessionIdentifierRef.current ||
       curve?.identifier ||
@@ -5472,6 +5478,17 @@ const GraphCapture = () => {
     );
     const nextPartNumber = String(editPartNumber || '').trim();
     const hasPartNumberChange = nextPartNumber !== currentPartNumber;
+    const currentEditMeta = {
+      xScale: targetCurve.config?.xScale || targetCurve.x_scale || 'Linear',
+      yScale: targetCurve.config?.yScale || targetCurve.y_scale || 'Linear',
+      xUnitPrefix: targetCurve.config?.xUnitPrefix || targetCurve.x_unit || '1',
+      yUnitPrefix: targetCurve.config?.yUnitPrefix || targetCurve.y_unit || '1',
+    };
+    const hasMetaChanges =
+      currentEditMeta.xScale !== editCurveMeta.xScale ||
+      currentEditMeta.yScale !== editCurveMeta.yScale ||
+      currentEditMeta.xUnitPrefix !== editCurveMeta.xUnitPrefix ||
+      currentEditMeta.yUnitPrefix !== editCurveMeta.yUnitPrefix;
 
     const editPlans = curvesOnGraph.map((curve) => {
       const isTarget = curve.id === curveId;
@@ -5619,7 +5636,7 @@ const GraphCapture = () => {
             config: {
               ...(curve.config || {}),
               ...(hasPartNumberChange ? { partNumber: nextPartNumber } : {}),
-              ...(isTarget
+              ...(isTarget && hasMetaChanges
                 ? {
               curveName: updatedName,
               xScale: editCurveMeta.xScale,
@@ -5627,9 +5644,11 @@ const GraphCapture = () => {
               xUnitPrefix: editCurveMeta.xUnitPrefix,
               yUnitPrefix: editCurveMeta.yUnitPrefix,
                   }
-                : {}),
+                : isTarget
+                  ? { curveName: updatedName }
+                  : {}),
             },
-            ...(isTarget
+            ...(isTarget && hasMetaChanges
               ? {
             symbolValues: { ...editCurveSymbolValues },
             x_scale: editCurveMeta.xScale,
@@ -5637,7 +5656,9 @@ const GraphCapture = () => {
             x_unit: editCurveMeta.xUnitPrefix,
             y_unit: editCurveMeta.yUnitPrefix,
                 }
-              : {}),
+              : isTarget
+                ? { symbolValues: { ...editCurveSymbolValues } }
+                : {}),
             updatedAt: Date.now(),
             locallyModified: true,
             userAdjustedPoints: isTarget ? true : Boolean(curve.userAdjustedPoints),
@@ -5897,6 +5918,16 @@ const GraphCapture = () => {
 
     const axisFields = resolveDiscovereeAxisFields(discovereeGraph, firstDetail || {});
     const curveList = Array.isArray(curves) ? curves : [];
+    const firstCurveAxis = curveList[0] ? normalizeCurveConfigFields(curveList[0]) : {};
+    const resolvedAxisFields = {
+      ...axisFields,
+      ...(axisFields.xUnitPrefix === '1' && firstCurveAxis.xUnitPrefix && firstCurveAxis.xUnitPrefix !== '1'
+        ? { xUnitPrefix: firstCurveAxis.xUnitPrefix }
+        : {}),
+      ...(axisFields.yUnitPrefix === '1' && firstCurveAxis.yUnitPrefix && firstCurveAxis.yUnitPrefix !== '1'
+        ? { yUnitPrefix: firstCurveAxis.yUnitPrefix }
+        : {}),
+    };
 
     setGraphConfig((prev) => {
       let next = {
@@ -5904,13 +5935,13 @@ const GraphCapture = () => {
         graphTitle: resolvedGraphTitle || discovereeGraph.graph_title || prev.graphTitle || '',
         partNumber: discovereeGraph.partno || prev.partNumber || '',
         manufacturer: discovereeGraph.manf || prev.manufacturer || '',
-        xLabel: axisFields.xLabel || discovereeGraph.x_title || discovereeGraph.x_label || prev.xLabel || '',
-        yLabel: axisFields.yLabel || discovereeGraph.y_title || discovereeGraph.y_label || prev.yLabel || '',
-        ...buildGraphConfigAxisPatch(axisFields),
-        ...(axisFields.xScale ? { xScale: axisFields.xScale } : {}),
-        ...(axisFields.yScale ? { yScale: axisFields.yScale } : {}),
-        ...(axisFields.xUnitPrefix ? { xUnitPrefix: axisFields.xUnitPrefix } : {}),
-        ...(axisFields.yUnitPrefix ? { yUnitPrefix: axisFields.yUnitPrefix } : {}),
+        xLabel: resolvedAxisFields.xLabel || discovereeGraph.x_title || discovereeGraph.x_label || prev.xLabel || '',
+        yLabel: resolvedAxisFields.yLabel || discovereeGraph.y_title || discovereeGraph.y_label || prev.yLabel || '',
+        ...buildGraphConfigAxisPatch(resolvedAxisFields),
+        ...(resolvedAxisFields.xScale ? { xScale: resolvedAxisFields.xScale } : {}),
+        ...(resolvedAxisFields.yScale ? { yScale: resolvedAxisFields.yScale } : {}),
+        ...(resolvedAxisFields.xUnitPrefix ? { xUnitPrefix: resolvedAxisFields.xUnitPrefix } : {}),
+        ...(resolvedAxisFields.yUnitPrefix ? { yUnitPrefix: resolvedAxisFields.yUnitPrefix } : {}),
       };
       return applyComputedAxisBounds(next, curveList);
     });
