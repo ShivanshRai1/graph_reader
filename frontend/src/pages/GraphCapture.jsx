@@ -4663,10 +4663,10 @@ const GraphCapture = () => {
     setIsReadOnly(false);
 
     const sessionAxisBounds = resolveAxisBoundFields({
-      xMin: graphConfig.xMin ?? nextConfig.xMin ?? curve.config?.xMin ?? curve.x_min,
-      xMax: graphConfig.xMax ?? nextConfig.xMax ?? curve.config?.xMax ?? curve.x_max,
-      yMin: graphConfig.yMin ?? nextConfig.yMin ?? curve.config?.yMin ?? curve.y_min,
-      yMax: graphConfig.yMax ?? nextConfig.yMax ?? curve.config?.yMax ?? curve.y_max,
+      xMin: nextConfig.xMin ?? curve.config?.xMin ?? curve.x_min ?? graphConfig.xMin,
+      xMax: nextConfig.xMax ?? curve.config?.xMax ?? curve.x_max ?? graphConfig.xMax,
+      yMin: nextConfig.yMin ?? curve.config?.yMin ?? curve.y_min ?? graphConfig.yMin,
+      yMax: nextConfig.yMax ?? curve.config?.yMax ?? curve.y_max ?? graphConfig.yMax,
     });
     editSessionAxisRef.current = sessionAxisBounds;
 
@@ -5478,13 +5478,18 @@ const GraphCapture = () => {
       const rawPoints = isTarget
         ? normalizePointsForComparison(getEditCurveDataPoints(targetCurve, dataPoints))
         : normalizePointsForComparison(curve?.points);
+      if (!hasAxisChange) {
+        return { curve, isTarget, points: rawPoints, removedCount: 0 };
+      }
       const { inBounds, removedCount } = partitionPointsByAxisBounds(rawPoints, nextAxisBounds);
       return { curve, isTarget, points: inBounds, removedCount };
     });
 
-    const totalRemoved = editPlans.reduce((sum, plan) => sum + plan.removedCount, 0);
+    const totalRemoved = hasAxisChange
+      ? editPlans.reduce((sum, plan) => sum + plan.removedCount, 0)
+      : 0;
 
-    if (editPlans.some((plan) => plan.points.length === 0)) {
+    if (hasAxisChange && editPlans.some((plan) => plan.points.length === 0)) {
       alert('Cannot update: at least one curve would have no points left. Widen the axis range or adjust points first.');
       return;
     }
@@ -5496,10 +5501,10 @@ const GraphCapture = () => {
         '\n\n' +
         confirmMessage;
     }
-    if (totalRemoved > 0) {
+    if (hasAxisChange && totalRemoved > 0) {
       confirmMessage =
         `${totalRemoved} point(s) fall outside the new axis range and will be removed.` +
-        (hasAxisChange ? ' Axis min/max will apply to all curves on this graph.' : '') +
+        ' Axis min/max will apply to all curves on this graph.' +
         '\n\nContinue with update?';
     } else if (hasAxisChange) {
       confirmMessage =
@@ -5736,7 +5741,7 @@ const GraphCapture = () => {
       clearDataPoints();
 
       const successMessage =
-        totalRemoved > 0
+        hasAxisChange && totalRemoved > 0
           ? `Curve updated successfully. ${totalRemoved} point(s) outside the axis range were removed.`
           : hasAxisChange
             ? 'Curve updated successfully. Axis min/max were applied to all curves on this graph.'
