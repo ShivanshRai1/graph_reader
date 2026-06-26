@@ -63,6 +63,15 @@ ensure_optional_curve_columns()
 MAX_GRAPH_IMAGE_MIRROR_CHARS = 1_500_000
 BACKEND_DIR = Path(__file__).resolve().parent
 TC_ROOT = BACKEND_DIR / "static" / "tc"
+IMAGE_ROOT = BACKEND_DIR / "static" / "images"
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+IMAGE_MEDIA_TYPES = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+    ".gif": "image/gif",
+}
 
 
 def normalize_tc_part_number(part_number: str) -> str:
@@ -96,6 +105,39 @@ def resolve_tc_file_path(part_number: str, filename: str) -> Path:
     if not file_path.is_file():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="TC file not found")
     return file_path
+
+
+def resolve_image_part_dir(part_number: str) -> Path:
+    safe_part = normalize_tc_part_number(part_number)
+    part_dir = (IMAGE_ROOT / safe_part).resolve()
+    if IMAGE_ROOT.resolve() not in part_dir.parents and part_dir != IMAGE_ROOT.resolve():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid part number path")
+    if not part_dir.is_dir():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"No graph images found for part '{safe_part}'")
+    return part_dir
+
+
+def resolve_image_file_path(part_number: str, filename: str) -> Path:
+    safe_name = Path(str(filename or "").strip()).name
+    if not safe_name or safe_name != str(filename).strip() or ".." in safe_name:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid filename")
+    if Path(safe_name).suffix.lower() not in IMAGE_EXTENSIONS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only image files are available (.png, .jpg, .jpeg, .webp, .gif)",
+        )
+
+    part_dir = resolve_image_part_dir(part_number)
+    file_path = (part_dir / safe_name).resolve()
+    if part_dir.resolve() not in file_path.parents:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid filename path")
+    if not file_path.is_file():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Image not found")
+    return file_path
+
+
+def image_media_type(file_path: Path) -> str:
+    return IMAGE_MEDIA_TYPES.get(file_path.suffix.lower(), "application/octet-stream")
 
 
 def normalize_mirror_graph_image(value: Optional[str]) -> str:
@@ -300,6 +342,83 @@ def get_tc_file(part_number: str, filename: str, download: bool = False):
     return FileResponse(
         path=file_path,
         media_type="application/json",
+        content_disposition_type="inline",
+    )
+
+
+@app.get("/api/images")
+def list_image_parts():
+    """List part folders that have hosted graph images (PNG/JPEG/WebP/GIF)."""
+    if not IMAGE_ROOT.is_dir():
+        return {"parts": [], "image_root": str(IMAGE_ROOT)}
+
+    parts = []
+    for part_dir in sorted(IMAGE_ROOT.iterdir(), key=lambda path: path.name.lower()):
+        if not part_dir.is_dir():
+            continue
+        image_files = [
+            path
+            for path in part_dir.iterdir()
+            if path.is_file() and path.suffix.lower() in IMAGE_EXTENSIONS
+        ]
+        if not image_files:
+            continue
+        parts.append({
+            "part_number": part_dir.name,
+            "file_count": len(image_files),
+            "list_url": f"/api/images/{part_dir.name}",
+        })
+    return {"parts": parts, "count": len(parts)}
+
+
+@app.get("/api/images/{part_number}")
+def list_image_files(part_number: str, request: Request):
+    """List viewable graph images for a part number with shareable URLs."""
+    part_dir = resolve_image_part_dir(part_number)
+    base_url = str(request.base_url).rstrip("/")
+    safe_part = part_dir.name
+
+    files = []
+    for file_path in sorted(part_dir.iterdir(), key=lambda path: path.name.lower()):
+        if not file_path.is_file() or file_path.suffix.lower() not in IMAGE_EXTENSIONS:
+            continue
+        quoted_name = quote(file_path.name)
+        view_url = f"{base_url}/api/images/{safe_part}/{quoted_name}"
+        files.append({
+            "name": file_path.name,
+            "size_bytes": file_path.stat().st_size,
+            "media_type": image_media_type(file_path),
+            "view_url": view_url,
+            "download_url": f"{view_url}?download=1",
+            "url": view_url,
+        })
+
+    return {
+        "part_number": safe_part,
+        "count": len(files),
+        "files": files,
+    }
+
+
+@app.get("/api/images/{part_number}/{filename}")
+def get_image_file(part_number: str, filename: str, download: bool = False):
+    """Serve a graph image by part number and filename.
+
+    Default: display inline in the browser (usable in <img src=\"...\">).
+    Add ?download=1 to force a file download.
+    """
+    file_path = resolve_image_file_path(part_number, filename)
+    media_type = image_media_type(file_path)
+    if download:
+        return FileResponse(
+            path=file_path,
+            media_type=media_type,
+            filename=file_path.name,
+            content_disposition_type="attachment",
+        )
+    return FileResponse(
+        path=file_path,
+        media_type=media_type,
         content_disposition_type="inline",
     )
 

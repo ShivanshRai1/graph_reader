@@ -91,6 +91,22 @@ GET https://graph-reader-0ot9.onrender.com/api/tc/max17640a/Figure_5_Efficiency_
 GET https://graph-reader-0ot9.onrender.com/api/tc/max17640a/Figure_5_Efficiency_Vs._Load_Current-all_curves-manual_edited.tc?download=1
 ```
 
+### Hosted graph images
+Static graph images (PNG/JPEG/WebP/GIF) live under `backend/static/images/{part_number}/`.
+
+- `GET /api/images` - List available part folders
+- `GET /api/images/{part_number}` - List images with full shareable URLs for that part
+- `GET /api/images/{part_number}/{filename}` - View image inline in browser (`<img src="...">`)
+- `GET /api/images/{part_number}/{filename}?download=1` - Download the image file
+
+Example (replace host with your Render service URL):
+
+```
+GET https://graph-reader-0ot9.onrender.com/api/images
+GET https://graph-reader-0ot9.onrender.com/api/images/max17640a
+GET https://graph-reader-0ot9.onrender.com/api/images/max17640a/fig-6-circuit-max17640b-output-voltage-ripple-pwm.png
+```
+
 ## Example Request
 
 ```bash
