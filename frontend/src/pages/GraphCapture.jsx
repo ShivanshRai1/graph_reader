@@ -918,6 +918,29 @@ const getCurveMergeKey = (curve) => {
 const getCurveDetailIdNumber = (curve) =>
   Number(String(curve?.detailId || curve?.detail_id || '').trim() || 0);
 
+const collectCompanyDetailIds = (curves = []) => {
+  const ids = new Set();
+  (Array.isArray(curves) ? curves : []).forEach((curve) => {
+    const detailId = String(curve?.detailId || curve?.detail_id || '').trim();
+    if (detailId) ids.add(detailId);
+  });
+  return ids;
+};
+
+/** Drop stale browser-cache curves whose detail_id no longer exists on DiscoverEE. */
+const filterPersistedCurvesForCompanyApi = (companyCurves = [], persistedCurves = []) => {
+  const apiDetailIds = collectCompanyDetailIds(companyCurves);
+  if (apiDetailIds.size === 0) {
+    return Array.isArray(persistedCurves) ? persistedCurves : [];
+  }
+
+  return (Array.isArray(persistedCurves) ? persistedCurves : []).filter((curve) => {
+    const detailId = String(curve?.detailId || curve?.detail_id || '').trim();
+    if (!detailId) return false;
+    return apiDetailIds.has(detailId);
+  });
+};
+
 const dedupeCompanyApiDetailsById = (details = []) => {
   const bestById = new Map();
   const withoutId = [];
@@ -1194,10 +1217,24 @@ const buildRestoredSavedCurves = ({
   const localApiCurves = localApiCurvesRaw.map((curve) =>
     mapLocalApiCurveToSavedCurve(curve, graphId, graphImageUrl)
   );
+  const prunedPersisted = filterPersistedCurvesForCompanyApi(
+    companyCurves,
+    persisted?.curves || []
+  );
+  if (
+    Array.isArray(persisted?.curves) &&
+    prunedPersisted.length !== persisted.curves.length
+  ) {
+    console.log('[GRAPH SESSION] Pruned stale browser-cache curves not on DiscoverEE:', {
+      graphId,
+      before: persisted.curves.length,
+      after: prunedPersisted.length,
+    });
+  }
   const merged = mergeCurvesForRestore(
     companyCurves,
     localApiCurves,
-    persisted?.curves || []
+    prunedPersisted
   );
   const hydrated = hydrateStoredCurves(merged, graphId).map((curve) => ({
     ...curve,
@@ -5906,42 +5943,47 @@ const GraphCapture = () => {
               const offGraph = prev.filter(
                 (curve) => String(curve.graphId || getGraphIdForCurve(curve) || '') !== graphIdKey
               );
+              const apiDetailIds = new Set(
+                apiDetails.map((detail) => String(detail?.id || '').trim()).filter(Boolean)
+              );
+              const prunedOnGraph = onGraph.filter((curve) => {
+                const detailId = String(getDetailIdForCurve(curve) || '').trim();
+                return detailId && apiDetailIds.has(detailId);
+              });
               const knownDetailIds = new Set(
-                onGraph.map((curve) => String(getDetailIdForCurve(curve) || '')).filter(Boolean)
+                prunedOnGraph.map((curve) => String(getDetailIdForCurve(curve) || '')).filter(Boolean)
               );
               const missing = apiDetails.filter(
                 (detail) => detail?.id && !knownDetailIds.has(String(detail.id))
               );
-              if (missing.length === 0) {
+              if (missing.length === 0 && prunedOnGraph.length === onGraph.length) {
                 return prev;
               }
 
               const graphImageUrl =
+                prunedOnGraph[0]?.graphImageUrl ||
                 onGraph[0]?.graphImageUrl ||
                 onGraph[0]?.graph_img ||
                 uploadedImage ||
                 '';
-              const restoredBundle = buildRestoredSavedCurves({
-                graphId: graphIdKey,
-                companyCurves: missing.map((detail, i) => {
-                  const rawPoints = parseXyString(detail.xy);
-                  return {
-                    id: `${graphIdKey}_${detail.id || i}`,
-                    detailId: detail.id ? String(detail.id) : '',
-                    graphId: graphIdKey,
-                    name: detail.curve_title || `Curve ${i + 1}`,
-                    points: rawPoints,
-                    graphImageUrl,
-                    config: {
-                      curveName: detail.curve_title || '',
-                      graphTitle: onGraph[0]?.config?.graphTitle || graphConfig.graphTitle || '',
-                    },
-                  };
-                }),
-                graphImageUrl,
+              const missingCurves = missing.map((detail, i) => {
+                const rawPoints = parseXyString(detail.xy);
+                return {
+                  id: `${graphIdKey}_${detail.id || i}`,
+                  detailId: detail.id ? String(detail.id) : '',
+                  graphId: graphIdKey,
+                  name: detail.curve_title || `Curve ${i + 1}`,
+                  points: rawPoints,
+                  graphImageUrl,
+                  config: {
+                    curveName: detail.curve_title || '',
+                    graphTitle: prunedOnGraph[0]?.config?.graphTitle || graphConfig.graphTitle || '',
+                  },
+                };
               });
 
-              const next = dedupeCurves([...offGraph, ...onGraph, ...restoredBundle.curves]);
+              const nextOnGraph = dedupeCurves([...prunedOnGraph, ...missingCurves]);
+              const next = dedupeCurves([...offGraph, ...nextOnGraph]);
               const curvesForGraph = next.filter(
                 (curve) => String(curve.graphId || getGraphIdForCurve(curve) || '') === graphIdKey
               );
