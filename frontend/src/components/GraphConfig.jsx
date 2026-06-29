@@ -1,5 +1,6 @@
 import { useGraph } from '../context/GraphContext';
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { flushSync } from 'react-dom';
 import {
   detectQuantityUnitGuidance,
   getAxisUnitMismatchWarning,

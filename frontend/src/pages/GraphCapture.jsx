@@ -1817,21 +1817,91 @@ const appendCompanyDetailAxisBounds = (detailPayload, axisConfig = {}) => {
   return detailPayload;
 };
 
-const findCompanyDetailByIdOrXy = (details = [], { detailId = '', xy = '' } = {}) => {
+const findCompanyDetailByVerifiedXy = (details = [], xy = '') => {
   const list = Array.isArray(details) ? details : [];
-  const normalizedDetailId = String(detailId || '').trim();
-  if (normalizedDetailId) {
-    const byId = list.find((detail) => String(detail?.id || '') === normalizedDetailId);
-    if (byId) return byId;
-  }
-
   const normalizedXy = normalizeCompanyXyString(xy);
-  if (normalizedXy) {
-    const byXy = list.find((detail) => normalizeCompanyXyString(detail?.xy) === normalizedXy);
-    if (byXy) return byXy;
+  if (!normalizedXy) return null;
+  return list.find((detail) => normalizeCompanyXyString(detail?.xy) === normalizedXy) || null;
+};
+
+const extractDetailIdFromCompanyResult = (result) => {
+  if (!result || typeof result !== 'object') return '';
+  if (result.detail_id !== undefined && result.detail_id !== null && String(result.detail_id).trim() !== '') {
+    return String(result.detail_id).trim();
+  }
+  if (Array.isArray(result.details) && result.details.length > 0 && result.details[0]?.id) {
+    return String(result.details[0].id).trim();
+  }
+  if (result.graph?.detail_id !== undefined && result.graph?.detail_id !== null) {
+    return String(result.graph.detail_id).trim();
+  }
+  if (Array.isArray(result.graph?.details) && result.graph.details.length > 0 && result.graph.details[0]?.id) {
+    return String(result.graph.details[0].id).trim();
+  }
+  return '';
+};
+
+const verifyEditedCurveOnDiscoveree = async ({
+  graphId,
+  sentXy = '',
+  rawXy = '',
+  appendResult = null,
+  attempts = 6,
+  delayMs = 1000,
+} = {}) => {
+  const normalizedGraphId = String(graphId || '').trim();
+  const normalizedSentXy = normalizeCompanyXyString(sentXy || rawXy);
+  if (!normalizedGraphId || !normalizedSentXy) {
+    return { xyConfirmedOnDiscoveree: false, detailId: '', verifiedDetail: null };
   }
 
-  return list.length > 0 ? list[list.length - 1] : null;
+  const hintedDetailId = extractDetailIdFromCompanyResult(appendResult?.result);
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const response = await fetch(
+        `https://www.discoveree.io/graph_capture_api.php?graph_id=${encodeURIComponent(normalizedGraphId)}`
+      );
+      if (response.ok) {
+        const parsed = parseCompanyApiText(await response.text());
+        const list = dedupeCompanyApiDetailsById(parseCompanyApiDetails(parsed));
+        console.log(`[EDIT VERIFY] Attempt ${attempt}/${attempts}:`, {
+          totalDetails: list.length,
+          hintedDetailId: hintedDetailId || '(none)',
+        });
+
+        const byXy = findCompanyDetailByVerifiedXy(list, rawXy);
+        if (byXy?.id && normalizeCompanyXyString(byXy.xy) === normalizedSentXy) {
+          return {
+            xyConfirmedOnDiscoveree: true,
+            detailId: String(byXy.id),
+            verifiedDetail: byXy,
+            attempt,
+          };
+        }
+
+        if (hintedDetailId) {
+          const byHint = list.find((detail) => String(detail?.id || '') === hintedDetailId);
+          if (byHint && normalizeCompanyXyString(byHint.xy) === normalizedSentXy) {
+            return {
+              xyConfirmedOnDiscoveree: true,
+              detailId: hintedDetailId,
+              verifiedDetail: byHint,
+              attempt,
+            };
+          }
+        }
+      }
+    } catch (error) {
+      console.warn(`[EDIT VERIFY] Attempt ${attempt}/${attempts} failed:`, error.message);
+    }
+
+    if (attempt < attempts) {
+      await new Promise((resolve) => window.setTimeout(resolve, delayMs));
+    }
+  }
+
+  return { xyConfirmedOnDiscoveree: false, detailId: '', verifiedDetail: null };
 };
 
 const fetchCompanyGraphDetailsWithRetry = async (graphId, { attempts = 4, delayMs = 750 } = {}) => {
@@ -5466,17 +5536,25 @@ const GraphCapture = () => {
     );
 
     const sentXy = normalizeCompanyXyString(detailPayload.xy);
-    const { details: verifyDetails } = await fetchCompanyGraphDetailsWithRetry(companyGraphId);
-    const verifiedDetail = findCompanyDetailByIdOrXy(verifyDetails, { xy: detailPayload.xy });
+    const {
+      xyConfirmedOnDiscoveree,
+      detailId: newDetailId,
+      verifiedDetail,
+      attempt: verifyAttempt,
+    } = await verifyEditedCurveOnDiscoveree({
+      graphId: companyGraphId,
+      sentXy,
+      rawXy: detailPayload.xy,
+      appendResult,
+    });
     const verifiedXy = normalizeCompanyXyString(verifiedDetail?.xy);
-    const xyConfirmedOnDiscoveree = Boolean(verifiedXy && sentXy && verifiedXy === sentXy);
-    const newDetailId = verifiedDetail?.id ? String(verifiedDetail.id) : '';
 
     console.log('[EDIT VERIFY]', {
       editMode: 'remove-and-resave',
       graphId: String(companyGraphId),
       removedDetailId: resolvedDetailId,
-      verifiedDetailId: newDetailId,
+      verifiedDetailId: newDetailId || '(pending)',
+      verifyAttempt: verifyAttempt || '(none)',
       sentPointCount: nextPoints.length,
       sentXyLength: sentXy.length,
       verifiedXyLength: verifiedXy.length,
@@ -5485,13 +5563,13 @@ const GraphCapture = () => {
 
     if (!xyConfirmedOnDiscoveree) {
       console.warn(
-        '[EDIT VERIFY] DiscoverEE GET did not yet return the re-saved xy; locallyModified cache will be used on refresh.'
+        '[EDIT VERIFY] DiscoverEE GET did not yet return the re-saved xy; keeping existing detail_id and locallyModified cache.'
       );
     }
 
     return {
       graphId: String(companyGraphId),
-      detailId: newDetailId,
+      detailId: xyConfirmedOnDiscoveree ? newDetailId : '',
       xyConfirmedOnDiscoveree,
     };
   };
@@ -5629,9 +5707,12 @@ const GraphCapture = () => {
 
       const saveResults = new Map();
       saveResults.set(curveId, {
-        detailId: String(editResult?.detailId || '').trim(),
+        detailId:
+          editResult?.xyConfirmedOnDiscoveree === true
+            ? String(editResult?.detailId || '').trim()
+            : '',
         points: targetPlan.points,
-        xyConfirmedOnDiscoveree: editResult?.xyConfirmedOnDiscoveree !== false,
+        xyConfirmedOnDiscoveree: editResult?.xyConfirmedOnDiscoveree === true,
       });
 
       if (hasAxisChange && savedCurvesSource === 'company') {
@@ -5651,9 +5732,12 @@ const GraphCapture = () => {
             }
           );
           saveResults.set(plan.curve.id, {
-            detailId: String(companionResult?.detailId || getDetailIdForCurve(plan.curve) || '').trim(),
+            detailId:
+              companionResult?.xyConfirmedOnDiscoveree === true
+                ? String(companionResult?.detailId || '').trim()
+                : '',
             points: plan.points,
-            xyConfirmedOnDiscoveree: companionResult?.xyConfirmedOnDiscoveree !== false,
+            xyConfirmedOnDiscoveree: companionResult?.xyConfirmedOnDiscoveree === true,
           });
         }
       }
@@ -5687,7 +5771,9 @@ const GraphCapture = () => {
           return {
             ...curve,
             ...(hasPartNumberChange ? { part_number: nextPartNumber } : {}),
-            ...(result?.detailId && graphIdForCurve
+            ...(result?.xyConfirmedOnDiscoveree === true &&
+            result?.detailId &&
+            graphIdForCurve
               ? {
                   detailId: result.detailId,
                   id: `${graphIdForCurve}_${result.detailId}`,
@@ -5725,7 +5811,7 @@ const GraphCapture = () => {
                 ? { symbolValues: { ...editCurveSymbolValues } }
                 : {}),
             updatedAt: Date.now(),
-            locallyModified: true,
+            locallyModified: isTarget || hasAxisChange ? true : Boolean(curve.locallyModified),
             userAdjustedPoints: isTarget ? true : Boolean(curve.userAdjustedPoints),
           };
         });
