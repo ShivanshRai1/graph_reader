@@ -567,6 +567,46 @@ const normalizeSessionIdentifier = (rawValue) => {
   return value;
 };
 
+/** Pick the identifier for a specific graph_id — never reuse another graph's session identifier. */
+const resolveIdentifierForGraph = ({
+  graphId = '',
+  curve = null,
+  savedCurves = [],
+  urlParams = {},
+  sessionGraphId = '',
+  sessionIdentifier = '',
+} = {}) => {
+  const targetGraphId = String(graphId || '').trim();
+  if (!targetGraphId) {
+    return normalizeSessionIdentifier(curve?.identifier || urlParams?.identifier || '');
+  }
+
+  const curveGraphId = String(curve?.graphId || '').trim();
+  if (curveGraphId === targetGraphId) {
+    const fromCurve = normalizeSessionIdentifier(curve?.identifier);
+    if (fromCurve) return fromCurve;
+  }
+
+  const curveList = Array.isArray(savedCurves) ? savedCurves : [];
+  for (const savedCurve of curveList) {
+    if (String(savedCurve?.graphId || '').trim() !== targetGraphId) continue;
+    const fromSaved = normalizeSessionIdentifier(savedCurve?.identifier);
+    if (fromSaved) return fromSaved;
+  }
+
+  if (String(urlParams?.graph_id || '').trim() === targetGraphId) {
+    const fromUrl = normalizeSessionIdentifier(urlParams?.identifier);
+    if (fromUrl) return fromUrl;
+  }
+
+  if (String(sessionGraphId || '').trim() === targetGraphId) {
+    const fromSession = normalizeSessionIdentifier(sessionIdentifier);
+    if (fromSession) return fromSession;
+  }
+
+  return '';
+};
+
 const UNIT_PREFIX_SYMBOL_MAP = {
   '1e-12': 'p',
   '1e-9': 'n',
@@ -4900,6 +4940,9 @@ const GraphCapture = () => {
 
     const nextGraphId = String(graphId);
     const previousGraphId = String(activeSessionGraphIdRef.current || '');
+    if (previousGraphId && previousGraphId !== nextGraphId) {
+      activeSessionIdentifierRef.current = '';
+    }
     hasActiveAppendSessionRef.current = true;
     activeSessionGraphIdRef.current = nextGraphId;
     activeSessionImageKeyRef.current = String(
@@ -5016,7 +5059,12 @@ const GraphCapture = () => {
       return;
     }
     const nextId = String(nextGraphId);
-    const normalizedIdentifier = normalizeSessionIdentifier(nextIdentifier || activeSessionIdentifierRef.current || '');
+    const previousGraphId = String(activeSessionGraphIdRef.current || '');
+    const sessionIdentifierForSameGraph =
+      previousGraphId && previousGraphId === nextId ? activeSessionIdentifierRef.current : '';
+    const normalizedIdentifier = normalizeSessionIdentifier(
+      nextIdentifier || sessionIdentifierForSameGraph || ''
+    );
     // console.log('[GRAPH SESSION] syncGraphIdContext', {
     //   nextGraphId: nextId,
     //   nextIdentifier: normalizedIdentifier || '(none)',
@@ -5027,7 +5075,11 @@ const GraphCapture = () => {
     if (normalizedIdentifier) {
       activeSessionIdentifierRef.current = normalizedIdentifier;
     }
-    setUrlParams((prev) => ({ ...prev, graph_id: nextId, identifier: normalizedIdentifier || prev.identifier || '' }));
+    setUrlParams((prev) => ({
+      ...prev,
+      graph_id: nextId,
+      identifier: normalizedIdentifier || (String(prev.graph_id || '') === nextId ? prev.identifier : '') || '',
+    }));
     setReturnGraphId(nextId);
 
     const currentUrl = new URL(window.location.href);
@@ -5311,12 +5363,14 @@ const GraphCapture = () => {
           yUnitPrefix: nextMeta.yUnitPrefix || currentMeta.yUnitPrefix || '1',
         }
       : { ...currentMeta };
-    const resolvedEditIdentifier = normalizeSessionIdentifier(
-      activeSessionIdentifierRef.current ||
-      curve?.identifier ||
-      urlParams.identifier ||
-      ''
-    );
+    const resolvedEditIdentifier = resolveIdentifierForGraph({
+      graphId: companyGraphId,
+      curve,
+      savedCurves,
+      urlParams,
+      sessionGraphId: activeSessionGraphIdRef.current,
+      sessionIdentifier: activeSessionIdentifierRef.current,
+    });
     const resolvedDetailId = getDetailIdForCurve(curve);
     if (!resolvedDetailId) {
       throw new Error('Missing DiscoverEE detail id for update. Refresh the graph and try again.');
@@ -5604,7 +5658,18 @@ const GraphCapture = () => {
         }
       }
 
-      syncGraphIdContext(targetCurve.graphId || getGraphIdForCurve(targetCurve));
+      const syncedGraphId = targetCurve.graphId || getGraphIdForCurve(targetCurve);
+      syncGraphIdContext(
+        syncedGraphId,
+        resolveIdentifierForGraph({
+          graphId: syncedGraphId,
+          curve: targetCurve,
+          savedCurves,
+          urlParams,
+          sessionGraphId: activeSessionGraphIdRef.current,
+          sessionIdentifier: activeSessionIdentifierRef.current,
+        })
+      );
 
       setSavedCurves((prev) => {
         const updated = prev.map((curve) => {
@@ -6304,7 +6369,13 @@ const GraphCapture = () => {
                 curvesToUse,
                 restoredBundle.source
               );
-              activateAppendSession(discovereeGraph.graph_id, graphImageUrl || quickImage, 'fetchGraphById');
+              activateAppendSession(resolvedGraphIdForCurves, graphImageUrl || quickImage, 'fetchGraphById');
+              syncGraphIdContext(
+                resolvedGraphIdForCurves,
+                normalizeSessionIdentifier(
+                  discovereeGraph.identifier || curvesToUse[0]?.identifier || ''
+                )
+              );
 
               if (graphImageUrl || quickImage) {
                 setUploadedImageFromExistingGraph(graphImageUrl || quickImage);
@@ -7133,7 +7204,16 @@ const GraphCapture = () => {
       // Use the stored session identifier (from original create-new save) to avoid API creating a new graph.
       // Falls back to URL identifier param, then to stored identifier from response.
       // CRITICAL: Never use graph_id as identifier fallback - this causes Company API to create new graphs!
-      const appendIdentifier = normalizeSessionIdentifier(activeSessionIdentifierRef.current || existingGraphIdentifier || '');
+      const appendIdentifier = resolveIdentifierForGraph({
+        graphId: existingGraphId,
+        curve: savedCurves.find(
+          (savedCurve) => String(savedCurve?.graphId || '').trim() === String(existingGraphId).trim()
+        ),
+        savedCurves,
+        urlParams,
+        sessionGraphId: activeSessionGraphIdRef.current,
+        sessionIdentifier: activeSessionIdentifierRef.current,
+      }) || existingGraphIdentifier;
 
       console.log('=== GRAPH SESSION STATE BEFORE SAVE ===', {
         sessionActive: hasActiveAppendSessionRef.current,
