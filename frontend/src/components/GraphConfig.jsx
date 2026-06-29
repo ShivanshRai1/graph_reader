@@ -5,8 +5,11 @@ import {
   detectQuantityUnitGuidance,
   getAxisUnitMismatchWarning,
   getAxisScaleMismatchWarning,
+  getAxisUnitRecommendations,
+  getUnitPrefixLabel,
   SCALE_AND_UNIT_CROSS_CHECK_MESSAGE,
   getGraphPatternGuidance,
+  UNIT_PREFIX_SELECT_OPTIONS,
 } from '../utils/quantityUnitGuidance';
 import { fetchHistoricalScaleSuggestion } from '../utils/graphScaleHistory';
 
@@ -87,6 +90,26 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
         yTitle: graphConfig.yLabel,
       }),
     [graphConfig.graphTitle, graphConfig.xLabel, graphConfig.yLabel]
+  );
+
+  const yAxisUnitRecommendations = useMemo(
+    () =>
+      getAxisUnitRecommendations('y', {
+        xTitle: graphConfig.xLabel,
+        yTitle: graphConfig.yLabel,
+        graphTitle: graphConfig.graphTitle,
+      }),
+    [graphConfig.xLabel, graphConfig.yLabel, graphConfig.graphTitle]
+  );
+
+  const xAxisUnitRecommendations = useMemo(
+    () =>
+      getAxisUnitRecommendations('x', {
+        xTitle: graphConfig.xLabel,
+        yTitle: graphConfig.yLabel,
+        graphTitle: graphConfig.graphTitle,
+      }),
+    [graphConfig.xLabel, graphConfig.yLabel, graphConfig.graphTitle]
   );
 
   const yAxisUnitWarning = useMemo(
@@ -247,19 +270,66 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
     return Math.round(exp * Math.pow(10, decimals)) / Math.pow(10, decimals);
   };
 
-  const getUnitLabel = (value) => {
-    const unitLabels = {
-      '1e-12': 'pico (1e-12)',
-      '1e-9': 'nano (1e-9)',
-      '1e-6': 'micro (1e-6)',
-      '1e-3': 'milli (1e-3)',
-      '1': '1',
-      '1e3': 'kilo (1e3)',
-      '1e6': 'mega (1e6)',
-      '1e9': 'giga (1e9)',
-      '1e12': 'tera (1e12)',
-    };
-    return unitLabels[value] || value || '-';
+  const getUnitLabel = (value) => getUnitPrefixLabel(value);
+
+  const formatUnitOptionLabel = (option, { primaryPrefix, recommendedPrefixes }) => {
+    if (!option.value) return option.label;
+    if (primaryPrefix && option.value === primaryPrefix) {
+      return `${option.label} — recommended`;
+    }
+    if (recommendedPrefixes.includes(option.value)) {
+      return `${option.label} — suggested`;
+    }
+    return option.label;
+  };
+
+  const renderUnitSelect = (name, value, recommendations) => {
+    const { primaryPrefix, recommendedPrefixes } = recommendations;
+    const hasRecommendations = recommendedPrefixes.length > 0;
+
+    return (
+      <label className="block mb-3">
+        <span className="block text-sm font-medium text-gray-800 mb-1">Unit:</span>
+        <select
+          name={name}
+          value={value}
+          onChange={handleChange}
+          disabled={isAxisMappingConfirmed || isEditingCurve}
+          className={`w-full px-3 py-2 border rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed ${
+            hasRecommendations ? 'border-amber-400' : 'border-gray-300'
+          }`}
+        >
+          <option value="">-select-</option>
+          {UNIT_PREFIX_SELECT_OPTIONS.map((option) => {
+            const isPrimary = primaryPrefix && option.value === primaryPrefix;
+            const isSuggested = recommendedPrefixes.includes(option.value);
+            return (
+              <option
+                key={option.value}
+                value={option.value}
+                style={
+                  isPrimary
+                    ? { fontWeight: 'bold', backgroundColor: '#fef3c7' }
+                    : isSuggested
+                      ? { backgroundColor: '#fffbeb' }
+                      : undefined
+                }
+              >
+                {formatUnitOptionLabel(option, { primaryPrefix, recommendedPrefixes })}
+              </option>
+            );
+          })}
+        </select>
+        {primaryPrefix ? (
+          <p className="mt-1 text-xs text-amber-800">
+            Recommended: <span className="font-semibold">{getUnitPrefixLabel(primaryPrefix)}</span>
+            {recommendedPrefixes.length > 1
+              ? ' (other suggested options are marked in the list)'
+              : ''}
+          </p>
+        ) : null}
+      </label>
+    );
   };
 
   // Helper function to format actual values (avoid unnecessary trailing zeros)
@@ -683,21 +753,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
               <option value="Logarithmic">Logarithmic</option>
             </select>
           </label>
-          <label className="block mb-3">
-            <span className="block text-sm font-medium text-gray-800 mb-1">Unit:</span>
-            <select name="yUnitPrefix" value={graphConfig.yUnitPrefix} onChange={handleChange} disabled={isAxisMappingConfirmed || isEditingCurve} className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed">
-              <option value="">-select-</option>
-              <option value="1e-12">pico (p) = 1e-12</option>
-              <option value="1e-9">nano (n) = 1e-9</option>
-              <option value="1e-6">micro (μ) = 1e-6</option>
-              <option value="1e-3">milli (m) = 1e-3</option>
-              <option value="1">1</option>
-              <option value="1e3">Kilo (k) = 1e3</option>
-              <option value="1e6">Mega (M) = 1e6</option>
-              <option value="1e9">Giga (G) = 1e9</option>
-              <option value="1e12">Tera (T) = 1e12</option>
-            </select>
-          </label>
+          {renderUnitSelect('yUnitPrefix', graphConfig.yUnitPrefix, yAxisUnitRecommendations)}
           
           <div className="block mb-3 p-2 bg-blue-50 border border-blue-300 rounded text-xs text-blue-700" style={{ visibility: graphConfig.yScale === 'Logarithmic' ? 'visible' : 'hidden' }}>
             Enter either exponent or number value
@@ -746,21 +802,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
               <option value="Logarithmic">Logarithmic</option>
             </select>
           </label>
-          <label className="block mb-3">
-            <span className="block text-sm font-medium text-gray-800 mb-1">Unit:</span>
-            <select name="xUnitPrefix" value={graphConfig.xUnitPrefix} onChange={handleChange} disabled={isAxisMappingConfirmed || isEditingCurve} className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed">
-              <option value="">-select-</option>
-              <option value="1e-12">pico (p) = 1e-12</option>
-              <option value="1e-9">nano (n) = 1e-9</option>
-              <option value="1e-6">micro (μ) = 1e-6</option>
-              <option value="1e-3">milli (m) = 1e-3</option>
-              <option value="1">1</option>
-              <option value="1e3">Kilo (k) = 1e3</option>
-              <option value="1e6">Mega (M) = 1e6</option>
-              <option value="1e9">Giga (G) = 1e9</option>
-              <option value="1e12">Tera (T) = 1e12</option>
-            </select>
-          </label>
+          {renderUnitSelect('xUnitPrefix', graphConfig.xUnitPrefix, xAxisUnitRecommendations)}
           
           <div className="block mb-3 p-2 bg-blue-50 border border-blue-300 rounded text-xs text-blue-700" style={{ visibility: graphConfig.xScale === 'Logarithmic' ? 'visible' : 'hidden' }}>
             Enter either exponent or number value

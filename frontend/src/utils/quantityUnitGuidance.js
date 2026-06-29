@@ -273,6 +273,56 @@ const titleSuggestsLogScale = (text) => {
   return false;
 };
 
+export const UNIT_PREFIX_SELECT_OPTIONS = [
+  { value: '1e-12', label: 'pico (p) = 1e-12' },
+  { value: '1e-9', label: 'nano (n) = 1e-9' },
+  { value: '1e-6', label: 'micro (μ) = 1e-6' },
+  { value: '1e-3', label: 'milli (m) = 1e-3' },
+  { value: '1', label: '1' },
+  { value: '1e3', label: 'Kilo (k) = 1e3' },
+  { value: '1e6', label: 'Mega (M) = 1e6' },
+  { value: '1e9', label: 'Giga (G) = 1e9' },
+  { value: '1e12', label: 'Tera (T) = 1e12' },
+];
+
+export const getUnitPrefixLabel = (prefix) => {
+  const match = UNIT_PREFIX_SELECT_OPTIONS.find((option) => option.value === String(prefix ?? '').trim());
+  return match?.label || String(prefix || '').trim() || '-';
+};
+
+export const getAxisUnitRecommendations = (
+  axis,
+  { xTitle = '', yTitle = '', graphTitle = '' } = {}
+) => {
+  const axisTitle = axis === 'x' ? normalizeGuidanceText(xTitle) : normalizeGuidanceText(yTitle);
+  const titleText = resolveAxisTitleText(axis, { xTitle, yTitle, graphTitle });
+  if (!titleText && !axisTitle) {
+    return { primaryPrefix: null, recommendedPrefixes: [] };
+  }
+
+  const primaryPrefix = inferSuggestedUnitPrefixForAxis(axis, { xTitle, yTitle, graphTitle });
+  const bracketPrefixes = extractBracketUnitPrefixes(axisTitle || titleText);
+  const ruleAllowed = collectAllowedPrefixesForTitle(titleText);
+
+  let recommendedPrefixes = [];
+  if (bracketPrefixes.length > 0) {
+    recommendedPrefixes =
+      ruleAllowed.length > 0
+        ? ruleAllowed.filter((prefix) => bracketPrefixes.includes(prefix))
+        : bracketPrefixes;
+    if (recommendedPrefixes.length === 0) {
+      recommendedPrefixes = bracketPrefixes;
+    }
+  } else if (ruleAllowed.length > 0) {
+    recommendedPrefixes = ruleAllowed;
+  }
+
+  return {
+    primaryPrefix,
+    recommendedPrefixes,
+  };
+};
+
 const inferSuggestedScaleForAxis = (axis, { xTitle = '', yTitle = '', graphTitle = '' } = {}) => {
   const axisTitle = axis === 'x' ? normalizeGuidanceText(xTitle) : normalizeGuidanceText(yTitle);
   if (titleSuggestsLogScale(axisTitle)) return 'Logarithmic';
