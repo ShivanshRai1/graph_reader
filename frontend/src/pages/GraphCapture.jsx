@@ -567,6 +567,49 @@ const normalizeSessionIdentifier = (rawValue) => {
   return value;
 };
 
+const GRAPH_STABLE_IDENTIFIER_PREFIX = 'usergraph_gid_';
+
+const getPersistedStableGraphIdentifier = (graphId) => {
+  const normalizedGraphId = String(graphId || '').trim();
+  if (!normalizedGraphId) return '';
+  try {
+    return normalizeSessionIdentifier(localStorage.getItem(`graph_stable_identifier_${normalizedGraphId}`));
+  } catch {
+    return '';
+  }
+};
+
+const persistStableGraphIdentifier = (graphId, identifier) => {
+  const normalizedGraphId = String(graphId || '').trim();
+  const normalizedIdentifier = normalizeSessionIdentifier(identifier);
+  if (!normalizedGraphId || !normalizedIdentifier) return normalizedIdentifier;
+  try {
+    localStorage.setItem(`graph_stable_identifier_${normalizedGraphId}`, normalizedIdentifier);
+  } catch (error) {
+    console.warn('[GRAPH SESSION] Failed to persist stable identifier:', error);
+  }
+  return normalizedIdentifier;
+};
+
+/** DiscoverEE often returns identifier "0" — generate a stable per-graph_id identifier for append/edit. */
+const ensureStableGraphIdentifier = (graphId, preferredIdentifier = '') => {
+  const normalizedGraphId = String(graphId || '').trim();
+  if (!normalizedGraphId) return '';
+
+  const fromPreferred = normalizeSessionIdentifier(preferredIdentifier);
+  if (fromPreferred) {
+    return persistStableGraphIdentifier(normalizedGraphId, fromPreferred);
+  }
+
+  const persisted = getPersistedStableGraphIdentifier(normalizedGraphId);
+  if (persisted) return persisted;
+
+  return persistStableGraphIdentifier(
+    normalizedGraphId,
+    `${GRAPH_STABLE_IDENTIFIER_PREFIX}${normalizedGraphId}`
+  );
+};
+
 /** Pick the identifier for a specific graph_id — never reuse another graph's session identifier. */
 const resolveIdentifierForGraph = ({
   graphId = '',
@@ -604,7 +647,7 @@ const resolveIdentifierForGraph = ({
     if (fromSession) return fromSession;
   }
 
-  return '';
+  return ensureStableGraphIdentifier(targetGraphId);
 };
 
 const UNIT_PREFIX_SYMBOL_MAP = {
@@ -5132,7 +5175,8 @@ const GraphCapture = () => {
     const previousGraphId = String(activeSessionGraphIdRef.current || '');
     const sessionIdentifierForSameGraph =
       previousGraphId && previousGraphId === nextId ? activeSessionIdentifierRef.current : '';
-    const normalizedIdentifier = normalizeSessionIdentifier(
+    const normalizedIdentifier = ensureStableGraphIdentifier(
+      nextId,
       nextIdentifier || sessionIdentifierForSameGraph || ''
     );
     // console.log('[GRAPH SESSION] syncGraphIdContext', {
@@ -5433,14 +5477,17 @@ const GraphCapture = () => {
           yUnitPrefix: nextMeta.yUnitPrefix || currentMeta.yUnitPrefix || '1',
         }
       : { ...currentMeta };
-    const resolvedEditIdentifier = resolveIdentifierForGraph({
-      graphId: companyGraphId,
-      curve,
-      savedCurves,
-      urlParams,
-      sessionGraphId: activeSessionGraphIdRef.current,
-      sessionIdentifier: activeSessionIdentifierRef.current,
-    });
+    const resolvedEditIdentifier = ensureStableGraphIdentifier(
+      companyGraphId,
+      resolveIdentifierForGraph({
+        graphId: companyGraphId,
+        curve,
+        savedCurves,
+        urlParams,
+        sessionGraphId: activeSessionGraphIdRef.current,
+        sessionIdentifier: activeSessionIdentifierRef.current,
+      })
+    );
     const resolvedDetailId = getDetailIdForCurve(curve);
     if (!resolvedDetailId) {
       throw new Error('Missing DiscoverEE detail id for update. Refresh the graph and try again.');
@@ -5519,6 +5566,12 @@ const GraphCapture = () => {
     }
 
     const returnedGraphId = appendResult?.result?.graph_id ? String(appendResult.result.graph_id) : '';
+    if (returnedGraphId && returnedGraphId !== String(companyGraphId)) {
+      throw new Error(
+        `Re-save was written to graph ${returnedGraphId} instead of ${companyGraphId}. ` +
+        'The edited curve was removed from the current graph. Check the other graph on DiscoverEE or re-capture this curve.'
+      );
+    }
     console.log('=== GRAPH ID CONSISTENCY CHECK (EDIT) ===', {
       editMode: 'remove-and-resave',
       expectedGraphId: String(companyGraphId),
@@ -6394,7 +6447,10 @@ const GraphCapture = () => {
                 id: `${discovereeGraph.graph_id}_${detail.id || i}`,
                 detailId: detail.id ? String(detail.id) : '',
                 graphId: String(discovereeGraph.graph_id || ''),
-                identifier: String(discovereeGraph.identifier || ''),
+                identifier: ensureStableGraphIdentifier(
+                  String(discovereeGraph.graph_id || ''),
+                  discovereeGraph.identifier || ''
+                ),
                 part_number: resolvedPartNumber,
                 discoveree_cat_id: String(
                   discovereeGraph.discoveree_cat_id ||
@@ -6458,7 +6514,8 @@ const GraphCapture = () => {
               activateAppendSession(resolvedGraphIdForCurves, graphImageUrl || quickImage, 'fetchGraphById');
               syncGraphIdContext(
                 resolvedGraphIdForCurves,
-                normalizeSessionIdentifier(
+                ensureStableGraphIdentifier(
+                  resolvedGraphIdForCurves,
                   discovereeGraph.identifier || curvesToUse[0]?.identifier || ''
                 )
               );
@@ -7480,6 +7537,7 @@ const GraphCapture = () => {
       // Store the identifier used for this create-new save so subsequent appends use the same one.
       if (companyGraphId && resolvedOutgoingIdentifier) {
         activeSessionIdentifierRef.current = resolvedOutgoingIdentifier;
+        persistStableGraphIdentifier(companyGraphId, resolvedOutgoingIdentifier);
       }
       if (companyGraphId) {
         if (uploadedImage && isEmbeddedGraphImage(uploadedImage)) {
