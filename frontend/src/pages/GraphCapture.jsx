@@ -1984,6 +1984,51 @@ const verifyEditedCurveOnDiscoveree = async ({
   return { xyConfirmedOnDiscoveree: false, detailId: '', verifiedDetail: null };
 };
 
+const verifyCompanyDetailRemovedFromDiscoveree = async ({
+  graphId,
+  detailId,
+  attempts = 6,
+  delayMs = 750,
+} = {}) => {
+  const normalizedGraphId = String(graphId || '').trim();
+  const normalizedDetailId = String(detailId || '').trim();
+  if (!normalizedGraphId || !normalizedDetailId) {
+    return { removed: false, attempt: 0 };
+  }
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const response = await fetch(
+        `https://www.discoveree.io/graph_capture_api.php?graph_id=${encodeURIComponent(normalizedGraphId)}`
+      );
+      if (response.ok) {
+        const parsed = parseCompanyApiText(await response.text());
+        const list = dedupeCompanyApiDetailsById(parseCompanyApiDetails(parsed));
+        const stillPresent = list.some(
+          (detail) => String(detail?.id || '').trim() === normalizedDetailId
+        );
+        console.log(`[EDIT REMOVE VERIFY] Attempt ${attempt}/${attempts}:`, {
+          graphId: normalizedGraphId,
+          detailId: normalizedDetailId,
+          stillPresent,
+          totalDetails: list.length,
+        });
+        if (!stillPresent) {
+          return { removed: true, attempt };
+        }
+      }
+    } catch (error) {
+      console.warn(`[EDIT REMOVE VERIFY] Attempt ${attempt}/${attempts} failed:`, error.message);
+    }
+
+    if (attempt < attempts) {
+      await new Promise((resolve) => window.setTimeout(resolve, delayMs));
+    }
+  }
+
+  return { removed: false, attempt: attempts };
+};
+
 const fetchCompanyGraphDetailsWithRetry = async (graphId, { attempts = 4, delayMs = 750 } = {}) => {
   const normalizedGraphId = String(graphId || '').trim();
   if (!normalizedGraphId) {
@@ -5543,24 +5588,34 @@ const GraphCapture = () => {
       axisConfig: resolvedEditAxis,
     });
 
+    const curvesOnSameGraph = savedCurves.filter(
+      (savedCurve) => String(getGraphIdForCurve(savedCurve) || '').trim() === String(companyGraphId).trim()
+    );
+    const isMultiCurveGraph = curvesOnSameGraph.length > 1;
+    const editGraphPayload = {
+      graph_id: String(companyGraphId),
+      discoveree_cat_id: String(curve?.discoveree_cat_id || urlParams.discoveree_cat_id || ''),
+      identifier: resolvedEditIdentifier,
+      partno: nextPartNumber,
+      manf: urlParams.manf || urlParams.manufacturer || graphConfig.manufacturer || '',
+      manufacturer: urlParams.manufacturer || graphConfig.manufacturer || '',
+      graph_title: graphConfig.graphTitle || urlParams.graph_title || curve.config?.graphTitle || '',
+      x_title: graphConfig.xLabel || urlParams.x_label || curve.config?.xLabel || '',
+      y_title: graphConfig.yLabel || urlParams.y_label || curve.config?.yLabel || '',
+      ...(resolvedGraphImageForEdit ? { graph_img: resolvedGraphImageForEdit } : {}),
+      mark_review: '1',
+      testuser_id: String(curve?.testuser_id || urlParams.testuser_id || ''),
+      uname: urlParams.username || graphConfig.username || '',
+      username: urlParams.username || graphConfig.username || '',
+    };
+    // Per-curve renames belong in details[0].curve_title only. On multi-curve graphs,
+    // omit graph-level curve_title so DiscoverEE does not treat the edit as a new graph.
+    if (!isMultiCurveGraph) {
+      editGraphPayload.curve_title = resolvedNewCurveName;
+    }
+
     const appendPayload = {
-      graph: {
-        graph_id: String(companyGraphId),
-        discoveree_cat_id: String(curve?.discoveree_cat_id || urlParams.discoveree_cat_id || ''),
-        identifier: resolvedEditIdentifier,
-        partno: nextPartNumber,
-        manf: urlParams.manf || urlParams.manufacturer || graphConfig.manufacturer || '',
-        manufacturer: urlParams.manufacturer || graphConfig.manufacturer || '',
-        graph_title: graphConfig.graphTitle || urlParams.graph_title || curve.config?.graphTitle || '',
-        curve_title: resolvedNewCurveName,
-        x_title: graphConfig.xLabel || urlParams.x_label || curve.config?.xLabel || '',
-        y_title: graphConfig.yLabel || urlParams.y_label || curve.config?.yLabel || '',
-        ...(resolvedGraphImageForEdit ? { graph_img: resolvedGraphImageForEdit } : {}),
-        mark_review: '1',
-        testuser_id: String(curve?.testuser_id || urlParams.testuser_id || ''),
-        uname: urlParams.username || graphConfig.username || '',
-        username: urlParams.username || graphConfig.username || '',
-      },
+      graph: editGraphPayload,
       details: [detailPayload],
     };
     Object.entries(getGraphDynamicFieldValues(nextSymbolPayload)).forEach(([key, value]) => {
@@ -5583,6 +5638,21 @@ const GraphCapture = () => {
           testuserId: String(curve?.testuser_id || urlParams.testuser_id || ''),
           corsFallback: triggerGetWithoutCors,
         });
+
+        const { removed, attempt: removeVerifyAttempt } = await verifyCompanyDetailRemovedFromDiscoveree({
+          graphId: companyGraphId,
+          detailId: detailIdToRemove,
+        });
+        if (!removed) {
+          throw new Error(
+            'DiscoverEE did not confirm removal of the old curve. Update was cancelled to avoid duplicate curves. Refresh the page and try again.'
+          );
+        }
+        console.log('=== EDIT REMOVE VERIFIED ===', {
+          graphId: companyGraphId,
+          detailId: detailIdToRemove,
+          removeVerifyAttempt,
+        });
       }
     } catch (removeError) {
       throw new Error(`Failed to remove old curve before save: ${removeError.message}`);
@@ -5591,6 +5661,8 @@ const GraphCapture = () => {
     console.log('=== EDIT REMOVE-AND-RESAVE ===', {
       step: 'append-save',
       graphId: companyGraphId,
+      isMultiCurveGraph,
+      graphLevelCurveTitleOmitted: isMultiCurveGraph,
     });
     let appendResult;
     try {
@@ -5956,7 +6028,11 @@ const GraphCapture = () => {
               const missing = apiDetails.filter(
                 (detail) => detail?.id && !knownDetailIds.has(String(detail.id))
               );
-              if (missing.length === 0 && prunedOnGraph.length === onGraph.length) {
+              if (
+                missing.length === 0 &&
+                prunedOnGraph.length === onGraph.length &&
+                prunedOnGraph.length === apiDetails.length
+              ) {
                 return prev;
               }
 
@@ -5966,6 +6042,23 @@ const GraphCapture = () => {
                 onGraph[0]?.graph_img ||
                 uploadedImage ||
                 '';
+              const syncedOnGraph = prunedOnGraph.map((curve) => {
+                const detailId = String(getDetailIdForCurve(curve) || '').trim();
+                const apiDetail = apiDetails.find(
+                  (detail) => String(detail?.id || '').trim() === detailId
+                );
+                if (!apiDetail?.curve_title) {
+                  return curve;
+                }
+                return {
+                  ...curve,
+                  name: apiDetail.curve_title,
+                  config: {
+                    ...(curve.config || {}),
+                    curveName: apiDetail.curve_title,
+                  },
+                };
+              });
               const missingCurves = missing.map((detail, i) => {
                 const rawPoints = parseXyString(detail.xy);
                 return {
@@ -5982,7 +6075,7 @@ const GraphCapture = () => {
                 };
               });
 
-              const nextOnGraph = dedupeCurves([...prunedOnGraph, ...missingCurves]);
+              const nextOnGraph = dedupeCurves([...syncedOnGraph, ...missingCurves]);
               const next = dedupeCurves([...offGraph, ...nextOnGraph]);
               const curvesForGraph = next.filter(
                 (curve) => String(curve.graphId || getGraphIdForCurve(curve) || '') === graphIdKey
