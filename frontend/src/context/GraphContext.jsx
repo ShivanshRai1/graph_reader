@@ -84,8 +84,8 @@ export const canvasToGraphWithBounds = (canvasX, canvasY, graphArea, graphConfig
   }
 
   const { xMin, xMax, yMin, yMax } = getAxisBoundsFromConfig(graphConfig);
-  const xRatio = (canvasX - graphArea.x) / graphArea.width;
-  const yRatio = (canvasY - graphArea.y) / graphArea.height;
+  const xRatio = Math.min(1, Math.max(0, (canvasX - graphArea.x) / graphArea.width));
+  const yRatio = Math.min(1, Math.max(0, (canvasY - graphArea.y) / graphArea.height));
 
   let graphX;
   if (graphConfig.xScale === 'Logarithmic') {
