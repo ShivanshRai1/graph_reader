@@ -6842,6 +6842,7 @@ const GraphCapture = () => {
     const searchParams = new URLSearchParams(window.location.search);
     const graphId = String(searchParams.get('graph_id') || activeSessionGraphIdRef.current || '').trim();
     if (!graphId || graphArea.width <= 0 || graphArea.height <= 0) return;
+    const mappingArea = getMappingArea();
     persistGraphContext(
       graphId,
       graphArea,
@@ -6849,6 +6850,7 @@ const GraphCapture = () => {
       {
         persistAxis: isAxisMappingConfirmed || hasValidAxisMapping(graphConfig),
         plotReferenceLocked: isAxisMappingConfirmed,
+        plotReferenceArea: mappingArea.width > 0 ? mappingArea : graphArea,
       }
     );
   }, [
@@ -6856,6 +6858,10 @@ const GraphCapture = () => {
     graphArea.y,
     graphArea.width,
     graphArea.height,
+    plotReferenceArea.x,
+    plotReferenceArea.y,
+    plotReferenceArea.width,
+    plotReferenceArea.height,
     isAxisMappingConfirmed,
     graphConfig.xMin,
     graphConfig.xMax,
@@ -8147,8 +8153,10 @@ const GraphCapture = () => {
                   setShowCaptureAnotherGuidance(false);
                   const graphId = String(urlParams.graph_id || activeSessionGraphIdRef.current || '').trim();
                   if (graphId && graphArea.width > 0 && graphArea.height > 0) {
+                    const mappingArea = getMappingArea();
                     persistGraphContext(graphId, graphArea, graphConfig, {
-                      plotReferenceArea: graphArea,
+                      plotReferenceArea:
+                        mappingArea.width > 0 ? mappingArea : graphArea,
                       plotReferenceLocked: true,
                     });
                     setSavedCurves((prev) => {

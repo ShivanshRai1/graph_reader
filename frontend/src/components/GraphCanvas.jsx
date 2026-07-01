@@ -7,7 +7,7 @@ import {
 } from '../utils/quantityUnitGuidance';
 
 const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', isAxisMappingConfirmed = false, hasReturnUrl = false, isEditingCurve = false, editingCurveOverlayId = '', savedCurveViewActive = false, hasAiSavedCurves = false, showAiCaptureGuidance = false, useInsetDefaultAxisBox = false, onGraphAreaManuallyAdjusted }) => {
-  const { uploadedImage, graphArea, setGraphArea, plotReferenceArea, isPlotReferenceLocked, getMappingArea, dataPoints, addDataPoint, clearDataPoints, graphConfig, deleteDataPoint, convertGraphToCanvasCoordinates, convertCanvasToGraphCoordinates, replaceDataPoints, updateDataPointFromCanvas } = useGraph();
+  const { uploadedImage, graphArea, setGraphArea, setCaptureGraphArea, plotReferenceArea, isPlotReferenceLocked, getMappingArea, dataPoints, addDataPoint, clearDataPoints, graphConfig, deleteDataPoint, convertGraphToCanvasCoordinates, convertCanvasToGraphCoordinates, replaceDataPoints, updateDataPointFromCanvas } = useGraph();
   const [showRedrawMsg, setShowRedrawMsg] = useState(false);
   const canvasRef = useRef(null);
   const magnifierRef = useRef(null);
@@ -942,7 +942,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
         canvasH
       );
 
-      setGraphArea(constrained);
+      setCaptureGraphArea(constrained);
       return;
     }
 
@@ -971,7 +971,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
         height,
       });
       const constrained = constrainAreaToMargin(normalized, canvas.width, canvas.height);
-      setGraphArea(constrained);
+      setCaptureGraphArea(constrained);
     }
   };
 
@@ -989,7 +989,13 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
         justFinishedResizingRef.current = false;
       }, 100);
     } else if (isDrawingBox) {
-      lastUserBoxRef.current = { ...graphArea };
+      const finalizedArea = normalizeArea(graphAreaRef.current);
+      if (finalizedArea.width > 0 && finalizedArea.height > 0) {
+        setGraphArea(finalizedArea);
+        lastUserBoxRef.current = finalizedArea;
+      } else {
+        lastUserBoxRef.current = { ...graphArea };
+      }
       setBoxTransparent(true);
       onGraphAreaManuallyAdjusted?.();
     }

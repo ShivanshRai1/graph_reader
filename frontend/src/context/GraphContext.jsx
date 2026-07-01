@@ -108,6 +108,18 @@ export const canvasToGraphWithBounds = (canvasX, canvasY, graphArea, graphConfig
   return { x: graphX, y: graphY };
 };
 
+const unionGraphAreas = (baseArea, nextArea) => {
+  const base = baseArea && baseArea.width > 0 && baseArea.height > 0 ? baseArea : null;
+  const next = nextArea && nextArea.width > 0 && nextArea.height > 0 ? nextArea : null;
+  if (!base) return next ? { ...next } : { x: 0, y: 0, width: 0, height: 0 };
+  if (!next) return { ...base };
+  const minX = Math.min(base.x, next.x);
+  const minY = Math.min(base.y, next.y);
+  const maxX = Math.max(base.x + base.width, next.x + next.width);
+  const maxY = Math.max(base.y + base.height, next.y + next.height);
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+};
+
 export const useGraph = () => {
   const context = useContext(GraphContext);
   if (!context) {
@@ -160,36 +172,48 @@ export const GraphProvider = ({ children }) => {
   const isPlotReferenceLockedRef = useRef(false);
 
   const getMappingArea = useCallback(() => {
-    if (
-      isPlotReferenceLockedRef.current &&
-      plotReferenceArea.width > 0 &&
-      plotReferenceArea.height > 0
-    ) {
+    if (plotReferenceArea.width > 0 && plotReferenceArea.height > 0) {
       return plotReferenceArea;
     }
     if (graphArea.width > 0 && graphArea.height > 0) {
       return graphArea;
     }
-    return plotReferenceArea.width > 0 ? plotReferenceArea : graphArea;
+    return graphArea;
   }, [graphArea, plotReferenceArea]);
+
+  const setCaptureGraphArea = useCallback((value) => {
+    setGraphAreaState((prev) => {
+      const next = typeof value === 'function' ? value(prev) : value;
+      if (!isPlotReferenceLockedRef.current) {
+        setPlotReferenceArea((prevPlot) => unionGraphAreas(prevPlot, next));
+      }
+      return next;
+    });
+  }, []);
 
   const setGraphArea = useCallback((value) => {
     setGraphAreaState((prev) => {
       const next = typeof value === 'function' ? value(prev) : value;
       if (!isPlotReferenceLockedRef.current) {
-        setPlotReferenceArea(next);
+        setPlotReferenceArea({ ...next });
       }
       return next;
     });
   }, []);
 
   const lockPlotReference = useCallback(() => {
+    isPlotReferenceLockedRef.current = true;
+    setIsPlotReferenceLocked(true);
     setGraphAreaState((currentCaptureBox) => {
-      if (currentCaptureBox.width > 0 && currentCaptureBox.height > 0) {
-        setPlotReferenceArea({ ...currentCaptureBox });
-      }
-      isPlotReferenceLockedRef.current = true;
-      setIsPlotReferenceLocked(true);
+      setPlotReferenceArea((prev) => {
+        if (prev.width > 0 && prev.height > 0) {
+          return prev;
+        }
+        if (currentCaptureBox.width > 0 && currentCaptureBox.height > 0) {
+          return { ...currentCaptureBox };
+        }
+        return prev;
+      });
       return currentCaptureBox;
     });
   }, []);
@@ -529,6 +553,7 @@ export const GraphProvider = ({ children }) => {
     setGraphConfig,
     graphArea,
     setGraphArea,
+    setCaptureGraphArea,
     plotReferenceArea,
     isPlotReferenceLocked,
     getMappingArea,
