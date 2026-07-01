@@ -1,13 +1,13 @@
 import { useRef, useState, useEffect, useMemo } from 'react';
 import { useGraph, isManualCapturePoint, getManualCapturePoints, canvasToGraphWithBounds } from '../context/GraphContext';
-import { buildDefaultGraphArea, graphAreasAreSimilar } from '../utils/graphAreaHelpers';
+import { buildDefaultGraphArea } from '../utils/graphAreaHelpers';
 import {
   shouldShowScaleAndUnitCrossCheck,
   SCALE_AND_UNIT_CROSS_CHECK_MESSAGE,
 } from '../utils/quantityUnitGuidance';
 
 const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', isAxisMappingConfirmed = false, hasReturnUrl = false, isEditingCurve = false, editingCurveOverlayId = '', savedCurveViewActive = false, hasAiSavedCurves = false, showAiCaptureGuidance = false, useInsetDefaultAxisBox = false, onGraphAreaManuallyAdjusted }) => {
-  const { uploadedImage, graphArea, setGraphArea, setCaptureGraphArea, plotReferenceArea, isPlotReferenceLocked, getMappingArea, establishPlotReference, dataPoints, addDataPoint, clearDataPoints, graphConfig, deleteDataPoint, convertGraphToCanvasCoordinates, convertCanvasToGraphCoordinates, replaceDataPoints, updateDataPointFromCanvas } = useGraph();
+  const { uploadedImage, graphArea, setGraphArea, setCaptureGraphArea, isPlotReferenceLocked, getMappingArea, establishPlotReference, dataPoints, addDataPoint, clearDataPoints, graphConfig, deleteDataPoint, convertGraphToCanvasCoordinates, convertCanvasToGraphCoordinates, replaceDataPoints, updateDataPointFromCanvas } = useGraph();
   const [showRedrawMsg, setShowRedrawMsg] = useState(false);
   const canvasRef = useRef(null);
   const magnifierRef = useRef(null);
@@ -52,7 +52,6 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   const [editDragPointIndex, setEditDragPointIndex] = useState(null);
   const editDragPointIndexRef = useRef(null);
   const editDragMovedRef = useRef(false);
-  const plotRefLegacyExpandedRef = useRef(false);
 
   const MARGIN = 6; // Margin from edges for resize handles visibility
 
@@ -273,14 +272,16 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
         requestAnimationFrame(() => {
           const currentArea = normalizeArea(graphAreaRef.current);
           if (currentArea.width === 0 || currentArea.height === 0) {
-            const rememberedBox = normalizeArea(lastUserBoxRef.current);
-            const initialBox =
-              rememberedBox.width > 0 && rememberedBox.height > 0
-                ? rememberedBox
-                : createInitialAxisBox(img.width, img.height);
-            setGraphArea(initialBox);
-            lastUserBoxRef.current = initialBox;
-            setBoxTransparent(false);
+            if (!isAxisMappingConfirmed) {
+              const rememberedBox = normalizeArea(lastUserBoxRef.current);
+              const initialBox =
+                rememberedBox.width > 0 && rememberedBox.height > 0
+                  ? rememberedBox
+                  : createInitialAxisBox(img.width, img.height);
+              setGraphArea(initialBox);
+              lastUserBoxRef.current = initialBox;
+              setBoxTransparent(false);
+            }
           }
 
           drawLoadedImage();
@@ -296,11 +297,12 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     } else {
       setImageLoadFailed(false);
     }
-  }, [uploadedImage]);
+  }, [uploadedImage, isAxisMappingConfirmed, setGraphArea, useInsetDefaultAxisBox]);
 
   // Ensure a visible default axis box whenever the image is ready but no box exists yet.
   useEffect(() => {
     if (!uploadedImage || imageSize.width <= 0 || imageSize.height <= 0) return;
+    if (isAxisMappingConfirmed) return;
 
     const area = normalizeArea(graphArea);
     if (area.width > 0 && area.height > 0) return;
@@ -316,37 +318,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     setGraphArea(initialBox);
     lastUserBoxRef.current = initialBox;
     setBoxTransparent(false);
-  }, [uploadedImage, imageSize.width, imageSize.height, graphArea.width, graphArea.height, graphArea.x, graphArea.y, setGraphArea, useInsetDefaultAxisBox]);
-
-  // Keep plot reference aligned with the visible blue box after confirm.
-  useEffect(() => {
-    plotRefLegacyExpandedRef.current = false;
-  }, [uploadedImage]);
-
-  useEffect(() => {
-    if (plotRefLegacyExpandedRef.current) return;
-    if (!isAxisMappingConfirmed || !isPlotReferenceLocked) return;
-    if (!uploadedImage || imageSize.width <= 0 || imageSize.height <= 0) return;
-
-    const plot = normalizeArea(plotReferenceArea);
-    const capture = normalizeArea(graphArea);
-    if (plot.width <= 0 || capture.width <= 0) return;
-
-    if (!graphAreasAreSimilar(plot, capture, 4)) {
-      establishPlotReference(capture);
-      plotRefLegacyExpandedRef.current = true;
-      console.log('[PLOT REF] Synced plot reference to locked axis box.');
-    }
-  }, [
-    uploadedImage,
-    imageSize.width,
-    imageSize.height,
-    isAxisMappingConfirmed,
-    isPlotReferenceLocked,
-    plotReferenceArea,
-    graphArea,
-    establishPlotReference,
-  ]);
+  }, [uploadedImage, imageSize.width, imageSize.height, graphArea.width, graphArea.height, graphArea.x, graphArea.y, setGraphArea, useInsetDefaultAxisBox, isAxisMappingConfirmed]);
 
   // Separate effect to redraw selection box and points without reloading image
   useEffect(() => {

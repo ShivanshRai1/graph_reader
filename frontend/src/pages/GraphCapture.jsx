@@ -863,9 +863,11 @@ const persistGraphContext = (graphId, area, axisConfig = {}, options = {}) => {
   const axis = shouldPersistAxis
     ? buildPersistedAxisPayload(axisConfig)
     : (existing?.axis || null);
-  const normalizedPlotReference = normalizePersistedGraphArea(
-    options.plotReferenceArea || existing?.plotReferenceArea || normalizedArea
-  );
+  const normalizedPlotReference = options.plotReferenceLocked === true
+    ? normalizedArea
+    : normalizePersistedGraphArea(
+        options.plotReferenceArea || existing?.plotReferenceArea || normalizedArea
+      );
   const plotReferenceLocked =
     options.plotReferenceLocked !== undefined
       ? Boolean(options.plotReferenceLocked)
@@ -4286,16 +4288,14 @@ const GraphCapture = () => {
     if (!graphId) return;
 
     const persistedContext = getPersistedGraphContext(graphId);
-    if (persistedContext?.plotReferenceArea) {
-      restorePlotReferenceArea(persistedContext.plotReferenceArea, {
-        locked: persistedContext.plotReferenceLocked,
-      });
-    } else if (persistedContext?.graphArea && hasPersistedMappingContext(persistedContext)) {
-      // Legacy sessions only stored capture box — keep axis confirmed but allow plot realignment.
-      restorePlotReferenceArea(persistedContext.graphArea, { locked: false });
-    }
-    if (persistedContext?.graphArea) {
-      setCaptureGraphArea(persistedContext.graphArea);
+    const persistedArea = normalizePersistedGraphArea(persistedContext?.graphArea);
+    const axisConfirmed = hasPersistedMappingContext(persistedContext);
+
+    if (persistedArea) {
+      setCaptureGraphArea(persistedArea);
+      if (axisConfirmed) {
+        restorePlotReferenceArea(persistedArea, { locked: true });
+      }
     }
     if (persistedContext?.axis && hasValidAxisMapping(persistedContext.axis)) {
       setGraphConfig((prev) => ({
@@ -4312,9 +4312,10 @@ const GraphCapture = () => {
         yLabel: persistedContext.axis.yLabel ?? prev.yLabel,
       }));
     }
-    if (hasPersistedMappingContext(persistedContext)) {
+    if (axisConfirmed) {
       setIsAxisMappingConfirmed(true);
       setFrozenGraphConfig((prev) => prev || { ...persistedContext.axis });
+      lockPlotReference(persistedArea);
     }
 
     const cachedImage = getValidatedPersistedGraphImage(graphId);
@@ -4332,7 +4333,7 @@ const GraphCapture = () => {
     if (cachedImage || persistedCurves?.curves?.length > 0) {
       autoLoadedGraphIdRef.current = graphId;
     }
-  }, [setCaptureGraphArea, setGraphConfig, setUploadedImage, restorePlotReferenceArea]);
+  }, [setCaptureGraphArea, setGraphConfig, setUploadedImage, restorePlotReferenceArea, lockPlotReference]);
 
   const uniqueSavedCurves = useMemo(() => {
     if (!Array.isArray(savedCurves)) return [];
@@ -4536,15 +4537,10 @@ const GraphCapture = () => {
     nextConfig = applyComputedAxisBounds(nextConfig, curveList);
 
     if (restoredArea) {
-      const persistedPlot = normalizePersistedGraphArea(persistedContext?.plotReferenceArea);
-      if (persistedPlot) {
-        restorePlotReferenceArea(persistedPlot, {
-          locked: Boolean(persistedContext?.plotReferenceLocked),
-        });
-      } else if (hasPersistedMappingContext(persistedContext)) {
-        restorePlotReferenceArea(restoredArea, { locked: false });
-      }
       setCaptureGraphArea(restoredArea);
+      if (hasPersistedMappingContext(persistedContext)) {
+        restorePlotReferenceArea(restoredArea, { locked: true });
+      }
     }
     // When no persisted area exists, keep the current box so GraphCanvas can show the default immediately.
 
@@ -4574,6 +4570,9 @@ const GraphCapture = () => {
     if (mappingConfirmed) {
       setIsAxisMappingConfirmed(true);
       setFrozenGraphConfig({ ...nextConfig });
+      if (restoredArea) {
+        lockPlotReference(restoredArea);
+      }
     } else {
       setIsAxisMappingConfirmed(false);
       setFrozenGraphConfig(null);
@@ -6842,11 +6841,6 @@ const GraphCapture = () => {
     const searchParams = new URLSearchParams(window.location.search);
     const graphId = String(searchParams.get('graph_id') || activeSessionGraphIdRef.current || '').trim();
     if (!graphId || graphArea.width <= 0 || graphArea.height <= 0) return;
-    const mappingArea = getMappingArea();
-    const plotAreaForPersist =
-      isAxisMappingConfirmed && graphArea.width > 0 && graphArea.height > 0
-        ? graphArea
-        : (mappingArea.width > 0 ? mappingArea : graphArea);
     persistGraphContext(
       graphId,
       graphArea,
@@ -6854,7 +6848,7 @@ const GraphCapture = () => {
       {
         persistAxis: isAxisMappingConfirmed || hasValidAxisMapping(graphConfig),
         plotReferenceLocked: isAxisMappingConfirmed,
-        plotReferenceArea: plotAreaForPersist,
+        plotReferenceArea: graphArea,
       }
     );
   }, [
@@ -6862,10 +6856,6 @@ const GraphCapture = () => {
     graphArea.y,
     graphArea.width,
     graphArea.height,
-    plotReferenceArea.x,
-    plotReferenceArea.y,
-    plotReferenceArea.width,
-    plotReferenceArea.height,
     isAxisMappingConfirmed,
     graphConfig.xMin,
     graphConfig.xMax,
@@ -8150,7 +8140,7 @@ const GraphCapture = () => {
                   if (syncedPoints !== dataPoints) {
                     replaceDataPoints(syncedPoints);
                   }
-                  lockPlotReference();
+                  lockPlotReference(graphArea);
                   setIsAxisMappingConfirmed(true);
                   setFrozenGraphConfig({ ...graphConfig });
                   setPartNumberLocked(true);

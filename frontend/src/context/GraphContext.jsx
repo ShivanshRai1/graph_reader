@@ -172,17 +172,12 @@ export const GraphProvider = ({ children }) => {
   const isPlotReferenceLockedRef = useRef(false);
 
   const getMappingArea = useCallback(() => {
-    if (isPlotReferenceLockedRef.current) {
-      if (graphArea.width > 0 && graphArea.height > 0) {
-        return graphArea;
-      }
+    if (graphArea.width > 0 && graphArea.height > 0) {
+      return graphArea;
     }
-
-    const plot = plotReferenceArea.width > 0 && plotReferenceArea.height > 0 ? plotReferenceArea : null;
-    const capture = graphArea.width > 0 && graphArea.height > 0 ? graphArea : null;
-
-    if (plot) return plot;
-    if (capture) return capture;
+    if (plotReferenceArea.width > 0 && plotReferenceArea.height > 0) {
+      return plotReferenceArea;
+    }
     return graphArea;
   }, [graphArea, plotReferenceArea]);
 
@@ -216,9 +211,20 @@ export const GraphProvider = ({ children }) => {
     });
   }, []);
 
-  const lockPlotReference = useCallback(() => {
+  const lockPlotReference = useCallback((areaOverride = null) => {
     isPlotReferenceLockedRef.current = true;
     setIsPlotReferenceLocked(true);
+    const override =
+      areaOverride && areaOverride.width > 0 && areaOverride.height > 0
+        ? { ...areaOverride }
+        : null;
+    if (override) {
+      setPlotReferenceArea(override);
+      setGraphAreaState((currentCaptureBox) =>
+        currentCaptureBox.width > 0 && currentCaptureBox.height > 0 ? currentCaptureBox : override
+      );
+      return;
+    }
     setGraphAreaState((currentCaptureBox) => {
       if (currentCaptureBox.width > 0 && currentCaptureBox.height > 0) {
         setPlotReferenceArea({ ...currentCaptureBox });
