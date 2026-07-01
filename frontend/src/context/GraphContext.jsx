@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { 
   getAnnotationsForCurve, 
   saveAnnotationsForCurve, 
@@ -78,6 +78,36 @@ export const graphToCanvasWithBounds = (graphX, graphY, graphArea, graphConfig =
   return { canvasX, canvasY };
 };
 
+export const canvasToGraphWithBounds = (canvasX, canvasY, graphArea, graphConfig = {}) => {
+  if (!graphArea || graphArea.width === 0 || graphArea.height === 0) {
+    return { x: 0, y: 0 };
+  }
+
+  const { xMin, xMax, yMin, yMax } = getAxisBoundsFromConfig(graphConfig);
+  const xRatio = (canvasX - graphArea.x) / graphArea.width;
+  const yRatio = (canvasY - graphArea.y) / graphArea.height;
+
+  let graphX;
+  if (graphConfig.xScale === 'Logarithmic') {
+    const xBounds = getSafeLogBoundsStatic(xMin, xMax);
+    const exponent = xBounds.logMin + xRatio * (xBounds.logMax - xBounds.logMin);
+    graphX = Math.pow(10, exponent);
+  } else {
+    graphX = xMin + xRatio * (xMax - xMin);
+  }
+
+  let graphY;
+  if (graphConfig.yScale === 'Logarithmic') {
+    const yBounds = getSafeLogBoundsStatic(yMin, yMax);
+    const exponent = yBounds.logMax - yRatio * (yBounds.logMax - yBounds.logMin);
+    graphY = Math.pow(10, exponent);
+  } else {
+    graphY = yMax - yRatio * (yMax - yMin);
+  }
+
+  return { x: graphX, y: graphY };
+};
+
 export const useGraph = () => {
   const context = useContext(GraphContext);
   if (!context) {
@@ -112,13 +142,71 @@ export const GraphProvider = ({ children }) => {
     temperature: '',
   });
   
-  // Graph area selection (coordinates)
-  const [graphArea, setGraphArea] = useState({
+  // Capture zone (blue box) — user-resizable; may be smaller than plot reference after confirm.
+  const [graphArea, setGraphAreaState] = useState({
     x: 0,
     y: 0,
     width: 0,
     height: 0,
   });
+  // Plot reference — full axis alignment on image; drives coordinate math once locked.
+  const [plotReferenceArea, setPlotReferenceArea] = useState({
+    x: 0,
+    y: 0,
+    width: 0,
+    height: 0,
+  });
+  const [isPlotReferenceLocked, setIsPlotReferenceLocked] = useState(false);
+  const isPlotReferenceLockedRef = useRef(false);
+
+  const getMappingArea = useCallback(() => {
+    if (
+      isPlotReferenceLockedRef.current &&
+      plotReferenceArea.width > 0 &&
+      plotReferenceArea.height > 0
+    ) {
+      return plotReferenceArea;
+    }
+    if (graphArea.width > 0 && graphArea.height > 0) {
+      return graphArea;
+    }
+    return plotReferenceArea.width > 0 ? plotReferenceArea : graphArea;
+  }, [graphArea, plotReferenceArea]);
+
+  const setGraphArea = useCallback((value) => {
+    setGraphAreaState((prev) => {
+      const next = typeof value === 'function' ? value(prev) : value;
+      if (!isPlotReferenceLockedRef.current) {
+        setPlotReferenceArea(next);
+      }
+      return next;
+    });
+  }, []);
+
+  const lockPlotReference = useCallback(() => {
+    setGraphAreaState((currentCaptureBox) => {
+      if (currentCaptureBox.width > 0 && currentCaptureBox.height > 0) {
+        setPlotReferenceArea({ ...currentCaptureBox });
+      }
+      isPlotReferenceLockedRef.current = true;
+      setIsPlotReferenceLocked(true);
+      return currentCaptureBox;
+    });
+  }, []);
+
+  const unlockPlotReference = useCallback(() => {
+    isPlotReferenceLockedRef.current = false;
+    setIsPlotReferenceLocked(false);
+  }, []);
+
+  const restorePlotReferenceArea = useCallback((area, { locked = false } = {}) => {
+    const normalized = area && area.width > 0 && area.height > 0 ? { ...area } : null;
+    if (normalized) {
+      setPlotReferenceArea(normalized);
+    }
+    isPlotReferenceLockedRef.current = Boolean(locked && normalized);
+    setIsPlotReferenceLocked(Boolean(locked && normalized));
+  }, []);
   
   // Data points captured from the graph
   const [dataPoints, setDataPoints] = useState([]);
@@ -162,56 +250,10 @@ export const GraphProvider = ({ children }) => {
 
   // Convert canvas coordinates to graph coordinates
   const convertCanvasToGraphCoordinates = useCallback((canvasX, canvasY) => {
-    if (graphArea.width === 0 || graphArea.height === 0) {
-      return { x: 0, y: 0 };
-    }
-
-    // Inline getNormalizedMinMax to avoid dependency issues
-    let xMin = parseFloat(graphConfig.xMin);
-    let xMax = parseFloat(graphConfig.xMax);
-    let yMin = parseFloat(graphConfig.yMin);
-    let yMax = parseFloat(graphConfig.yMax);
-
-    if (isNaN(xMin)) xMin = 0;
-    if (isNaN(xMax)) xMax = 100;
-    if (isNaN(yMin)) yMin = 0;
-    if (isNaN(yMax)) yMax = 100;
-
-    const xRatio = (canvasX - graphArea.x) / graphArea.width;
-    const yRatio = (canvasY - graphArea.y) / graphArea.height;
-
-    let graphX;
-    if (graphConfig.xScale === 'Logarithmic') {
-      const safeXMin = xMin > 0 ? xMin : 1e-12;
-      const candidateXMax = xMax > 0 ? xMax : safeXMin * 10;
-      const safeXMax = candidateXMax > safeXMin ? candidateXMax : safeXMin * 10;
-      const logXMin = Math.log10(safeXMin);
-      const logXMax = Math.log10(safeXMax);
-      const exponent = logXMin + xRatio * (logXMax - logXMin);
-      graphX = Math.pow(10, exponent);
-    } else {
-      graphX = xMin + xRatio * (xMax - xMin);
-    }
-
-    let graphY;
-    if (graphConfig.yScale === 'Logarithmic') {
-      const safeYMin = yMin > 0 ? yMin : 1e-12;
-      const candidateYMax = yMax > 0 ? yMax : safeYMin * 10;
-      const safeYMax = candidateYMax > safeYMin ? candidateYMax : safeYMin * 10;
-      const logYMin = Math.log10(safeYMin);
-      const logYMax = Math.log10(safeYMax);
-      const exponent = logYMax - yRatio * (logYMax - logYMin);
-      graphY = Math.pow(10, exponent);
-    } else {
-      graphY = yMax - yRatio * (yMax - yMin);
-    }
-    
-    return { x: graphX, y: graphY };
+    const mappingArea = getMappingArea();
+    return canvasToGraphWithBounds(canvasX, canvasY, mappingArea, graphConfig);
   }, [
-    graphArea.x,
-    graphArea.y,
-    graphArea.width,
-    graphArea.height,
+    getMappingArea,
     graphConfig.xMin,
     graphConfig.xMax,
     graphConfig.yMin,
@@ -233,7 +275,7 @@ export const GraphProvider = ({ children }) => {
         }
       : graphConfig;
 
-    return graphToCanvasWithBounds(graphX, graphY, graphArea, configForConversion);
+    return graphToCanvasWithBounds(graphX, graphY, getMappingArea(), configForConversion);
   };
 
   const addDataPoint = (point, curveId = null) => {
@@ -400,7 +442,8 @@ export const GraphProvider = ({ children }) => {
   useEffect(() => {
     // Only recalculate if there are imported points
     const hasImportedPoints = dataPoints.some(p => p.imported);
-    if (!hasImportedPoints || graphArea.width === 0 || graphArea.height === 0) {
+    const mappingArea = getMappingArea();
+    if (!hasImportedPoints || mappingArea.width === 0 || mappingArea.height === 0) {
       return;
     }
 
@@ -409,7 +452,7 @@ export const GraphProvider = ({ children }) => {
         return point;
       }
 
-      const canvasCoords = graphToCanvasWithBounds(point.x, point.y, graphArea, graphConfig);
+      const canvasCoords = graphToCanvasWithBounds(point.x, point.y, mappingArea, graphConfig);
       if (
         Number.isFinite(point.canvasX) &&
         Number.isFinite(point.canvasY) &&
@@ -430,7 +473,7 @@ export const GraphProvider = ({ children }) => {
     if (changed) {
       setDataPoints(updatedPoints);
     }
-  }, [graphConfig.xScale, graphConfig.yScale, graphConfig.xUnitPrefix, graphConfig.yUnitPrefix, graphConfig.xMin, graphConfig.xMax, graphConfig.yMin, graphConfig.yMax, graphArea.width, graphArea.height, graphArea.x, graphArea.y]);
+  }, [graphConfig.xScale, graphConfig.yScale, graphConfig.xUnitPrefix, graphConfig.yUnitPrefix, graphConfig.xMin, graphConfig.xMax, graphConfig.yMin, graphConfig.yMax, graphArea, plotReferenceArea, isPlotReferenceLocked, dataPoints.length]);
 
   /**
    * Load saved annotations for a curve and add them to current data points
@@ -486,6 +529,12 @@ export const GraphProvider = ({ children }) => {
     setGraphConfig,
     graphArea,
     setGraphArea,
+    plotReferenceArea,
+    isPlotReferenceLocked,
+    getMappingArea,
+    lockPlotReference,
+    unlockPlotReference,
+    restorePlotReferenceArea,
     dataPoints,
     addDataPoint,
     clearDataPoints,

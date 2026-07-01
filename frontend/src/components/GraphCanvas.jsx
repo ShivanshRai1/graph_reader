@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect, useMemo } from 'react';
-import { useGraph, isManualCapturePoint, getManualCapturePoints } from '../context/GraphContext';
+import { useGraph, isManualCapturePoint, getManualCapturePoints, canvasToGraphWithBounds } from '../context/GraphContext';
 import { buildDefaultGraphArea } from '../utils/graphAreaHelpers';
 import {
   shouldShowScaleAndUnitCrossCheck,
@@ -7,7 +7,7 @@ import {
 } from '../utils/quantityUnitGuidance';
 
 const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', isAxisMappingConfirmed = false, hasReturnUrl = false, isEditingCurve = false, editingCurveOverlayId = '', savedCurveViewActive = false, hasAiSavedCurves = false, showAiCaptureGuidance = false, useInsetDefaultAxisBox = false, onGraphAreaManuallyAdjusted }) => {
-  const { uploadedImage, graphArea, setGraphArea, dataPoints, addDataPoint, clearDataPoints, graphConfig, deleteDataPoint, convertGraphToCanvasCoordinates, convertCanvasToGraphCoordinates, replaceDataPoints, updateDataPointFromCanvas } = useGraph();
+  const { uploadedImage, graphArea, setGraphArea, plotReferenceArea, isPlotReferenceLocked, getMappingArea, dataPoints, addDataPoint, clearDataPoints, graphConfig, deleteDataPoint, convertGraphToCanvasCoordinates, convertCanvasToGraphCoordinates, replaceDataPoints, updateDataPointFromCanvas } = useGraph();
   const [showRedrawMsg, setShowRedrawMsg] = useState(false);
   const canvasRef = useRef(null);
   const magnifierRef = useRef(null);
@@ -32,6 +32,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   const justFinishedResizingRef = useRef(false);
   const prevIsResizingRef = useRef(false);
   const graphAreaRef = useRef(graphArea);
+  const plotReferenceLockedRef = useRef(isPlotReferenceLocked);
   const dataPointsRef = useRef(dataPoints);
   const [removedPointsMsg, setRemovedPointsMsg] = useState('');
   const removedMsgTimeoutRef = useRef(null);
@@ -140,9 +141,8 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     !isEditingCurve &&
     canShowImportedCurveOverlay();
 
-  // Allow box resize before Final Check, while editing/viewing, or when AI saved curves need alignment.
-  const canAdjustAxisBox = () =>
-    !isAxisMappingConfirmed || isEditingCurve || hasImportedCurvePoints() || hasAiSavedCurves;
+  // Allow capture-zone resize before/after confirm; plot reference locks separately on confirm.
+  const canAdjustCaptureBox = () => !(isReadOnly && !isEditingCurve);
   const EDGE_GAP = 12; // Hysteresis for edge checks to reduce flicker
   const EPS = 1e-6;
   const WARN_CLEAR_DELAY = 180; // ms to hold warning before clearing
@@ -152,7 +152,8 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   const DOUBLE_CLICK_GUARD_PX = 2; // Only suppress near-identical click locations
   const BOX_STROKE_HALF_PX = 2; // blue box lineWidth is 4, stroke extends outside the rect
   const CAPTURE_EDGE_TOLERANCE_PX = BOX_STROKE_HALF_PX + 4; // cover border stroke + slight aim error
-  const ALLOW_CAPTURE_OUTSIDE_BLUE_BOX = true; // Temporary — placement rules will be added later
+  const CAPTURE_ZONE_INSIDE_COLOR = '#e53935';
+  const CAPTURE_ZONE_OUTSIDE_COLOR = '#ff9800';
   const EDIT_POINT_HIT_RADIUS = 12;
 
   const normalizeArea = (area) => {
@@ -221,18 +222,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   };
 
   const clampCanvasPointToGraphArea = (canvasX, canvasY) => {
-    if (ALLOW_CAPTURE_OUTSIDE_BLUE_BOX) {
-      return { canvasX, canvasY };
-    }
-    const area = normalizeArea(graphArea);
-    if (area.width <= 0 || area.height <= 0) {
-      return { canvasX, canvasY };
-    }
-
-    return {
-      canvasX: Math.min(Math.max(canvasX, area.x), area.x + area.width),
-      canvasY: Math.min(Math.max(canvasY, area.y), area.y + area.height),
-    };
+    return { canvasX, canvasY };
   };
 
   const updatePointFromCanvasPosition = (index, canvasX, canvasY) => {
@@ -338,6 +328,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   // Keep live refs always in sync with latest state
   const graphConfigRef = useRef(graphConfig);
   useEffect(() => { graphAreaRef.current = graphArea; }, [graphArea]);
+  useEffect(() => { plotReferenceLockedRef.current = isPlotReferenceLocked; }, [isPlotReferenceLocked]);
   useEffect(() => {
     const area = normalizeArea(graphArea);
     if (area.width > 0 && area.height > 0) {
@@ -374,44 +365,18 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     }
   }, [savedCurveViewActive, dataPoints]);
 
-  // After resize finishes, recalculate graph values from original canvas positions and remove out-of-bounds points.
-  // All values are read from refs (never from stale closures) so timing with React renders is irrelevant.
+  // After resize finishes, recalculate graph values when plot reference is not locked yet.
   useEffect(() => {
     if (prevIsResizingRef.current === true && isResizing === false) {
-      const box = normalizeArea(graphAreaRef.current);
+      if (plotReferenceLockedRef.current) {
+        prevIsResizingRef.current = isResizing;
+        return;
+      }
+
+      const box = normalizeArea(getMappingArea?.() || graphAreaRef.current);
       const pts = dataPointsRef.current;
       const cfg = graphConfigRef.current;
 
-      // Inline canvasToGraph using only refs — no function ref timing issues
-      const canvasToGraph = (cx, cy) => {
-        if (box.width === 0 || box.height === 0) return { x: 0, y: 0 };
-        let xMin = parseFloat(cfg.xMin); if (isNaN(xMin)) xMin = 0;
-        let xMax = parseFloat(cfg.xMax); if (isNaN(xMax)) xMax = 100;
-        let yMin = parseFloat(cfg.yMin); if (isNaN(yMin)) yMin = 0;
-        let yMax = parseFloat(cfg.yMax); if (isNaN(yMax)) yMax = 100;
-        const xRatio = (cx - box.x) / box.width;
-        const yRatio = (cy - box.y) / box.height;
-        let gx, gy;
-        if (cfg.xScale === 'Logarithmic') {
-          const safeXMin = xMin > 0 ? xMin : 1e-12;
-          const safeXMax = (xMax > 0 && xMax > safeXMin) ? xMax : safeXMin * 10;
-          gx = Math.pow(10, Math.log10(safeXMin) + xRatio * (Math.log10(safeXMax) - Math.log10(safeXMin)));
-        } else {
-          gx = xMin + xRatio * (xMax - xMin);
-        }
-        if (cfg.yScale === 'Logarithmic') {
-          const safeYMin = yMin > 0 ? yMin : 1e-12;
-          const safeYMax = (yMax > 0 && yMax > safeYMin) ? yMax : safeYMin * 10;
-          const logYMin = Math.log10(safeYMin);
-          const logYMax = Math.log10(safeYMax);
-          gy = Math.pow(10, logYMax - yRatio * (logYMax - logYMin));
-        } else {
-          gy = yMax - yRatio * (yMax - yMin);
-        }
-        return { x: gx, y: gy };
-      };
-
-      // Filter to points whose original pixel is inside the new box
       const kept = pts.filter(
         (p) => p.imported || !Number.isFinite(p.canvasX) || !Number.isFinite(p.canvasY) ||
           (p.canvasX >= box.x && p.canvasX <= box.x + box.width &&
@@ -419,10 +384,9 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       );
       const removedCount = pts.length - kept.length;
 
-      // Recalculate graph values from original canvas positions using the new box + config
       const updated = kept.map((p) => {
         if (p.imported || !Number.isFinite(p.canvasX) || !Number.isFinite(p.canvasY)) return p;
-        const { x, y } = canvasToGraph(p.canvasX, p.canvasY);
+        const { x, y } = canvasToGraphWithBounds(p.canvasX, p.canvasY, box, cfg);
         return { ...p, x, y };
       });
 
@@ -436,7 +400,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       }
     }
     prevIsResizingRef.current = isResizing;
-  }, [isResizing]);
+  }, [isResizing, getMappingArea, replaceDataPoints]);
 
   // When axis config changes (min/max/scale), recalculate point graph values from original
   // canvas positions so dots stay on the curve regardless of axis range changes.
@@ -445,44 +409,17 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     if (isAxisMappingConfirmed || isEditingCurve) return;
     const pts = dataPointsRef.current;
     if (pts.length === 0) return;
-    const box = normalizeArea(graphAreaRef.current);
+    const box = normalizeArea(getMappingArea?.() || graphAreaRef.current);
     if (box.width === 0 || box.height === 0) return;
     const cfg = graphConfigRef.current;
 
-    const canvasToGraph = (cx, cy) => {
-      let xMin = parseFloat(cfg.xMin); if (isNaN(xMin)) xMin = 0;
-      let xMax = parseFloat(cfg.xMax); if (isNaN(xMax)) xMax = 100;
-      let yMin = parseFloat(cfg.yMin); if (isNaN(yMin)) yMin = 0;
-      let yMax = parseFloat(cfg.yMax); if (isNaN(yMax)) yMax = 100;
-      const xRatio = (cx - box.x) / box.width;
-      const yRatio = (cy - box.y) / box.height;
-      let gx, gy;
-      if (cfg.xScale === 'Logarithmic') {
-        const safeXMin = xMin > 0 ? xMin : 1e-12;
-        const safeXMax = (xMax > 0 && xMax > safeXMin) ? xMax : safeXMin * 10;
-        gx = Math.pow(10, Math.log10(safeXMin) + xRatio * (Math.log10(safeXMax) - Math.log10(safeXMin)));
-      } else {
-        gx = xMin + xRatio * (xMax - xMin);
-      }
-      if (cfg.yScale === 'Logarithmic') {
-        const safeYMin = yMin > 0 ? yMin : 1e-12;
-        const safeYMax = (yMax > 0 && yMax > safeYMin) ? yMax : safeYMin * 10;
-        const logYMin = Math.log10(safeYMin);
-        const logYMax = Math.log10(safeYMax);
-        gy = Math.pow(10, logYMax - yRatio * (logYMax - logYMin));
-      } else {
-        gy = yMax - yRatio * (yMax - yMin);
-      }
-      return { x: gx, y: gy };
-    };
-
     const updated = pts.map((p) => {
       if (p.imported || !Number.isFinite(p.canvasX) || !Number.isFinite(p.canvasY)) return p;
-      const { x, y } = canvasToGraph(p.canvasX, p.canvasY);
+      const { x, y } = canvasToGraphWithBounds(p.canvasX, p.canvasY, box, cfg);
       return { ...p, x, y };
     });
     replaceDataPoints(updated);
-  }, [graphConfig.xMin, graphConfig.xMax, graphConfig.yMin, graphConfig.yMax, graphConfig.xScale, graphConfig.yScale, isAxisMappingConfirmed, isEditingCurve]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [graphConfig.xMin, graphConfig.xMax, graphConfig.yMin, graphConfig.yMax, graphConfig.xScale, graphConfig.yScale, isAxisMappingConfirmed, isEditingCurve, getMappingArea, replaceDataPoints]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => () => {
     if (coordinateUpdateTimeoutRef.current) {
@@ -571,9 +508,8 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   const drawSavedViewCrosshair = (ctx) => {
     if (!isSavedViewCrosscheckActive()) return;
     if (previewMousePos.x === null || previewMousePos.y === null) return;
-    if (graphArea.width <= 0 || graphArea.height <= 0) return;
-
-    const area = normalizeArea(graphArea);
+    const area = normalizeArea(getMappingArea());
+    if (area.width <= 0 || area.height <= 0) return;
     ctx.save();
     ctx.strokeStyle = 'rgba(34, 197, 94, 0.9)';
     ctx.lineWidth = 1;
@@ -597,6 +533,11 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     if (hasImportedPoints && !canShowImportedCurveOverlay()) return;
 
     const inSavedView = savedCurveViewActive && canShowImportedCurveOverlay();
+    const showCaptureZoneColors =
+      isAxisMappingConfirmed &&
+      isPlotReferenceLocked &&
+      !inSavedView &&
+      !isEditingCurve;
     let manualPointLabel = 0;
 
     dataPoints.forEach((point, index) => {
@@ -615,7 +556,13 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       // - Yellow/Orange for annotations (user-captured points)
       const fillColor = isActiveEditPoint
         ? '#FFD700'
-        : (isAnnotation ? '#FFD700' : (point.overlayColor || 'red'));
+        : (isAnnotation
+          ? '#FFD700'
+          : (showCaptureZoneColors && isManualCapturePoint(point)
+            ? (isCanvasPointInsideGraphArea(drawX, drawY, CAPTURE_EDGE_TOLERANCE_PX)
+              ? CAPTURE_ZONE_INSIDE_COLOR
+              : CAPTURE_ZONE_OUTSIDE_COLOR)
+            : (point.overlayColor || 'red')));
       
       ctx.strokeStyle = isActiveEditPoint ? '#1976d2' : '#ffffff';
       ctx.lineWidth = strokeWidth;
@@ -729,16 +676,31 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     };
   };
 
-  const isCanvasPointInsideGraphArea = (canvasX, canvasY, edgeTolerancePx = 0) => {
-    if (graphArea.width === 0 || graphArea.height === 0) return false;
-    const area = normalizeArea(graphArea);
+  const isCanvasPointInsideArea = (area, canvasX, canvasY, edgeTolerancePx = 0) => {
+    if (!area || area.width === 0 || area.height === 0) return false;
+    const normalized = normalizeArea(area);
     const tol = Math.max(0, edgeTolerancePx);
     return (
-      canvasX >= area.x - tol &&
-      canvasX <= area.x + area.width + tol &&
-      canvasY >= area.y - tol &&
-      canvasY <= area.y + area.height + tol
+      canvasX >= normalized.x - tol &&
+      canvasX <= normalized.x + normalized.width + tol &&
+      canvasY >= normalized.y - tol &&
+      canvasY <= normalized.y + normalized.height + tol
     );
+  };
+
+  const isCanvasPointInsideGraphArea = (canvasX, canvasY, edgeTolerancePx = 0) =>
+    isCanvasPointInsideArea(graphArea, canvasX, canvasY, edgeTolerancePx);
+
+  const isCanvasPointInsidePlotReference = (canvasX, canvasY, edgeTolerancePx = 0) => {
+    const mappingArea = getMappingArea();
+    return isCanvasPointInsideArea(mappingArea, canvasX, canvasY, edgeTolerancePx);
+  };
+
+  const isGraphCoordCaptureValid = (graphX, graphY) => {
+    if (!Number.isFinite(graphX) || !Number.isFinite(graphY)) return false;
+    if (graphConfig.xScale === 'Logarithmic' && graphX <= 0) return false;
+    if (graphConfig.yScale === 'Logarithmic' && graphY <= 0) return false;
+    return isGraphValueWithinAxisBounds(graphX, graphY);
   };
 
   const clampGraphCoordsToAxisBounds = (graphX, graphY) => {
@@ -789,29 +751,22 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   };
 
   const tryAddCapturedPoint = (canvasX, canvasY, { requireAxisConfirmed = true, applyDoubleClickGuard = true } = {}) => {
-    if (graphArea.width === 0 || graphArea.height === 0) {
+    const mappingArea = getMappingArea();
+    if (mappingArea.width === 0 || mappingArea.height === 0) {
       setShowRedrawMsg(true);
       return false;
     }
 
-    const insideBox = isCanvasPointInsideGraphArea(canvasX, canvasY, CAPTURE_EDGE_TOLERANCE_PX);
-    if (!ALLOW_CAPTURE_OUTSIDE_BLUE_BOX && !insideBox) {
+    const captureX = canvasX;
+    const captureY = canvasY;
+
+    if (!isCanvasPointInsidePlotReference(captureX, captureY, CAPTURE_EDGE_TOLERANCE_PX)) {
       return false;
     }
 
-    let captureX = canvasX;
-    let captureY = canvasY;
-    if (!ALLOW_CAPTURE_OUTSIDE_BLUE_BOX && hasConfiguredAxisBounds()) {
-      let { x: graphX, y: graphY } = convertCanvasToGraphCoordinates(captureX, captureY);
-      if (!isGraphValueWithinAxisBounds(graphX, graphY)) {
-        const clamped = clampGraphCoordsToAxisBounds(graphX, graphY);
-        if (!isGraphValueWithinAxisBounds(clamped.x, clamped.y)) {
-          return false;
-        }
-        const recanvas = convertGraphToCanvasCoordinates(clamped.x, clamped.y);
-        captureX = recanvas.canvasX;
-        captureY = recanvas.canvasY;
-      }
+    const { x: graphX, y: graphY } = convertCanvasToGraphCoordinates(captureX, captureY);
+    if (!isGraphCoordCaptureValid(graphX, graphY)) {
+      return false;
     }
 
     if (requireAxisConfirmed && !isAxisMappingConfirmed) {
@@ -903,7 +858,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     }
 
     if (mode) {
-      if (!canAdjustAxisBox()) {
+      if (!canAdjustCaptureBox()) {
         return;
       }
       // Store that a handle was clicked, but don't resize yet
@@ -914,12 +869,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       return;
     }
 
-    if (
-      graphArea.width > 0 &&
-      graphArea.height > 0 &&
-      (ALLOW_CAPTURE_OUTSIDE_BLUE_BOX ||
-        isCanvasPointInsideGraphArea(x, y, CAPTURE_EDGE_TOLERANCE_PX))
-    ) {
+    if (graphArea.width > 0 && graphArea.height > 0) {
       // Let click place a point instead of starting a box drag.
       return;
     }
@@ -944,7 +894,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     }
 
     // Check if we need to activate resize mode based on potential handle
-    if (!resizeMode && potentialResizeHandleRef.current && initialArea && canAdjustAxisBox()) {
+    if (!resizeMode && potentialResizeHandleRef.current && initialArea && canAdjustCaptureBox()) {
       const dx = x - initialMouse.x;
       const dy = y - initialMouse.y;
       const moveDistance = Math.sqrt(dx * dx + dy * dy);
@@ -959,7 +909,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       }
     }
 
-    if (resizeMode && initialArea && canAdjustAxisBox()) {
+    if (resizeMode && initialArea && canAdjustCaptureBox()) {
       const dx = x - initialMouse.x;
       const dy = y - initialMouse.y;
       const minSize = 20;
@@ -1221,59 +1171,26 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       }
     }
     
-    // Show coordinates - use drawn box if available, otherwise use full canvas as reference
-    let graphX, graphY;
-    
-    // Parse config values as numbers
-    // User enters min/max in display units and hover shows real values.
+    // Show coordinates from plot reference mapping when available.
+    const mappingArea = normalizeArea(getMappingArea());
+    if (mappingArea.width <= 0 || mappingArea.height <= 0) {
+      if (!uploadedImage || imageSize.width <= 0) {
+        return;
+      }
+    }
+
+    const hoverCoords = convertCanvasToGraphCoordinates(canvasX, canvasY);
+    const graphX = hoverCoords.x;
+    const graphY = hoverCoords.y;
+
     let xMin = parseFloat(graphConfig.xMin);
     let xMax = parseFloat(graphConfig.xMax);
     let yMin = parseFloat(graphConfig.yMin);
     let yMax = parseFloat(graphConfig.yMax);
-
     if (Number.isNaN(xMin)) xMin = graphConfig.xScale === 'Logarithmic' ? 1 : 0;
     if (Number.isNaN(xMax)) xMax = 100;
     if (Number.isNaN(yMin)) yMin = graphConfig.yScale === 'Logarithmic' ? 1 : 0;
     if (Number.isNaN(yMax)) yMax = 100;
-
-    let xRatio;
-    let yRatio;
-
-    if (graphArea.width > 0 && graphArea.height > 0) {
-      // Use the drawn box for calculation
-      xRatio = (canvasX - graphArea.x) / graphArea.width;
-      yRatio = (canvasY - graphArea.y) / graphArea.height;
-    } else if (uploadedImage && imageSize.width > 0) {
-      // If no box drawn yet, use full image dimensions as reference
-      xRatio = canvasX / imageSize.width;
-      yRatio = canvasY / imageSize.height;
-    } else {
-      return; // Can't calculate without image loaded
-    }
-
-    if (graphConfig.xScale === 'Logarithmic') {
-      const safeXMin = xMin > 0 ? xMin : 1e-12;
-      const safeXMaxCandidate = xMax > 0 ? xMax : safeXMin * 10;
-      const safeXMax = safeXMaxCandidate > safeXMin ? safeXMaxCandidate : safeXMin * 10;
-      const logXMin = Math.log10(safeXMin);
-      const logXMax = Math.log10(safeXMax);
-      const xExponent = logXMin + xRatio * (logXMax - logXMin);
-      graphX = Math.pow(10, xExponent);
-    } else {
-      graphX = xMin + xRatio * (xMax - xMin);
-    }
-
-    if (graphConfig.yScale === 'Logarithmic') {
-      const safeYMin = yMin > 0 ? yMin : 1e-12;
-      const safeYMaxCandidate = yMax > 0 ? yMax : safeYMin * 10;
-      const safeYMax = safeYMaxCandidate > safeYMin ? safeYMaxCandidate : safeYMin * 10;
-      const logYMin = Math.log10(safeYMin);
-      const logYMax = Math.log10(safeYMax);
-      const yExponent = logYMax - yRatio * (logYMax - logYMin);
-      graphY = Math.pow(10, yExponent);
-    } else {
-      graphY = yMax - yRatio * (yMax - yMin);
-    }
     
     // Throttle coordinate updates to reduce flickering
     if (coordinateUpdateTimeoutRef.current) {
@@ -1288,7 +1205,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     // Detect if values are stuck (any constant value, positive or negative) while cursor moves
     const prevCanvas = prevCanvasPosRef.current;
     const prevGraph = prevGraphPosRef.current;
-    const areaForWarn = normalizeArea(graphArea);
+    const areaForWarn = normalizeArea(getMappingArea());
     let nextStuckWarn = false;
     if (prevCanvas && prevGraph) {
       const canvasDelta = Math.hypot(canvasX - prevCanvas.x, canvasY - prevCanvas.y);
@@ -1454,9 +1371,10 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       <div className="bg-blue-50 p-4 rounded mb-4">
         <p className="text-blue-700 font-medium mb-2"><strong>Instructions:</strong></p>
         <ul className="list-disc pl-5 text-gray-700">
-          <li>Drag to select the graph area (blue box)</li>
+          <li>Drag to select the graph area (blue box). Before confirming, align it to the full printed axis range.</li>
+          <li>After confirm, you can resize the blue box as a capture zone; coordinates still use the full axis.</li>
           <li>In Graph Configuration, set axis min/max, scale, and unit, then confirm axis mapping</li>
-          <li>Click inside the blue box to add data points</li>
+          <li>Click on the plot to add data points (orange = outside capture zone, red = inside)</li>
           <li>Right-click on a captured point to remove it</li>
           <li>Use the buttons below to adjust the box or clear points; hover to see the magnifier</li>
         </ul>
