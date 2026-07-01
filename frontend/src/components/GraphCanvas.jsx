@@ -314,33 +314,43 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     setBoxTransparent(false);
   }, [uploadedImage, imageSize.width, imageSize.height, graphArea.width, graphArea.height, graphArea.x, graphArea.y, setGraphArea, useInsetDefaultAxisBox]);
 
-  // Legacy saved graphs often stored only the capture box as plot reference. Expand once on load.
+  // Legacy saved graphs often stored the capture box as plot reference. Expand once on load.
   useEffect(() => {
     plotRefLegacyExpandedRef.current = false;
   }, [uploadedImage]);
 
   useEffect(() => {
     if (plotRefLegacyExpandedRef.current) return;
+    if (!isAxisMappingConfirmed) return;
     if (!uploadedImage || imageSize.width <= 0 || imageSize.height <= 0) return;
 
     const plot = normalizeArea(plotReferenceArea);
+    if (plot.width <= 0 || plot.height <= 0) return;
+
     const capture = normalizeArea(graphArea);
-    if (plot.width <= 0 || capture.width <= 0) return;
+    const datasheetPlot = buildDefaultGraphArea(imageSize.width, imageSize.height, { useInset: true });
+    const fullImagePlot = buildDefaultGraphArea(imageSize.width, imageSize.height, { useInset: false });
+    const defaultPlot = createInitialAxisBox(imageSize.width, imageSize.height);
 
-    const fullPlot = createInitialAxisBox(imageSize.width, imageSize.height);
-    const plotMatchesCapture = graphAreasAreSimilar(plot, capture, 8);
-    const plotSmallerThanFull =
-      plot.width < fullPlot.width * 0.9 || plot.height < fullPlot.height * 0.9;
+    const plotMatchesCapture =
+      capture.width > 0 && graphAreasAreSimilar(plot, capture, 12);
+    const plotLikelyLegacyShrunk =
+      plotMatchesCapture ||
+      plot.width < imageSize.width * 0.85 ||
+      plot.width < defaultPlot.width * 0.95 ||
+      plot.height < defaultPlot.height * 0.95;
 
-    if (plotMatchesCapture && plotSmallerThanFull) {
-      expandPlotReference(fullPlot);
+    if (plotLikelyLegacyShrunk) {
+      expandPlotReference(datasheetPlot);
+      expandPlotReference(fullImagePlot);
       plotRefLegacyExpandedRef.current = true;
-      console.log('[PLOT REF] Expanded legacy plot reference toward full default plot area.');
+      console.log('[PLOT REF] Expanded legacy/shrunk plot reference for confirmed axis mapping.');
     }
   }, [
     uploadedImage,
     imageSize.width,
     imageSize.height,
+    isAxisMappingConfirmed,
     plotReferenceArea,
     graphArea,
     expandPlotReference,

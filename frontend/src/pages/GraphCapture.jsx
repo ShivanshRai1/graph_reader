@@ -3232,6 +3232,7 @@ const GraphCapture = () => {
     convertCanvasToGraphCoordinates,
     graphArea,
     setGraphArea,
+    setCaptureGraphArea,
     plotReferenceArea,
     getMappingArea,
     lockPlotReference,
@@ -4285,9 +4286,6 @@ const GraphCapture = () => {
     if (!graphId) return;
 
     const persistedContext = getPersistedGraphContext(graphId);
-    if (persistedContext?.graphArea) {
-      setGraphArea(persistedContext.graphArea);
-    }
     if (persistedContext?.plotReferenceArea) {
       restorePlotReferenceArea(persistedContext.plotReferenceArea, {
         locked: persistedContext.plotReferenceLocked,
@@ -4295,6 +4293,9 @@ const GraphCapture = () => {
     } else if (persistedContext?.graphArea && hasPersistedMappingContext(persistedContext)) {
       // Legacy sessions only stored capture box — keep axis confirmed but allow plot realignment.
       restorePlotReferenceArea(persistedContext.graphArea, { locked: false });
+    }
+    if (persistedContext?.graphArea) {
+      setCaptureGraphArea(persistedContext.graphArea);
     }
     if (persistedContext?.axis && hasValidAxisMapping(persistedContext.axis)) {
       setGraphConfig((prev) => ({
@@ -4331,7 +4332,7 @@ const GraphCapture = () => {
     if (cachedImage || persistedCurves?.curves?.length > 0) {
       autoLoadedGraphIdRef.current = graphId;
     }
-  }, [setGraphArea, setGraphConfig, setUploadedImage, restorePlotReferenceArea]);
+  }, [setCaptureGraphArea, setGraphConfig, setUploadedImage, restorePlotReferenceArea]);
 
   const uniqueSavedCurves = useMemo(() => {
     if (!Array.isArray(savedCurves)) return [];
@@ -4535,7 +4536,6 @@ const GraphCapture = () => {
     nextConfig = applyComputedAxisBounds(nextConfig, curveList);
 
     if (restoredArea) {
-      setGraphArea(restoredArea);
       const persistedPlot = normalizePersistedGraphArea(persistedContext?.plotReferenceArea);
       if (persistedPlot) {
         restorePlotReferenceArea(persistedPlot, {
@@ -4544,6 +4544,7 @@ const GraphCapture = () => {
       } else if (hasPersistedMappingContext(persistedContext)) {
         restorePlotReferenceArea(restoredArea, { locked: false });
       }
+      setCaptureGraphArea(restoredArea);
     }
     // When no persisted area exists, keep the current box so GraphCanvas can show the default immediately.
 
