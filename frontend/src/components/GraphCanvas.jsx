@@ -7,7 +7,7 @@ import {
 } from '../utils/quantityUnitGuidance';
 
 const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', isAxisMappingConfirmed = false, hasReturnUrl = false, isEditingCurve = false, editingCurveOverlayId = '', savedCurveViewActive = false, hasAiSavedCurves = false, showAiCaptureGuidance = false, useInsetDefaultAxisBox = false, onGraphAreaManuallyAdjusted }) => {
-  const { uploadedImage, graphArea, setGraphArea, setCaptureGraphArea, plotReferenceArea, isPlotReferenceLocked, getMappingArea, expandPlotReference, establishPlotReference, dataPoints, addDataPoint, clearDataPoints, graphConfig, deleteDataPoint, convertGraphToCanvasCoordinates, convertCanvasToGraphCoordinates, replaceDataPoints, updateDataPointFromCanvas } = useGraph();
+  const { uploadedImage, graphArea, setGraphArea, setCaptureGraphArea, plotReferenceArea, isPlotReferenceLocked, getMappingArea, establishPlotReference, dataPoints, addDataPoint, clearDataPoints, graphConfig, deleteDataPoint, convertGraphToCanvasCoordinates, convertCanvasToGraphCoordinates, replaceDataPoints, updateDataPointFromCanvas } = useGraph();
   const [showRedrawMsg, setShowRedrawMsg] = useState(false);
   const canvasRef = useRef(null);
   const magnifierRef = useRef(null);
@@ -314,47 +314,37 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     setBoxTransparent(false);
   }, [uploadedImage, imageSize.width, imageSize.height, graphArea.width, graphArea.height, graphArea.x, graphArea.y, setGraphArea, useInsetDefaultAxisBox]);
 
-  // Legacy saved graphs often stored the capture box as plot reference. Expand once on load.
+  // Repair plot reference corrupted by prior auto-expand-to-full-image logic.
   useEffect(() => {
     plotRefLegacyExpandedRef.current = false;
   }, [uploadedImage]);
 
   useEffect(() => {
     if (plotRefLegacyExpandedRef.current) return;
-    if (!isAxisMappingConfirmed) return;
+    if (!isAxisMappingConfirmed || !isPlotReferenceLocked) return;
     if (!uploadedImage || imageSize.width <= 0 || imageSize.height <= 0) return;
 
     const plot = normalizeArea(plotReferenceArea);
-    if (plot.width <= 0 || plot.height <= 0) return;
-
     const capture = normalizeArea(graphArea);
-    const datasheetPlot = buildDefaultGraphArea(imageSize.width, imageSize.height, { useInset: true });
-    const fullImagePlot = buildDefaultGraphArea(imageSize.width, imageSize.height, { useInset: false });
-    const defaultPlot = createInitialAxisBox(imageSize.width, imageSize.height);
+    if (plot.width <= 0 || capture.width <= 0) return;
 
-    const plotMatchesCapture =
-      capture.width > 0 && graphAreasAreSimilar(plot, capture, 12);
-    const plotLikelyLegacyShrunk =
-      plotMatchesCapture ||
-      plot.width < imageSize.width * 0.85 ||
-      plot.width < defaultPlot.width * 0.95 ||
-      plot.height < defaultPlot.height * 0.95;
+    const plotRefWasAutoExpandedToFullImage =
+      plot.width >= imageSize.width * 0.92 && capture.width < plot.width * 0.88;
 
-    if (plotLikelyLegacyShrunk) {
-      expandPlotReference(datasheetPlot);
-      expandPlotReference(fullImagePlot);
+    if (plotRefWasAutoExpandedToFullImage) {
+      establishPlotReference(capture);
       plotRefLegacyExpandedRef.current = true;
-      console.log('[PLOT REF] Expanded legacy/shrunk plot reference for confirmed axis mapping.');
+      console.log('[PLOT REF] Repaired plot reference to match axis-aligned capture box.');
     }
   }, [
     uploadedImage,
     imageSize.width,
     imageSize.height,
     isAxisMappingConfirmed,
+    isPlotReferenceLocked,
     plotReferenceArea,
     graphArea,
-    expandPlotReference,
-    useInsetDefaultAxisBox,
+    establishPlotReference,
   ]);
 
   // Separate effect to redraw selection box and points without reloading image
@@ -1527,14 +1517,16 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
             if (lastUserBoxRef.current?.width > 0 && lastUserBoxRef.current?.height > 0) {
               const restored = { ...lastUserBoxRef.current };
               setCaptureGraphArea(restored);
+              if (!isPlotReferenceLocked) {
+                establishPlotReference(restored);
+              }
             } else if (imageSize.width && imageSize.height) {
               const newBox = createInitialAxisBox(imageSize.width, imageSize.height);
               setCaptureGraphArea(newBox);
-              establishPlotReference(newBox);
+              if (!isPlotReferenceLocked) {
+                establishPlotReference(newBox);
+              }
               lastUserBoxRef.current = newBox;
-            }
-            if (imageSize.width && imageSize.height) {
-              expandPlotReference(createInitialAxisBox(imageSize.width, imageSize.height));
             }
             setBoxTransparent(false);
             setShowRedrawMsg(false);

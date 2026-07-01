@@ -6843,6 +6843,10 @@ const GraphCapture = () => {
     const graphId = String(searchParams.get('graph_id') || activeSessionGraphIdRef.current || '').trim();
     if (!graphId || graphArea.width <= 0 || graphArea.height <= 0) return;
     const mappingArea = getMappingArea();
+    const plotAreaForPersist =
+      isAxisMappingConfirmed && plotReferenceArea.width > 0 && plotReferenceArea.height > 0
+        ? plotReferenceArea
+        : (mappingArea.width > 0 ? mappingArea : graphArea);
     persistGraphContext(
       graphId,
       graphArea,
@@ -6850,7 +6854,7 @@ const GraphCapture = () => {
       {
         persistAxis: isAxisMappingConfirmed || hasValidAxisMapping(graphConfig),
         plotReferenceLocked: isAxisMappingConfirmed,
-        plotReferenceArea: mappingArea.width > 0 ? mappingArea : graphArea,
+        plotReferenceArea: plotAreaForPersist,
       }
     );
   }, [
@@ -8153,10 +8157,8 @@ const GraphCapture = () => {
                   setShowCaptureAnotherGuidance(false);
                   const graphId = String(urlParams.graph_id || activeSessionGraphIdRef.current || '').trim();
                   if (graphId && graphArea.width > 0 && graphArea.height > 0) {
-                    const mappingArea = getMappingArea();
                     persistGraphContext(graphId, graphArea, graphConfig, {
-                      plotReferenceArea:
-                        mappingArea.width > 0 ? mappingArea : graphArea,
+                      plotReferenceArea: graphArea,
                       plotReferenceLocked: true,
                     });
                     setSavedCurves((prev) => {

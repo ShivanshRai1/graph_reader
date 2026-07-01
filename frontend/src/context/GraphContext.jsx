@@ -184,7 +184,9 @@ export const GraphProvider = ({ children }) => {
   const setCaptureGraphArea = useCallback((value) => {
     setGraphAreaState((prev) => {
       const next = typeof value === 'function' ? value(prev) : value;
-      setPlotReferenceArea((prevPlot) => unionGraphAreas(prevPlot, next));
+      if (!isPlotReferenceLockedRef.current) {
+        setPlotReferenceArea({ ...next });
+      }
       return next;
     });
   }, []);
@@ -213,15 +215,9 @@ export const GraphProvider = ({ children }) => {
     isPlotReferenceLockedRef.current = true;
     setIsPlotReferenceLocked(true);
     setGraphAreaState((currentCaptureBox) => {
-      setPlotReferenceArea((prev) => {
-        if (prev.width > 0 && prev.height > 0) {
-          return prev;
-        }
-        if (currentCaptureBox.width > 0 && currentCaptureBox.height > 0) {
-          return { ...currentCaptureBox };
-        }
-        return prev;
-      });
+      if (currentCaptureBox.width > 0 && currentCaptureBox.height > 0) {
+        setPlotReferenceArea({ ...currentCaptureBox });
+      }
       return currentCaptureBox;
     });
   }, []);
@@ -229,6 +225,12 @@ export const GraphProvider = ({ children }) => {
   const unlockPlotReference = useCallback(() => {
     isPlotReferenceLockedRef.current = false;
     setIsPlotReferenceLocked(false);
+    setGraphAreaState((currentCaptureBox) => {
+      if (currentCaptureBox.width > 0 && currentCaptureBox.height > 0) {
+        setPlotReferenceArea({ ...currentCaptureBox });
+      }
+      return currentCaptureBox;
+    });
   }, []);
 
   const restorePlotReferenceArea = useCallback((area, { locked = false } = {}) => {
