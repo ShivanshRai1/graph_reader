@@ -104,6 +104,18 @@ const GRAPH_SCALE_PATTERNS = [
     },
   },
   {
+    id: 'gate_charge_vs_vgs',
+    label: 'Gate charge vs gate voltage (Qg vs Vgs)',
+    typicalNote:
+      'Gate charge curves are often logarithmic on one or both axes — verify against the printed graph.',
+    componentFamilies: ['mosfet', 'generic'],
+    defaultScales: { x: 'Linear', y: 'Linear' },
+    defaultUnits: { x: BASE, y: BASE },
+    matches: ({ combined }) =>
+      (/\bgate\s+charge\b/i.test(combined) || /\bqg\b/i.test(combined)) &&
+      (/\bvgs\b/i.test(combined) || /\bgate\s+voltage\b/i.test(combined)),
+  },
+  {
     id: 'rds_on_vs_vgs',
     label: 'On-resistance vs gate voltage',
     typicalNote:

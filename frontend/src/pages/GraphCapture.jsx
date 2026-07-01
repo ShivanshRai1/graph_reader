@@ -8179,6 +8179,10 @@ const GraphCapture = () => {
                 initialGraphTitle={urlParams.graph_title}
                 initialXTitle={urlParams.x_label}
                 initialYTitle={urlParams.y_label}
+                companyGraphId={String(
+                  urlParams.graph_id || savedCurves[0]?.graphId || ''
+                ).trim()}
+                sessionSavedCurves={savedCurves}
                 isAxisMappingConfirmed={isAxisMappingConfirmed}
                 allowNextCurveNameEntry={showCaptureAnotherGuidance && isAxisMappingConfirmed}
                 isEditingCurve={Boolean(editingCurveId)}

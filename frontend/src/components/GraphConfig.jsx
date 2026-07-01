@@ -68,7 +68,7 @@ const convertTemperatureToCelsius = (rawValue, unit) => {
   return formatTemperatureNumber(numericValue);
 };
 
-const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNameReadOnly = false, isXTitleReadOnly = false, isYTitleReadOnly = false, initialCurveName = '', initialGraphTitle = '', initialXTitle = '', initialYTitle = '', isAxisMappingConfirmed = false, isEditingCurve = false, allowNextCurveNameEntry = false, isPartNumberFromUrl = false, isPartNumberLocked = false, showManufacturerField = false, showUsernameField = false, onConfirmAxisMapping = () => {}, onRetakeAxis = () => {}, children = null }) => {
+const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNameReadOnly = false, isXTitleReadOnly = false, isYTitleReadOnly = false, initialCurveName = '', initialGraphTitle = '', initialXTitle = '', initialYTitle = '', isAxisMappingConfirmed = false, isEditingCurve = false, allowNextCurveNameEntry = false, isPartNumberFromUrl = false, isPartNumberLocked = false, showManufacturerField = false, showUsernameField = false, companyGraphId = '', sessionSavedCurves = [], onConfirmAxisMapping = () => {}, onRetakeAxis = () => {}, children = null }) => {
   const { graphConfig, setGraphConfig } = useGraph();
   const [logError, setLogError] = useState({ x: '', y: '' });
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -183,9 +183,25 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
 
   const [historicalScaleHint, setHistoricalScaleHint] = useState(null);
 
+  const sessionCurvesFingerprint = useMemo(
+    () =>
+      (Array.isArray(sessionSavedCurves) ? sessionSavedCurves : [])
+        .map(
+          (curve) =>
+            `${curve?.id || ''}:${curve?.config?.xScale || ''}:${curve?.config?.yScale || ''}:${curve?.config?.xMin || ''}:${curve?.config?.xMax || ''}:${curve?.config?.yMin || ''}:${curve?.config?.yMax || ''}`
+        )
+        .join(';'),
+    [sessionSavedCurves]
+  );
+
   const showScaleGuidancePanel =
     !isMetadataLocked &&
-    Boolean(quantityUnitGuidance.length > 0 || graphPatternGuidance || historicalScaleHint?.message);
+    Boolean(
+      quantityUnitGuidance.length > 0 ||
+        graphPatternGuidance ||
+        historicalScaleHint?.message ||
+        historicalScaleHint?.emptyMessage
+    );
 
   const canApplyHistoricalAxisSuggestion =
     !isAxisMappingConfirmed &&
@@ -221,13 +237,18 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
 
     let cancelled = false;
     const timer = window.setTimeout(async () => {
-      const result = await fetchHistoricalScaleSuggestion(API_URL, {
-        graphTitle: graphConfig.graphTitle,
-        xLabel: graphConfig.xLabel,
-        yLabel: graphConfig.yLabel,
-        partNumber: graphConfig.partNumber,
-        manufacturer: graphConfig.manufacturer,
-      });
+      const result = await fetchHistoricalScaleSuggestion(
+        API_URL,
+        {
+          graphTitle: graphConfig.graphTitle,
+          xLabel: graphConfig.xLabel,
+          yLabel: graphConfig.yLabel,
+          partNumber: graphConfig.partNumber,
+          manufacturer: graphConfig.manufacturer,
+          graphId: companyGraphId,
+        },
+        { sessionCurves: sessionSavedCurves }
+      );
       if (!cancelled) {
         setHistoricalScaleHint(result);
       }
@@ -243,6 +264,8 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
     graphConfig.yLabel,
     graphConfig.partNumber,
     graphConfig.manufacturer,
+    companyGraphId,
+    sessionCurvesFingerprint,
     isMetadataLocked,
   ]);
 
@@ -740,6 +763,13 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
               {historicalScaleHint.message}
             </p>
           ) : null}
+          {historicalScaleHint?.emptyMessage && !historicalScaleHint?.message ? (
+            <p className="text-sm sm:text-base text-amber-900 mb-3 leading-relaxed">
+              <span className="font-semibold">Past captures:</span>
+              {' '}
+              {historicalScaleHint.emptyMessage}
+            </p>
+          ) : null}
           {canApplyHistoricalAxisSuggestion ? (
             <div className="mb-3">
               <button
@@ -750,7 +780,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
                 Use axis settings from similar captures
               </button>
               <p className="text-xs text-amber-800 mt-2">
-                Fills scale and min/max from past graphs like this one. You still align the blue box and click Final Check.
+                Uses past graphs like this one from your saved curves and company records. You still align the blue box and click Final Check.
               </p>
             </div>
           ) : null}
