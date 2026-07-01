@@ -11,7 +11,7 @@ import {
   getGraphPatternGuidance,
   UNIT_PREFIX_SELECT_OPTIONS,
 } from '../utils/quantityUnitGuidance';
-import { fetchHistoricalScaleSuggestion, applyHistoricalAxisSuggestion, historicalSuggestionHasAxisSettings } from '../utils/graphScaleHistory';
+import { fetchHistoricalScaleSuggestion, applyHistoricalAxisSuggestion, historicalSuggestionHasAxisSettings, PAST_CAPTURES_EMPTY_MESSAGE } from '../utils/graphScaleHistory';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -208,6 +208,30 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
     !isEditingCurve &&
     historicalSuggestionHasAxisSettings(historicalScaleHint);
 
+  const canApplyPatternDefaults =
+    !isAxisMappingConfirmed &&
+    !isEditingCurve &&
+    Boolean(graphPatternGuidance?.defaultScales?.x || graphPatternGuidance?.defaultScales?.y);
+
+  const handleApplyPatternDefaults = () => {
+    if (!graphPatternGuidance) return;
+    setGraphConfig((prev) => ({
+      ...prev,
+      ...(graphPatternGuidance.defaultScales?.x
+        ? { xScale: graphPatternGuidance.defaultScales.x }
+        : {}),
+      ...(graphPatternGuidance.defaultScales?.y
+        ? { yScale: graphPatternGuidance.defaultScales.y }
+        : {}),
+      ...(graphPatternGuidance.defaultUnits?.x
+        ? { xUnitPrefix: graphPatternGuidance.defaultUnits.x }
+        : {}),
+      ...(graphPatternGuidance.defaultUnits?.y
+        ? { yUnitPrefix: graphPatternGuidance.defaultUnits.y }
+        : {}),
+    }));
+  };
+
   const handleApplyHistoricalAxisSuggestion = () => {
     const next = applyHistoricalAxisSuggestion(graphConfig, historicalScaleHint, {
       onlyFillDefaults: false,
@@ -237,20 +261,39 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
 
     let cancelled = false;
     const timer = window.setTimeout(async () => {
-      const result = await fetchHistoricalScaleSuggestion(
-        API_URL,
-        {
-          graphTitle: graphConfig.graphTitle,
-          xLabel: graphConfig.xLabel,
-          yLabel: graphConfig.yLabel,
-          partNumber: graphConfig.partNumber,
-          manufacturer: graphConfig.manufacturer,
-          graphId: companyGraphId,
-        },
-        { sessionCurves: sessionSavedCurves }
-      );
-      if (!cancelled) {
-        setHistoricalScaleHint(result);
+      try {
+        const result = await fetchHistoricalScaleSuggestion(
+          API_URL,
+          {
+            graphTitle: graphConfig.graphTitle,
+            xLabel: graphConfig.xLabel,
+            yLabel: graphConfig.yLabel,
+            partNumber: graphConfig.partNumber,
+            manufacturer: graphConfig.manufacturer,
+            graphId: companyGraphId,
+          },
+          { sessionCurves: sessionSavedCurves }
+        );
+        if (cancelled) return;
+        if (result) {
+          setHistoricalScaleHint(result);
+          return;
+        }
+        if (graphPatternGuidance) {
+          setHistoricalScaleHint({
+            suggestion: null,
+            emptyMessage: PAST_CAPTURES_EMPTY_MESSAGE,
+          });
+        } else {
+          setHistoricalScaleHint(null);
+        }
+      } catch {
+        if (!cancelled && graphPatternGuidance) {
+          setHistoricalScaleHint({
+            suggestion: null,
+            emptyMessage: PAST_CAPTURES_EMPTY_MESSAGE,
+          });
+        }
       }
     }, 350);
 
@@ -266,6 +309,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
     graphConfig.manufacturer,
     companyGraphId,
     sessionCurvesFingerprint,
+    graphPatternGuidance,
     isMetadataLocked,
   ]);
 
@@ -756,6 +800,11 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
               {graphPatternGuidance.detail}
             </p>
           ) : null}
+          {graphPatternGuidance && !historicalScaleHint?.message && !historicalScaleHint?.emptyMessage ? (
+            <p className="text-sm sm:text-base text-amber-800 mb-3 leading-relaxed">
+              Checking past captures...
+            </p>
+          ) : null}
           {historicalScaleHint?.message ? (
             <p className="text-sm sm:text-base text-amber-900 mb-3 leading-relaxed">
               <span className="font-semibold">Past captures:</span>
@@ -769,6 +818,20 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
               {' '}
               {historicalScaleHint.emptyMessage}
             </p>
+          ) : null}
+          {canApplyPatternDefaults ? (
+            <div className="mb-3">
+              <button
+                type="button"
+                onClick={handleApplyPatternDefaults}
+                className="px-4 py-2 rounded bg-amber-600 text-white text-sm font-semibold hover:bg-amber-700"
+              >
+                Use typical scale for this graph type
+              </button>
+              <p className="text-xs text-amber-800 mt-2">
+                Sets the usual scale and units for graphs like this (e.g. logarithmic C–V). You still set min/max and align the blue box.
+              </p>
+            </div>
           ) : null}
           {canApplyHistoricalAxisSuggestion ? (
             <div className="mb-3">

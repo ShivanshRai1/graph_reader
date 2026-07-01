@@ -10,6 +10,10 @@ const MAJORITY_RATIO = 0.7;
 const UNIT_MAJORITY_RATIO = 0.6;
 const MAX_COMPANY_GRAPHS = 8;
 const COMPANY_FETCH_TIMEOUT_MS = 20000;
+const RENDER_FETCH_TIMEOUT_MS = 10000;
+
+export const PAST_CAPTURES_EMPTY_MESSAGE =
+  'No similar past captures found yet for this part and graph type. Save this graph once; the next similar capture can suggest axis settings automatically.';
 
 const PATTERN_SEARCH_KEYWORDS = {
   capacitance_vs_vr: ['capacitance'],
@@ -36,10 +40,14 @@ const buildScaleSuggestionsUrl = (apiUrl, params = {}) => {
 };
 
 const parseCompanyApiText = (rawText) => {
-  const text = String(rawText || '').trim();
-  if (!text) return null;
-  const match = text.match(/[{\[][\s\S]*[}\]]/);
-  return JSON.parse(match ? match[0] : text);
+  try {
+    const text = String(rawText || '').trim();
+    if (!text) return null;
+    const match = text.match(/[{\[][\s\S]*[}\]]/);
+    return JSON.parse(match ? match[0] : text);
+  } catch {
+    return null;
+  }
 };
 
 const fetchWithTimeout = async (url, timeoutMs = COMPANY_FETCH_TIMEOUT_MS) => {
@@ -357,7 +365,7 @@ const dedupeAxisSamples = (samples = []) => {
 
 const buildEmptyHistoricalMessage = ({ totalSamples = 0, sessionSampleCount = 0 } = {}) => {
   if (totalSamples === 0) {
-    return 'No similar past captures found yet for this part and graph type. Save this graph once; the next similar capture can suggest axis settings automatically.';
+    return PAST_CAPTURES_EMPTY_MESSAGE;
   }
   if (totalSamples === 1) {
     return 'Only one similar capture found so far. Save one more graph like this to unlock axis suggestions.';
@@ -516,6 +524,14 @@ const fetchRenderScaleSuggestion = async (apiUrl, params = {}) => {
   }
 };
 
+const fetchRenderScaleSuggestionWithTimeout = async (apiUrl, params = {}) =>
+  Promise.race([
+    fetchRenderScaleSuggestion(apiUrl, params),
+    new Promise((resolve) => {
+      window.setTimeout(() => resolve(null), RENDER_FETCH_TIMEOUT_MS);
+    }),
+  ]);
+
 const mergeHistoricalScaleSuggestions = (renderResult, companyResult) => {
   if (!renderResult?.suggestion && !companyResult?.suggestion) {
     return null;
@@ -580,6 +596,23 @@ const mergeHistoricalScaleSuggestions = (renderResult, companyResult) => {
   };
 };
 
+const buildEmptyHistoricalHint = (targetPattern, companyResult = null, renderResult = null) => {
+  if (!targetPattern) return null;
+
+  const totalSamples =
+    (companyResult?.sample_count || 0) + (renderResult?.sample_count || 0);
+  const sessionSampleCount = companyResult?.sessionSampleCount || 0;
+
+  return {
+    suggestion: null,
+    pattern_id: targetPattern.id,
+    pattern_label: targetPattern.label,
+    sample_count: totalSamples,
+    message: null,
+    emptyMessage: buildEmptyHistoricalMessage({ totalSamples, sessionSampleCount }),
+  };
+};
+
 export const fetchHistoricalScaleSuggestion = async (
   apiUrl,
   params = {},
@@ -591,37 +624,29 @@ export const fetchHistoricalScaleSuggestion = async (
     yTitle: params.yLabel,
   });
 
-  const [renderResult, companyResult] = await Promise.all([
-    fetchRenderScaleSuggestion(apiUrl, params),
-    buildCompanyAndSessionSuggestion(params, sessionCurves, targetPattern),
-  ]);
-
-  const merged = mergeHistoricalScaleSuggestions(renderResult, companyResult);
-  if (merged?.suggestion) return merged;
-
-  if (companyResult?.suggestion) {
-    return {
-      ...companyResult,
-      sources: [companyResult.source === 'session' ? 'session' : 'company'],
-    };
-  }
-  if (renderResult?.suggestion) return { ...renderResult, sources: ['render'] };
-
   if (!targetPattern) return null;
 
-  const totalSamples =
-    (companyResult?.sample_count || 0) +
-    (renderResult?.sample_count || 0);
-  const sessionSampleCount = companyResult?.sessionSampleCount || 0;
+  try {
+    const [renderResult, companyResult] = await Promise.all([
+      fetchRenderScaleSuggestionWithTimeout(apiUrl, params),
+      buildCompanyAndSessionSuggestion(params, sessionCurves, targetPattern),
+    ]);
 
-  return {
-    suggestion: null,
-    pattern_id: targetPattern.id,
-    pattern_label: targetPattern.label,
-    sample_count: totalSamples,
-    message: null,
-    emptyMessage: buildEmptyHistoricalMessage({ totalSamples, sessionSampleCount }),
-  };
+    const merged = mergeHistoricalScaleSuggestions(renderResult, companyResult);
+    if (merged?.suggestion) return merged;
+
+    if (companyResult?.suggestion) {
+      return {
+        ...companyResult,
+        sources: [companyResult.source === 'session' ? 'session' : 'company'],
+      };
+    }
+    if (renderResult?.suggestion) return { ...renderResult, sources: ['render'] };
+
+    return buildEmptyHistoricalHint(targetPattern, companyResult, renderResult);
+  } catch {
+    return buildEmptyHistoricalHint(targetPattern);
+  }
 };
 
 const isDefaultLinearScale = (value) => String(value || 'Linear').trim() === 'Linear';

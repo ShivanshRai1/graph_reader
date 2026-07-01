@@ -12,6 +12,7 @@ const combineTitles = ({ graphTitle = '', xTitle = '', yTitle = '' } = {}) =>
 const hasCapacitanceSignal = (text) =>
   /\bcapacitance\b/i.test(text) ||
   /\bc\s*\[/i.test(text) ||
+  /\bc\s*\(/i.test(text) ||
   /\[\s*pF/i.test(text) ||
   /\[\s*nF/i.test(text) ||
   /\bc\s+vs\.?\s*/i.test(text);
@@ -35,7 +36,8 @@ const hasVoltageSignal = (text) =>
   hasReverseVoltageSignal(text) ||
   hasForwardVoltageSignal(text) ||
   /\bvoltage\b/i.test(text) ||
-  /\[\s*v\s*\]/i.test(text);
+  /\[\s*v\s*\]/i.test(text) ||
+  /\bv\s*ds\b/i.test(text);
 
 const hasCurrentSignal = (text) =>
   /\bcurrent\b/i.test(text) ||
