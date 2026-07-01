@@ -6844,8 +6844,8 @@ const GraphCapture = () => {
     if (!graphId || graphArea.width <= 0 || graphArea.height <= 0) return;
     const mappingArea = getMappingArea();
     const plotAreaForPersist =
-      isAxisMappingConfirmed && plotReferenceArea.width > 0 && plotReferenceArea.height > 0
-        ? plotReferenceArea
+      isAxisMappingConfirmed && graphArea.width > 0 && graphArea.height > 0
+        ? graphArea
         : (mappingArea.width > 0 ? mappingArea : graphArea);
     persistGraphContext(
       graphId,

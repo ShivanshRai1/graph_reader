@@ -1,13 +1,13 @@
 import { useRef, useState, useEffect, useMemo } from 'react';
 import { useGraph, isManualCapturePoint, getManualCapturePoints, canvasToGraphWithBounds } from '../context/GraphContext';
-import { buildDefaultGraphArea, graphAreasAreSimilar, isGraphAreaContainedIn } from '../utils/graphAreaHelpers';
+import { buildDefaultGraphArea, graphAreasAreSimilar } from '../utils/graphAreaHelpers';
 import {
   shouldShowScaleAndUnitCrossCheck,
   SCALE_AND_UNIT_CROSS_CHECK_MESSAGE,
 } from '../utils/quantityUnitGuidance';
 
 const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', isAxisMappingConfirmed = false, hasReturnUrl = false, isEditingCurve = false, editingCurveOverlayId = '', savedCurveViewActive = false, hasAiSavedCurves = false, showAiCaptureGuidance = false, useInsetDefaultAxisBox = false, onGraphAreaManuallyAdjusted }) => {
-  const { uploadedImage, graphArea, setGraphArea, setCaptureGraphArea, plotReferenceArea, isPlotReferenceLocked, getMappingArea, expandPlotReference, establishPlotReference, dataPoints, addDataPoint, clearDataPoints, graphConfig, deleteDataPoint, convertGraphToCanvasCoordinates, convertCanvasToGraphCoordinates, replaceDataPoints, updateDataPointFromCanvas } = useGraph();
+  const { uploadedImage, graphArea, setGraphArea, setCaptureGraphArea, plotReferenceArea, isPlotReferenceLocked, getMappingArea, establishPlotReference, dataPoints, addDataPoint, clearDataPoints, graphConfig, deleteDataPoint, convertGraphToCanvasCoordinates, convertCanvasToGraphCoordinates, replaceDataPoints, updateDataPointFromCanvas } = useGraph();
   const [showRedrawMsg, setShowRedrawMsg] = useState(false);
   const canvasRef = useRef(null);
   const magnifierRef = useRef(null);
@@ -142,8 +142,12 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     !isEditingCurve &&
     canShowImportedCurveOverlay();
 
-  // Allow capture-zone resize before/after confirm; plot reference locks separately on confirm.
-  const canAdjustCaptureBox = () => !(isReadOnly && !isEditingCurve);
+  // Lock the blue box and map coordinates from it once axis mapping is confirmed.
+  const canAdjustCaptureBox = () => {
+    if (isReadOnly && !isEditingCurve) return false;
+    if (isAxisMappingConfirmed && !isEditingCurve) return false;
+    return true;
+  };
   const EDGE_GAP = 12; // Hysteresis for edge checks to reduce flicker
   const EPS = 1e-6;
   const WARN_CLEAR_DELAY = 180; // ms to hold warning before clearing
@@ -314,7 +318,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     setBoxTransparent(false);
   }, [uploadedImage, imageSize.width, imageSize.height, graphArea.width, graphArea.height, graphArea.x, graphArea.y, setGraphArea, useInsetDefaultAxisBox]);
 
-  // Repair plot reference corrupted by prior auto-expand-to-full-image logic.
+  // Keep plot reference aligned with the visible blue box after confirm.
   useEffect(() => {
     plotRefLegacyExpandedRef.current = false;
   }, [uploadedImage]);
@@ -328,19 +332,10 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     const capture = normalizeArea(graphArea);
     if (plot.width <= 0 || capture.width <= 0) return;
 
-    const plotRefWasAutoExpandedToFullImage =
-      plot.width >= imageSize.width * 0.92 && capture.width < plot.width * 0.88;
-    const captureExtendsBeyondPlot =
-      !isGraphAreaContainedIn(capture, plot) && !graphAreasAreSimilar(plot, capture, 4);
-
-    if (plotRefWasAutoExpandedToFullImage) {
+    if (!graphAreasAreSimilar(plot, capture, 4)) {
       establishPlotReference(capture);
       plotRefLegacyExpandedRef.current = true;
-      console.log('[PLOT REF] Repaired plot reference to match axis-aligned capture box.');
-    } else if (captureExtendsBeyondPlot) {
-      expandPlotReference(capture);
-      plotRefLegacyExpandedRef.current = true;
-      console.log('[PLOT REF] Expanded plot reference to include current axis-aligned capture box.');
+      console.log('[PLOT REF] Synced plot reference to locked axis box.');
     }
   }, [
     uploadedImage,
@@ -351,7 +346,6 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     plotReferenceArea,
     graphArea,
     establishPlotReference,
-    expandPlotReference,
   ]);
 
   // Separate effect to redraw selection box and points without reloading image
@@ -483,7 +477,11 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       if (tickGuide) drawLastLabeledTickGuides(ctx, area, tickGuide.fraction);
       ctx.globalAlpha = 1; // Reset for handles
       
-      // Draw resize handles
+      // Draw resize handles when the axis box can still be adjusted
+      if (!canAdjustCaptureBox()) {
+        return;
+      }
+
       const handleSize = 8;
       const handles = [
         { x: area.x, y: area.y, key: 'top-left' },
@@ -1024,12 +1022,6 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     } else if (isResizing) {
       justFinishedResizingRef.current = true;
       lastUserBoxRef.current = { ...graphArea };
-      if (isPlotReferenceLocked) {
-        const capture = normalizeArea(graphAreaRef.current);
-        if (capture.width > 0 && capture.height > 0) {
-          expandPlotReference(capture);
-        }
-      }
       setBoxTransparent(true);
       onGraphAreaManuallyAdjusted?.();
       setTimeout(() => {
@@ -1181,7 +1173,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     
     // Check if mouse is directly over any resize handle
     const area = normalizeArea(graphArea);
-    if (area.width > 0 && area.height > 0) {
+    if (area.width > 0 && area.height > 0 && canAdjustCaptureBox()) {
       const handleRadius = 12; // Detection radius for hover
       
       // Define all handle positions
@@ -1424,10 +1416,10 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       <div className="bg-blue-50 p-4 rounded mb-4">
         <p className="text-blue-700 font-medium mb-2"><strong>Instructions:</strong></p>
         <ul className="list-disc pl-5 text-gray-700">
-          <li>Drag to select the graph area (blue box). Before confirming, align it to the full printed axis range.</li>
-          <li>After confirm, you can resize the blue box as a capture zone; coordinates still use the full axis.</li>
+          <li>Drag to select the graph area (blue box). Align it to the full printed axis range before confirming.</li>
+          <li>After axis mapping is confirmed, the blue box is locked. Unlock configuration to realign it.</li>
           <li>In Graph Configuration, set axis min/max, scale, and unit, then confirm axis mapping</li>
-          <li>Click on the plot to add data points (orange = outside capture zone, red = inside)</li>
+          <li>Click on the plot to add data points</li>
           <li>Right-click on a captured point to remove it</li>
           <li>Use the buttons below to adjust the box or clear points; hover to see the magnifier</li>
         </ul>
@@ -1525,8 +1517,10 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
           )}
         </div>
         <button
-          className="px-4 py-2 rounded bg-gray-700 text-white font-medium"
+          className={`px-4 py-2 rounded font-medium ${isAxisMappingConfirmed && !isEditingCurve ? 'bg-gray-400 text-gray-100 cursor-not-allowed' : 'bg-gray-700 text-white'}`}
+          disabled={isAxisMappingConfirmed && !isEditingCurve}
           onClick={() => {
+            if (isAxisMappingConfirmed && !isEditingCurve) return;
             if (lastUserBoxRef.current?.width > 0 && lastUserBoxRef.current?.height > 0) {
               const restored = { ...lastUserBoxRef.current };
               setCaptureGraphArea(restored);
@@ -1545,7 +1539,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
             setShowRedrawMsg(false);
             onGraphAreaManuallyAdjusted?.();
           }}
-          title="Redraw/retake the bounding box for the axis (clears only the box, not captured points)"
+          title={isAxisMappingConfirmed && !isEditingCurve ? 'Unlock configuration to redraw the axis box' : 'Redraw/retake the bounding box for the axis (clears only the box, not captured points)'}
         >
           Redraw Axis Box
         </button>
