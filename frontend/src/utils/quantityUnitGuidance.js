@@ -1,6 +1,7 @@
 import {
   detectGraphScalePattern,
   getPatternAxisDefaults,
+  normalizeGraphMetadataText,
 } from './graphScalePatterns';
 
 const PICO = '1e-12';
@@ -154,7 +155,7 @@ const BRACKET_UNIT_TO_SCALE = {
   uf: 'Logarithmic',
 };
 
-const normalizeGuidanceText = (value) => String(value || '').trim();
+const normalizeGuidanceText = (value) => normalizeGraphMetadataText(value);
 
 const normalizeBracketUnitKey = (value) =>
   String(value || '')

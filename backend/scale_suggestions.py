@@ -16,8 +16,27 @@ PATTERN_LABELS = {
 }
 
 
+def _normalize_part(text: str) -> str:
+    cleaned = str(text or "").strip()
+    if not cleaned:
+        return ""
+
+    cleaned = re.sub(
+        r"^[\s_./\\|,;:!@#$%^&*+=~`\"'<>[\]{}-–—]+|[\s_./\\|,;:!@#$%^&*+=~`\"'<>[\]{}-–—]+$",
+        "",
+        cleaned,
+    )
+    cleaned = re.sub(r"[_/\\|,;:!@#$%^&*+=~`\"'<>{}]+", " ", cleaned)
+    cleaned = cleaned.replace("–", "-").replace("—", "-")
+    cleaned = re.sub(r"(?<!\d)-(?!\d)", " - ", cleaned)
+    cleaned = re.sub(r"(?<!\d)\.(?!\d)", " ", cleaned)
+    return re.sub(r"\s+", " ", cleaned).strip()
+
+
 def _normalize_text(*parts: Optional[str]) -> str:
-    combined = " ".join(str(part or "").strip() for part in parts if str(part or "").strip())
+    combined = " ".join(
+        _normalize_part(part) for part in parts if _normalize_part(part)
+    )
     return re.sub(r"\s+", " ", combined).strip().lower()
 
 

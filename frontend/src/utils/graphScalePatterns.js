@@ -4,7 +4,27 @@ const MICRO = '1e-6';
 const MILLI = '1e-3';
 const BASE = '1';
 
-const normalizeText = (value) => String(value || '').trim();
+// Normalize titles/labels for pattern matching: turn punctuation into word breaks
+// while keeping unit markers like C(pF), [pF], and I-V style ranges readable.
+const SEPARATOR_CHARS = /[_/\\|,;:!@#$%^&*+=~`'"<>{}]+/g;
+const WRAPPING_PUNCTUATION = /^[\s_./\\|,;:!@#$%^&*+=~`'"<>[\]{}-–—]+|[\s_./\\|,;:!@#$%^&*+=~`'"<>[\]{}-–—]+$/g;
+
+export const normalizeGraphMetadataText = (value) => {
+  let text = String(value || '').trim();
+  if (!text) return '';
+
+  text = text.replace(WRAPPING_PUNCTUATION, '');
+  text = text
+    .replace(SEPARATOR_CHARS, ' ')
+    .replace(/[–—]/g, '-')
+    // Hyphen between non-digits (I-V, on-resistance); keep decimals like 0.1.
+    .replace(/(?<!\d)-(?!-)(?!\d)/g, ' - ')
+    .replace(/(?<!\d)\.(?!\d)/g, ' ');
+
+  return text.replace(/\s+/g, ' ').trim();
+};
+
+const normalizeText = (value) => normalizeGraphMetadataText(value);
 
 const combineTitles = ({ graphTitle = '', xTitle = '', yTitle = '' } = {}) =>
   [graphTitle, xTitle, yTitle].filter(Boolean).join(' ');
@@ -99,7 +119,7 @@ const GRAPH_SCALE_PATTERNS = [
     defaultScales: { x: 'Linear', y: 'Linear' },
     defaultUnits: { x: BASE, y: MILLI },
     matches: ({ combined, xTitle, yTitle }) => {
-      if (!/\boutput\s+characteristic|\btransfer\s+characteristic|\bdrain\s+current\b|\bi\s*[-–]\s*v\b/i.test(combined)) {
+      if (!/\boutput\s+characteristic|\btransfer\s+characteristic|\bdrain\s+current\b|\bi\s*[-–]\s*v\b|\bi\s+v\b/i.test(combined)) {
         return false;
       }
       return hasVoltageSignal(xTitle || combined) && hasCurrentSignal(yTitle || combined);
