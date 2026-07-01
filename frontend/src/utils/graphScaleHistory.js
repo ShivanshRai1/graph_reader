@@ -28,7 +28,62 @@ export const fetchHistoricalScaleSuggestion = async (apiUrl, params = {}) => {
   }
 };
 
-export const applyHistoricalScaleHints = (
+const isDefaultLinearScale = (value) => String(value || 'Linear').trim() === 'Linear';
+
+const isDefaultPlaceholderBounds = (config = {}) => {
+  const xMin = Number.parseFloat(config.xMin);
+  const xMax = Number.parseFloat(config.xMax);
+  const yMin = Number.parseFloat(config.yMin);
+  const yMax = Number.parseFloat(config.yMax);
+  return (
+    isDefaultLinearScale(config.xScale) &&
+    isDefaultLinearScale(config.yScale) &&
+    xMin === 0 &&
+    xMax === 100 &&
+    yMin === 0 &&
+    yMax === 100
+  );
+};
+
+const isEmptyAxisValue = (value) => {
+  if (value === null || value === undefined) return true;
+  const text = String(value).trim();
+  return text === '';
+};
+
+const canApplyAxisField = (config, field, suggestedValue, { onlyFillDefaults }) => {
+  const suggested = String(suggestedValue ?? '').trim();
+  if (!suggested) return false;
+
+  const current = config?.[field];
+  if (!onlyFillDefaults) return String(current ?? '').trim() !== suggested;
+
+  if (field === 'xScale' || field === 'yScale') {
+    return isDefaultLinearScale(current);
+  }
+  if (field === 'xUnitPrefix' || field === 'yUnitPrefix') {
+    return !current || String(current).trim() === '1';
+  }
+  if (['xMin', 'xMax', 'yMin', 'yMax'].includes(field)) {
+    return isEmptyAxisValue(current) || isDefaultPlaceholderBounds(config);
+  }
+  return isEmptyAxisValue(current);
+};
+
+export const historicalSuggestionHasAxisSettings = (historical) => {
+  const suggestion = historical?.suggestion;
+  if (!suggestion || typeof suggestion !== 'object') return false;
+  return Boolean(
+    suggestion.xScale ||
+      suggestion.yScale ||
+      suggestion.xMin ||
+      suggestion.xMax ||
+      suggestion.yMin ||
+      suggestion.yMax
+  );
+};
+
+export const applyHistoricalAxisSuggestion = (
   config = {},
   historical = null,
   { onlyFillDefaults = true } = {}
@@ -39,26 +94,28 @@ export const applyHistoricalScaleHints = (
   const next = { ...config };
   let changed = false;
 
-  const isDefaultLinearScale = (value) => String(value || 'Linear').trim() === 'Linear';
+  const fields = [
+    'xScale',
+    'yScale',
+    'xUnitPrefix',
+    'yUnitPrefix',
+    'xMin',
+    'xMax',
+    'yMin',
+    'yMax',
+  ];
 
-  ['x', 'y'].forEach((axis) => {
-    const scaleKey = axis === 'x' ? 'xScale' : 'yScale';
-    const suggestedScale = String(suggestion[scaleKey] || '').trim();
-    const currentScale = String(next[scaleKey] || 'Linear').trim();
-    if (!suggestedScale || suggestedScale === currentScale) return;
-
-    const canSetLog =
-      suggestedScale === 'Logarithmic' &&
-      (!onlyFillDefaults || isDefaultLinearScale(currentScale));
-    const canSetLinear =
-      suggestedScale === 'Linear' &&
-      (!onlyFillDefaults || isDefaultLinearScale(currentScale));
-
-    if (canSetLog || canSetLinear) {
-      next[scaleKey] = suggestedScale;
-      changed = true;
-    }
+  fields.forEach((field) => {
+    if (!canApplyAxisField(config, field, suggestion[field], { onlyFillDefaults })) return;
+    next[field] = String(suggestion[field]).trim();
+    changed = true;
   });
 
   return changed ? next : config;
 };
+
+export const applyHistoricalScaleHints = (
+  config = {},
+  historical = null,
+  options = {}
+) => applyHistoricalAxisSuggestion(config, historical, options);

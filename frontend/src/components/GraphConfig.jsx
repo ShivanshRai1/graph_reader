@@ -11,7 +11,7 @@ import {
   getGraphPatternGuidance,
   UNIT_PREFIX_SELECT_OPTIONS,
 } from '../utils/quantityUnitGuidance';
-import { fetchHistoricalScaleSuggestion } from '../utils/graphScaleHistory';
+import { fetchHistoricalScaleSuggestion, applyHistoricalAxisSuggestion, historicalSuggestionHasAxisSettings } from '../utils/graphScaleHistory';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -186,6 +186,20 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
   const showScaleGuidancePanel =
     !isMetadataLocked &&
     Boolean(quantityUnitGuidance.length > 0 || graphPatternGuidance || historicalScaleHint?.message);
+
+  const canApplyHistoricalAxisSuggestion =
+    !isAxisMappingConfirmed &&
+    !isEditingCurve &&
+    historicalSuggestionHasAxisSettings(historicalScaleHint);
+
+  const handleApplyHistoricalAxisSuggestion = () => {
+    const next = applyHistoricalAxisSuggestion(graphConfig, historicalScaleHint, {
+      onlyFillDefaults: false,
+    });
+    if (next !== graphConfig) {
+      setGraphConfig(next);
+    }
+  };
 
   useEffect(() => {
     if (initialCurveName || initialGraphTitle || initialXTitle || initialYTitle) {
@@ -725,6 +739,20 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
               {' '}
               {historicalScaleHint.message}
             </p>
+          ) : null}
+          {canApplyHistoricalAxisSuggestion ? (
+            <div className="mb-3">
+              <button
+                type="button"
+                onClick={handleApplyHistoricalAxisSuggestion}
+                className="px-4 py-2 rounded bg-amber-700 text-white text-sm font-semibold hover:bg-amber-800"
+              >
+                Use axis settings from similar captures
+              </button>
+              <p className="text-xs text-amber-800 mt-2">
+                Fills scale and min/max from past graphs like this one. You still align the blue box and click Final Check.
+              </p>
+            </div>
           ) : null}
           <div className="space-y-2">
             {quantityUnitGuidance.map((entry) => (
