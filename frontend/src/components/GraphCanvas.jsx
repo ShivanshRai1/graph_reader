@@ -1,13 +1,13 @@
 import { useRef, useState, useEffect, useMemo } from 'react';
 import { useGraph, isManualCapturePoint, getManualCapturePoints, canvasToGraphWithBounds } from '../context/GraphContext';
-import { buildDefaultGraphArea, graphAreasAreSimilar } from '../utils/graphAreaHelpers';
+import { buildDefaultGraphArea, graphAreasAreSimilar, isGraphAreaContainedIn } from '../utils/graphAreaHelpers';
 import {
   shouldShowScaleAndUnitCrossCheck,
   SCALE_AND_UNIT_CROSS_CHECK_MESSAGE,
 } from '../utils/quantityUnitGuidance';
 
 const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', isAxisMappingConfirmed = false, hasReturnUrl = false, isEditingCurve = false, editingCurveOverlayId = '', savedCurveViewActive = false, hasAiSavedCurves = false, showAiCaptureGuidance = false, useInsetDefaultAxisBox = false, onGraphAreaManuallyAdjusted }) => {
-  const { uploadedImage, graphArea, setGraphArea, setCaptureGraphArea, plotReferenceArea, isPlotReferenceLocked, getMappingArea, establishPlotReference, dataPoints, addDataPoint, clearDataPoints, graphConfig, deleteDataPoint, convertGraphToCanvasCoordinates, convertCanvasToGraphCoordinates, replaceDataPoints, updateDataPointFromCanvas } = useGraph();
+  const { uploadedImage, graphArea, setGraphArea, setCaptureGraphArea, plotReferenceArea, isPlotReferenceLocked, getMappingArea, expandPlotReference, establishPlotReference, dataPoints, addDataPoint, clearDataPoints, graphConfig, deleteDataPoint, convertGraphToCanvasCoordinates, convertCanvasToGraphCoordinates, replaceDataPoints, updateDataPointFromCanvas } = useGraph();
   const [showRedrawMsg, setShowRedrawMsg] = useState(false);
   const canvasRef = useRef(null);
   const magnifierRef = useRef(null);
@@ -330,11 +330,17 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
 
     const plotRefWasAutoExpandedToFullImage =
       plot.width >= imageSize.width * 0.92 && capture.width < plot.width * 0.88;
+    const captureExtendsBeyondPlot =
+      !isGraphAreaContainedIn(capture, plot) && !graphAreasAreSimilar(plot, capture, 4);
 
     if (plotRefWasAutoExpandedToFullImage) {
       establishPlotReference(capture);
       plotRefLegacyExpandedRef.current = true;
       console.log('[PLOT REF] Repaired plot reference to match axis-aligned capture box.');
+    } else if (captureExtendsBeyondPlot) {
+      expandPlotReference(capture);
+      plotRefLegacyExpandedRef.current = true;
+      console.log('[PLOT REF] Expanded plot reference to include current axis-aligned capture box.');
     }
   }, [
     uploadedImage,
@@ -345,6 +351,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     plotReferenceArea,
     graphArea,
     establishPlotReference,
+    expandPlotReference,
   ]);
 
   // Separate effect to redraw selection box and points without reloading image
@@ -1017,6 +1024,12 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     } else if (isResizing) {
       justFinishedResizingRef.current = true;
       lastUserBoxRef.current = { ...graphArea };
+      if (isPlotReferenceLocked) {
+        const capture = normalizeArea(graphAreaRef.current);
+        if (capture.width > 0 && capture.height > 0) {
+          expandPlotReference(capture);
+        }
+      }
       setBoxTransparent(true);
       onGraphAreaManuallyAdjusted?.();
       setTimeout(() => {

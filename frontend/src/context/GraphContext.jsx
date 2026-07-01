@@ -120,6 +120,19 @@ const unionGraphAreas = (baseArea, nextArea) => {
   return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
 };
 
+const isGraphAreaContainedIn = (inner, outer, tolerancePx = 3) => {
+  if (!inner || !outer || inner.width <= 0 || inner.height <= 0 || outer.width <= 0 || outer.height <= 0) {
+    return false;
+  }
+  const tol = Math.max(0, tolerancePx);
+  return (
+    inner.x >= outer.x - tol &&
+    inner.y >= outer.y - tol &&
+    inner.x + inner.width <= outer.x + outer.width + tol &&
+    inner.y + inner.height <= outer.y + outer.height + tol
+  );
+};
+
 export const useGraph = () => {
   const context = useContext(GraphContext);
   if (!context) {
@@ -172,12 +185,17 @@ export const GraphProvider = ({ children }) => {
   const isPlotReferenceLockedRef = useRef(false);
 
   const getMappingArea = useCallback(() => {
-    if (plotReferenceArea.width > 0 && plotReferenceArea.height > 0) {
-      return plotReferenceArea;
+    const plot = plotReferenceArea.width > 0 && plotReferenceArea.height > 0 ? plotReferenceArea : null;
+    const capture = graphArea.width > 0 && graphArea.height > 0 ? graphArea : null;
+
+    if (isPlotReferenceLockedRef.current && plot && capture) {
+      if (!isGraphAreaContainedIn(capture, plot)) {
+        return unionGraphAreas(plot, capture);
+      }
+      return plot;
     }
-    if (graphArea.width > 0 && graphArea.height > 0) {
-      return graphArea;
-    }
+    if (plot) return plot;
+    if (capture) return capture;
     return graphArea;
   }, [graphArea, plotReferenceArea]);
 

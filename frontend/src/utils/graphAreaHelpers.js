@@ -224,3 +224,16 @@ export const graphAreasAreSimilar = (a, b, tolerancePx = 6) => {
     Math.abs(a.height - b.height) <= tolerancePx
   );
 };
+
+export const isGraphAreaContainedIn = (inner, outer, tolerancePx = 3) => {
+  if (!inner || !outer || inner.width <= 0 || inner.height <= 0 || outer.width <= 0 || outer.height <= 0) {
+    return false;
+  }
+  const tol = Math.max(0, tolerancePx);
+  return (
+    inner.x >= outer.x - tol &&
+    inner.y >= outer.y - tol &&
+    inner.x + inner.width <= outer.x + outer.width + tol &&
+    inner.y + inner.height <= outer.y + outer.height + tol
+  );
+};
