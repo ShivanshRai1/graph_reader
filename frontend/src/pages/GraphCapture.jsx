@@ -4502,22 +4502,49 @@ const GraphCapture = () => {
     return '';
   };
 
-  const buildCurveConfigFromSaved = (curve, prevConfig = {}, persistedAxis = null) => ({
-    graphTitle: curve.config?.graphTitle || curve.graph_title || prevConfig.graphTitle || '',
-    curveName: curve.config?.curveName || curve.curve_name || curve.name || prevConfig.curveName || '',
-    partNumber: curve.config?.partNumber || curve.part_number || prevConfig.partNumber || '',
-    xScale: curve.config?.xScale || curve.x_scale || persistedAxis?.xScale || prevConfig.xScale || 'Linear',
-    yScale: curve.config?.yScale || curve.y_scale || persistedAxis?.yScale || prevConfig.yScale || 'Linear',
-    xUnitPrefix: curve.config?.xUnitPrefix || curve.x_unit || persistedAxis?.xUnitPrefix || prevConfig.xUnitPrefix || '1',
-    yUnitPrefix: curve.config?.yUnitPrefix || curve.y_unit || persistedAxis?.yUnitPrefix || prevConfig.yUnitPrefix || '1',
-    xMin: resolveAxisValue(curve.config?.xMin, curve.x_min, persistedAxis?.xMin, prevConfig.xMin),
-    xMax: resolveAxisValue(curve.config?.xMax, curve.x_max, persistedAxis?.xMax, prevConfig.xMax),
-    yMin: resolveAxisValue(curve.config?.yMin, curve.y_min, persistedAxis?.yMin, prevConfig.yMin),
-    yMax: resolveAxisValue(curve.config?.yMax, curve.y_max, persistedAxis?.yMax, prevConfig.yMax),
-    xLabel: curve.config?.xLabel || curve.x_label || persistedAxis?.xLabel || prevConfig.xLabel || '',
-    yLabel: curve.config?.yLabel || curve.y_label || persistedAxis?.yLabel || prevConfig.yLabel || '',
-    temperature: curve.config?.temperature || curve.temperature || prevConfig.temperature || '',
-  });
+  const buildCurveConfigFromSaved = (curve, prevConfig = {}, persistedAxis = null, { preferPersistedAxis = false } = {}) => {
+    const xMinSources = preferPersistedAxis
+      ? [persistedAxis?.xMin, curve.config?.xMin, curve.x_min, prevConfig.xMin]
+      : [curve.config?.xMin, curve.x_min, persistedAxis?.xMin, prevConfig.xMin];
+    const xMaxSources = preferPersistedAxis
+      ? [persistedAxis?.xMax, curve.config?.xMax, curve.x_max, prevConfig.xMax]
+      : [curve.config?.xMax, curve.x_max, persistedAxis?.xMax, prevConfig.xMax];
+    const yMinSources = preferPersistedAxis
+      ? [persistedAxis?.yMin, curve.config?.yMin, curve.y_min, prevConfig.yMin]
+      : [curve.config?.yMin, curve.y_min, persistedAxis?.yMin, prevConfig.yMin];
+    const yMaxSources = preferPersistedAxis
+      ? [persistedAxis?.yMax, curve.config?.yMax, curve.y_max, prevConfig.yMax]
+      : [curve.config?.yMax, curve.y_max, persistedAxis?.yMax, prevConfig.yMax];
+
+    return {
+      graphTitle: curve.config?.graphTitle || curve.graph_title || prevConfig.graphTitle || '',
+      curveName: curve.config?.curveName || curve.curve_name || curve.name || prevConfig.curveName || '',
+      partNumber: curve.config?.partNumber || curve.part_number || prevConfig.partNumber || '',
+      xScale: preferPersistedAxis
+        ? (persistedAxis?.xScale || curve.config?.xScale || curve.x_scale || prevConfig.xScale || 'Linear')
+        : (curve.config?.xScale || curve.x_scale || persistedAxis?.xScale || prevConfig.xScale || 'Linear'),
+      yScale: preferPersistedAxis
+        ? (persistedAxis?.yScale || curve.config?.yScale || curve.y_scale || prevConfig.yScale || 'Linear')
+        : (curve.config?.yScale || curve.y_scale || persistedAxis?.yScale || prevConfig.yScale || 'Linear'),
+      xUnitPrefix: preferPersistedAxis
+        ? (persistedAxis?.xUnitPrefix || curve.config?.xUnitPrefix || curve.x_unit || prevConfig.xUnitPrefix || '1')
+        : (curve.config?.xUnitPrefix || curve.x_unit || persistedAxis?.xUnitPrefix || prevConfig.xUnitPrefix || '1'),
+      yUnitPrefix: preferPersistedAxis
+        ? (persistedAxis?.yUnitPrefix || curve.config?.yUnitPrefix || curve.y_unit || prevConfig.yUnitPrefix || '1')
+        : (curve.config?.yUnitPrefix || curve.y_unit || persistedAxis?.yUnitPrefix || prevConfig.yUnitPrefix || '1'),
+      xMin: resolveAxisValue(...xMinSources),
+      xMax: resolveAxisValue(...xMaxSources),
+      yMin: resolveAxisValue(...yMinSources),
+      yMax: resolveAxisValue(...yMaxSources),
+      xLabel: preferPersistedAxis
+        ? (persistedAxis?.xLabel || curve.config?.xLabel || curve.x_label || prevConfig.xLabel || '')
+        : (curve.config?.xLabel || curve.x_label || persistedAxis?.xLabel || prevConfig.xLabel || ''),
+      yLabel: preferPersistedAxis
+        ? (persistedAxis?.yLabel || curve.config?.yLabel || curve.y_label || prevConfig.yLabel || '')
+        : (curve.config?.yLabel || curve.y_label || persistedAxis?.yLabel || prevConfig.yLabel || ''),
+      temperature: curve.config?.temperature || curve.temperature || prevConfig.temperature || '',
+    };
+  };
 
   const restoreGraphDisplayFromSavedCurve = (curve, graphId, { keepCurveNameEmpty = false, allCurves = null, loadPoints = true, graphAreaOverride = null } = {}) => {
     const persistedContext = getPersistedGraphContext(graphId);
@@ -4525,16 +4552,21 @@ const GraphCapture = () => {
     const restoredArea =
       normalizePersistedGraphArea(graphAreaOverride) ||
       normalizePersistedGraphArea(persistedContext?.graphArea);
-    let nextConfig = buildCurveConfigFromSaved(curve, graphConfig, persistedAxis);
+    const mappingConfirmed = hasPersistedMappingContext(persistedContext);
+    let nextConfig = buildCurveConfigFromSaved(curve, graphConfig, persistedAxis, {
+      preferPersistedAxis: mappingConfirmed,
+    });
     const curveList = Array.isArray(allCurves) && allCurves.length > 0 ? allCurves : [curve];
     const apiAxisPatch = buildGraphConfigAxisPatch(
       resolveDiscovereeAxisFields({}, normalizeCurveConfigFields(curveList[0]))
     );
-    if (Object.keys(apiAxisPatch).length > 0) {
+    if (Object.keys(apiAxisPatch).length > 0 && !mappingConfirmed) {
       nextConfig = { ...nextConfig, ...apiAxisPatch };
     }
 
-    nextConfig = applyComputedAxisBounds(nextConfig, curveList);
+    if (!mappingConfirmed) {
+      nextConfig = applyComputedAxisBounds(nextConfig, curveList);
+    }
 
     if (restoredArea) {
       setCaptureGraphArea(restoredArea);
@@ -4566,10 +4598,12 @@ const GraphCapture = () => {
       replaceDataPoints(loadedPoints);
     }
 
-    const mappingConfirmed = hasPersistedMappingContext(persistedContext);
     if (mappingConfirmed) {
       setIsAxisMappingConfirmed(true);
-      setFrozenGraphConfig({ ...nextConfig });
+      setFrozenGraphConfig({
+        ...nextConfig,
+        ...(persistedAxis && hasUsableAxisMapping(persistedAxis) ? persistedAxis : {}),
+      });
       if (restoredArea) {
         lockPlotReference(restoredArea);
       }
@@ -6284,9 +6318,17 @@ const GraphCapture = () => {
 
   const normalizeCurveConfig = (curve) => normalizeCurveConfigFields(curve);
 
-  const applyDiscovereeGraphMetadataToConfig = (discovereeGraph = {}, resolvedGraphTitle = '', firstDetail = null, curves = []) => {
+  const applyDiscovereeGraphMetadataToConfig = (
+    discovereeGraph = {},
+    resolvedGraphTitle = '',
+    firstDetail = null,
+    curves = [],
+    graphId = ''
+  ) => {
     if (!discovereeGraph || typeof discovereeGraph !== 'object') return;
 
+    const persistedContext = graphId ? getPersistedGraphContext(graphId) : null;
+    const keepPersistedAxis = hasPersistedMappingContext(persistedContext);
     const axisFields = resolveDiscovereeAxisFields(discovereeGraph, firstDetail || {});
     const curveList = Array.isArray(curves) ? curves : [];
     const firstCurveAxis = curveList[0] ? normalizeCurveConfigFields(curveList[0]) : {};
@@ -6306,6 +6348,14 @@ const GraphCapture = () => {
         graphTitle: resolvedGraphTitle || discovereeGraph.graph_title || prev.graphTitle || '',
         partNumber: discovereeGraph.partno || prev.partNumber || '',
         manufacturer: discovereeGraph.manf || prev.manufacturer || '',
+      };
+
+      if (keepPersistedAxis) {
+        return next;
+      }
+
+      next = {
+        ...next,
         xLabel: resolvedAxisFields.xLabel || discovereeGraph.x_title || discovereeGraph.x_label || prev.xLabel || '',
         yLabel: resolvedAxisFields.yLabel || discovereeGraph.y_title || discovereeGraph.y_label || prev.yLabel || '',
         ...buildGraphConfigAxisPatch(resolvedAxisFields),
@@ -6700,7 +6750,13 @@ const GraphCapture = () => {
                 ),
               });
 
-              applyDiscovereeGraphMetadataToConfig(discovereeGraph, resolvedGraphTitle, discovereeDetails[0], curvesToUse);
+              applyDiscovereeGraphMetadataToConfig(
+                discovereeGraph,
+                resolvedGraphTitle,
+                discovereeDetails[0],
+                curvesToUse,
+                resolvedGraphIdForCurves
+              );
               return;
             }
           }
@@ -6736,7 +6792,7 @@ const GraphCapture = () => {
             setShouldSkipCaptureChoiceAfterAi(false);
 
             const resolvedGraphTitle = resolveGraphTitle(discovereeGraph, []);
-            applyDiscovereeGraphMetadataToConfig(discovereeGraph, resolvedGraphTitle, null, []);
+            applyDiscovereeGraphMetadataToConfig(discovereeGraph, resolvedGraphTitle, null, [], resolvedGraphId);
 
             if (resolvedGraphTitle && !urlParams.graph_title) {
               setGraphConfig((prev) => ({

@@ -1388,9 +1388,8 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       <div className="bg-blue-50 p-4 rounded mb-4">
         <p className="text-blue-700 font-medium mb-2"><strong>Instructions:</strong></p>
         <ul className="list-disc pl-5 text-gray-700">
-          <li>Drag to select the graph area (blue box). Align it to the full printed axis range before confirming.</li>
-          <li>After axis mapping is confirmed, the blue box is locked. Unlock configuration to realign it.</li>
-          <li>In Graph Configuration, set axis min/max, scale, and unit, then confirm axis mapping</li>
+          <li>Align the blue box to the printed axis ticks (0.1 and 100 on X, 0.1 and 1000 on Y for this graph) — not the image border.</li>
+          <li>Set axis min/max to match those tick values (e.g. X max = 100, Y max = 1000), then confirm axis mapping.</li>
           <li>Click on the plot to add data points</li>
           <li>Right-click on a captured point to remove it</li>
           <li>Use the buttons below to adjust the box or clear points; hover to see the magnifier</li>
