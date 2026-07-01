@@ -184,11 +184,19 @@ export const GraphProvider = ({ children }) => {
   const setCaptureGraphArea = useCallback((value) => {
     setGraphAreaState((prev) => {
       const next = typeof value === 'function' ? value(prev) : value;
-      if (!isPlotReferenceLockedRef.current) {
-        setPlotReferenceArea((prevPlot) => unionGraphAreas(prevPlot, next));
-      }
+      setPlotReferenceArea((prevPlot) => unionGraphAreas(prevPlot, next));
       return next;
     });
+  }, []);
+
+  const expandPlotReference = useCallback((area) => {
+    if (!area || area.width <= 0 || area.height <= 0) return;
+    setPlotReferenceArea((prevPlot) => unionGraphAreas(prevPlot, area));
+  }, []);
+
+  const establishPlotReference = useCallback((area) => {
+    if (!area || area.width <= 0 || area.height <= 0) return;
+    setPlotReferenceArea({ ...area });
   }, []);
 
   const setGraphArea = useCallback((value) => {
@@ -560,6 +568,8 @@ export const GraphProvider = ({ children }) => {
     lockPlotReference,
     unlockPlotReference,
     restorePlotReferenceArea,
+    expandPlotReference,
+    establishPlotReference,
     dataPoints,
     addDataPoint,
     clearDataPoints,

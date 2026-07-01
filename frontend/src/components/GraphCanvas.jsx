@@ -1,13 +1,13 @@
 import { useRef, useState, useEffect, useMemo } from 'react';
 import { useGraph, isManualCapturePoint, getManualCapturePoints, canvasToGraphWithBounds } from '../context/GraphContext';
-import { buildDefaultGraphArea } from '../utils/graphAreaHelpers';
+import { buildDefaultGraphArea, graphAreasAreSimilar } from '../utils/graphAreaHelpers';
 import {
   shouldShowScaleAndUnitCrossCheck,
   SCALE_AND_UNIT_CROSS_CHECK_MESSAGE,
 } from '../utils/quantityUnitGuidance';
 
 const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', isAxisMappingConfirmed = false, hasReturnUrl = false, isEditingCurve = false, editingCurveOverlayId = '', savedCurveViewActive = false, hasAiSavedCurves = false, showAiCaptureGuidance = false, useInsetDefaultAxisBox = false, onGraphAreaManuallyAdjusted }) => {
-  const { uploadedImage, graphArea, setGraphArea, setCaptureGraphArea, plotReferenceArea, isPlotReferenceLocked, getMappingArea, dataPoints, addDataPoint, clearDataPoints, graphConfig, deleteDataPoint, convertGraphToCanvasCoordinates, convertCanvasToGraphCoordinates, replaceDataPoints, updateDataPointFromCanvas } = useGraph();
+  const { uploadedImage, graphArea, setGraphArea, setCaptureGraphArea, plotReferenceArea, isPlotReferenceLocked, getMappingArea, expandPlotReference, establishPlotReference, dataPoints, addDataPoint, clearDataPoints, graphConfig, deleteDataPoint, convertGraphToCanvasCoordinates, convertCanvasToGraphCoordinates, replaceDataPoints, updateDataPointFromCanvas } = useGraph();
   const [showRedrawMsg, setShowRedrawMsg] = useState(false);
   const canvasRef = useRef(null);
   const magnifierRef = useRef(null);
@@ -52,6 +52,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   const [editDragPointIndex, setEditDragPointIndex] = useState(null);
   const editDragPointIndexRef = useRef(null);
   const editDragMovedRef = useRef(false);
+  const plotRefLegacyExpandedRef = useRef(false);
 
   const MARGIN = 6; // Margin from edges for resize handles visibility
 
@@ -312,6 +313,39 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     lastUserBoxRef.current = initialBox;
     setBoxTransparent(false);
   }, [uploadedImage, imageSize.width, imageSize.height, graphArea.width, graphArea.height, graphArea.x, graphArea.y, setGraphArea, useInsetDefaultAxisBox]);
+
+  // Legacy saved graphs often stored only the capture box as plot reference. Expand once on load.
+  useEffect(() => {
+    plotRefLegacyExpandedRef.current = false;
+  }, [uploadedImage]);
+
+  useEffect(() => {
+    if (plotRefLegacyExpandedRef.current) return;
+    if (!uploadedImage || imageSize.width <= 0 || imageSize.height <= 0) return;
+
+    const plot = normalizeArea(plotReferenceArea);
+    const capture = normalizeArea(graphArea);
+    if (plot.width <= 0 || capture.width <= 0) return;
+
+    const fullPlot = createInitialAxisBox(imageSize.width, imageSize.height);
+    const plotMatchesCapture = graphAreasAreSimilar(plot, capture, 8);
+    const plotSmallerThanFull =
+      plot.width < fullPlot.width * 0.9 || plot.height < fullPlot.height * 0.9;
+
+    if (plotMatchesCapture && plotSmallerThanFull) {
+      expandPlotReference(fullPlot);
+      plotRefLegacyExpandedRef.current = true;
+      console.log('[PLOT REF] Expanded legacy plot reference toward full default plot area.');
+    }
+  }, [
+    uploadedImage,
+    imageSize.width,
+    imageSize.height,
+    plotReferenceArea,
+    graphArea,
+    expandPlotReference,
+    useInsetDefaultAxisBox,
+  ]);
 
   // Separate effect to redraw selection box and points without reloading image
   useEffect(() => {
@@ -1481,11 +1515,16 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
           className="px-4 py-2 rounded bg-gray-700 text-white font-medium"
           onClick={() => {
             if (lastUserBoxRef.current?.width > 0 && lastUserBoxRef.current?.height > 0) {
-              setGraphArea({ ...lastUserBoxRef.current });
+              const restored = { ...lastUserBoxRef.current };
+              setCaptureGraphArea(restored);
             } else if (imageSize.width && imageSize.height) {
               const newBox = createInitialAxisBox(imageSize.width, imageSize.height);
-              setGraphArea(newBox);
+              setCaptureGraphArea(newBox);
+              establishPlotReference(newBox);
               lastUserBoxRef.current = newBox;
+            }
+            if (imageSize.width && imageSize.height) {
+              expandPlotReference(createInitialAxisBox(imageSize.width, imageSize.height));
             }
             setBoxTransparent(false);
             setShowRedrawMsg(false);

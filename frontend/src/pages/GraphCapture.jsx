@@ -4292,10 +4292,9 @@ const GraphCapture = () => {
       restorePlotReferenceArea(persistedContext.plotReferenceArea, {
         locked: persistedContext.plotReferenceLocked,
       });
-    } else if (persistedContext?.graphArea && persistedContext?.plotReferenceLocked) {
-      restorePlotReferenceArea(persistedContext.graphArea, { locked: true });
     } else if (persistedContext?.graphArea && hasPersistedMappingContext(persistedContext)) {
-      restorePlotReferenceArea(persistedContext.graphArea, { locked: true });
+      // Legacy sessions only stored capture box — keep axis confirmed but allow plot realignment.
+      restorePlotReferenceArea(persistedContext.graphArea, { locked: false });
     }
     if (persistedContext?.axis && hasValidAxisMapping(persistedContext.axis)) {
       setGraphConfig((prev) => ({
@@ -4540,10 +4539,10 @@ const GraphCapture = () => {
       const persistedPlot = normalizePersistedGraphArea(persistedContext?.plotReferenceArea);
       if (persistedPlot) {
         restorePlotReferenceArea(persistedPlot, {
-          locked: Boolean(persistedContext?.plotReferenceLocked ?? hasPersistedMappingContext(persistedContext)),
+          locked: Boolean(persistedContext?.plotReferenceLocked),
         });
       } else if (hasPersistedMappingContext(persistedContext)) {
-        restorePlotReferenceArea(restoredArea, { locked: true });
+        restorePlotReferenceArea(restoredArea, { locked: false });
       }
     }
     // When no persisted area exists, keep the current box so GraphCanvas can show the default immediately.
