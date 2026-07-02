@@ -30,7 +30,6 @@ import {
 import {
   buildPlotReferenceAreaFromCaptureBox,
   graphAreasAreSimilar,
-  isGraphAreaContainedIn,
   suggestGraphAreaFromImportedPoints,
 } from '../utils/graphAreaHelpers';
 import { useGraph, graphToCanvasWithBounds, getManualCapturePoints, MANUAL_CAPTURE_OVERLAY_ID } from '../context/GraphContext';
@@ -854,43 +853,40 @@ const patchSavedCurvesWithAxisConfig = (curves, axisConfig, graphId) => {
   });
 };
 
-const buildCanvasSizeHintFromArea = (area) => ({
-  width: Math.max(area.x + area.width + 48, 1),
-  height: Math.max(area.y + area.height + 48, 1),
+const buildCanvasSizeHintFromArea = (area, imageSize = {}) => ({
+  width: Math.max(
+    Number(imageSize.width) || 0,
+    area.x + area.width + 48,
+    1
+  ),
+  height: Math.max(
+    Number(imageSize.height) || 0,
+    area.y + area.height + 48,
+    1
+  ),
 });
 
-const resolveLockedPlotReferenceArea = (captureArea, axisConfig, persistedPlotRef) => {
+const resolveLockedPlotReferenceArea = (captureArea, axisConfig, imageSize = {}) => {
   if (!captureArea) {
-    return persistedPlotRef;
+    return null;
   }
 
-  const rebuilt =
+  return (
     buildPlotReferenceAreaFromCaptureBox(
       captureArea,
       axisConfig,
-      buildCanvasSizeHintFromArea(captureArea)
-    ) || captureArea;
-
-  if (!persistedPlotRef) {
-    return rebuilt;
-  }
-
-  const leftDrifted = Math.abs(persistedPlotRef.x - captureArea.x) > 8;
-  const captureOutsideRef = !isGraphAreaContainedIn(captureArea, persistedPlotRef, 8);
-  if (leftDrifted || captureOutsideRef) {
-    return rebuilt;
-  }
-
-  return persistedPlotRef.width >= rebuilt.width ? persistedPlotRef : rebuilt;
+      buildCanvasSizeHintFromArea(captureArea, imageSize)
+    ) || captureArea
+  );
 };
 
-const resolvePersistedPlotReferenceArea = (persistedContext) => {
+const resolvePersistedPlotReferenceArea = (persistedContext, imageSize = {}) => {
   const captureArea = normalizePersistedGraphArea(persistedContext?.graphArea);
   const plotRef = normalizePersistedGraphArea(persistedContext?.plotReferenceArea);
   const axis = persistedContext?.axis;
 
   if (persistedContext?.plotReferenceLocked && captureArea && axis && hasUsableAxisMapping(axis)) {
-    return resolveLockedPlotReferenceArea(captureArea, axis, plotRef);
+    return resolveLockedPlotReferenceArea(captureArea, axis, imageSize);
   }
 
   if (persistedContext?.plotReferenceLocked) {
@@ -3292,6 +3288,7 @@ const GraphCapture = () => {
   } = useGraph();
   const graphWorkspaceRef = useRef(null);
   const graphAreaRef = useRef(graphArea);
+  const imageSizeRef = useRef({ width: 0, height: 0 });
   const importedBoxAutoFitDoneRef = useRef(false);
   const userManuallyAdjustedGraphAreaRef = useRef(false);
 
@@ -4343,7 +4340,7 @@ const GraphCapture = () => {
     if (persistedArea) {
       setCaptureGraphArea(persistedArea);
       if (axisConfirmed) {
-        const persistedPlotRef = resolvePersistedPlotReferenceArea(persistedContext);
+        const persistedPlotRef = resolvePersistedPlotReferenceArea(persistedContext, imageSizeRef.current);
         restorePlotReferenceArea(persistedPlotRef, { locked: true });
       }
     }
@@ -4365,7 +4362,7 @@ const GraphCapture = () => {
     if (axisConfirmed) {
       setIsAxisMappingConfirmed(true);
       setFrozenGraphConfig((prev) => prev || { ...persistedContext.axis });
-      const persistedPlotRef = resolvePersistedPlotReferenceArea(persistedContext);
+      const persistedPlotRef = resolvePersistedPlotReferenceArea(persistedContext, imageSizeRef.current);
       lockPlotReference(persistedPlotRef);
     }
 
@@ -4622,7 +4619,7 @@ const GraphCapture = () => {
     if (restoredArea) {
       setCaptureGraphArea(restoredArea);
       if (hasPersistedMappingContext(persistedContext)) {
-        const persistedPlotRef = resolvePersistedPlotReferenceArea(persistedContext);
+        const persistedPlotRef = resolvePersistedPlotReferenceArea(persistedContext, imageSizeRef.current);
         restorePlotReferenceArea(persistedPlotRef, { locked: true });
       }
     }
@@ -4657,7 +4654,7 @@ const GraphCapture = () => {
         ...(persistedAxis && hasUsableAxisMapping(persistedAxis) ? persistedAxis : {}),
       });
       if (restoredArea) {
-        const persistedPlotRef = resolvePersistedPlotReferenceArea(persistedContext);
+        const persistedPlotRef = resolvePersistedPlotReferenceArea(persistedContext, imageSizeRef.current);
         lockPlotReference(persistedPlotRef);
       }
     } else {
@@ -8209,6 +8206,9 @@ const GraphCapture = () => {
                   savedCurves.some((curve) => String(curve.graphId || '').trim() !== '')
                 )}
                 onGraphAreaManuallyAdjusted={handleGraphAreaManuallyAdjusted}
+                onImageSizeChange={(size) => {
+                  imageSizeRef.current = size;
+                }}
               />
               <CapturedPointsList isReadOnly={isReadOnly} hasReturnUrl={!!urlParams.return_url} isEditingCurve={Boolean(editingCurveId)} />
             </div>
@@ -8252,7 +8252,7 @@ const GraphCapture = () => {
                   const plotRef = resolveLockedPlotReferenceArea(
                     captureArea,
                     graphConfig,
-                    null
+                    imageSizeRef.current
                   );
                   const mappingArea =
                     plotRef.width > 0 && plotRef.height > 0 ? plotRef : captureArea;

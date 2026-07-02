@@ -6,7 +6,7 @@ import {
   SCALE_AND_UNIT_CROSS_CHECK_MESSAGE,
 } from '../utils/quantityUnitGuidance';
 
-const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', isAxisMappingConfirmed = false, hasReturnUrl = false, isEditingCurve = false, editingCurveOverlayId = '', savedCurveViewActive = false, hasAiSavedCurves = false, showAiCaptureGuidance = false, useInsetDefaultAxisBox = false, onGraphAreaManuallyAdjusted }) => {
+const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', isAxisMappingConfirmed = false, hasReturnUrl = false, isEditingCurve = false, editingCurveOverlayId = '', savedCurveViewActive = false, hasAiSavedCurves = false, showAiCaptureGuidance = false, useInsetDefaultAxisBox = false, onGraphAreaManuallyAdjusted, onImageSizeChange }) => {
   const { uploadedImage, graphArea, setGraphArea, setCaptureGraphArea, isPlotReferenceLocked, getMappingArea, establishPlotReference, dataPoints, addDataPoint, clearDataPoints, graphConfig, deleteDataPoint, convertGraphToCanvasCoordinates, convertCanvasToGraphCoordinates, replaceDataPoints, updateDataPointFromCanvas } = useGraph();
   const [showRedrawMsg, setShowRedrawMsg] = useState(false);
   const canvasRef = useRef(null);
@@ -260,6 +260,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
         canvas.width = img.width;
         canvas.height = img.height;
         setImageSize({ width: img.width, height: img.height });
+        onImageSizeChange?.({ width: img.width, height: img.height });
         imageRef.current = img; // Store image reference
 
         const drawLoadedImage = () => {

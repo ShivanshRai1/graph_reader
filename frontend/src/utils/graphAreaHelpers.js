@@ -257,6 +257,36 @@ const expandLogCanvasSpanFromMinAnchor = (canvasMin, canvasMax, axisMin, axisMax
   return { min: canvasMin, max: canvasMin + fullSpan };
 };
 
+/**
+ * Only extend plot reference past the capture box when the box likely ends on an inner
+ * tick (e.g. 100) while config max goes further (1000). Skip when the box already
+ * spans the full plot width on the image (right edge at the outer grid line).
+ */
+const shouldExpandLogPlotRightFromCaptureBox = (captureBox, xMin, xMax, canvasW) => {
+  const visibleMax = inferLogVisibleMaxAtMinAnchor(xMin, xMax);
+  if (!(visibleMax < xMax)) return false;
+
+  const logSpanFull = Math.log10(xMax) - Math.log10(xMin);
+  const logSpanVisible = Math.log10(visibleMax) - Math.log10(xMin);
+  const expansionRatio = logSpanFull / logSpanVisible;
+  if (!(expansionRatio > 1.02)) return false;
+
+  const canvasWidth = Math.max(
+    Number(canvasW) || 0,
+    captureBox.x + captureBox.width + GRAPH_AREA_EDGE_MARGIN
+  );
+  const boxRight = captureBox.x + captureBox.width;
+
+  // Extra grid decade is already inside the box — no rightward extension needed.
+  const remainingRight = canvasWidth - boxRight;
+  const expansionGrowth = captureBox.width * (expansionRatio - 1);
+  if (remainingRight < expansionGrowth * 0.35) {
+    return false;
+  }
+
+  return true;
+};
+
 const expandLinearCanvasSpanFromMinAnchor = (canvasMin, canvasMax, axisMin, axisMax) => {
   return expandCanvasSpanForAxisFraction(
     canvasMin,
@@ -294,24 +324,28 @@ export const buildPlotReferenceAreaFromCaptureBox = (
   let height = captureBox.height;
   const right = x + width;
 
-  // Keep the capture box left edge fixed (aligned to axis min). Only extend rightward
-  // when the box ends on an inner tick (e.g. 100) while config max goes further (1000).
-  if (graphConfig.xScale === 'Logarithmic') {
-    const expandedRight = expandLogCanvasSpanFromMinAnchor(x, right, xMin, xMax);
-    x = captureBox.x;
-    width = Math.max(captureBox.width, expandedRight.max - captureBox.x);
-  } else if (xMax > xMin) {
-    const expandedRight = expandLinearCanvasSpanFromMinAnchor(x, right, xMin, xMax);
-    x = captureBox.x;
-    width = Math.max(captureBox.width, expandedRight.max - captureBox.x);
-  }
-
   const canvasW =
     Number(canvasSize.width) ||
     Math.max(x + width + GRAPH_AREA_EDGE_MARGIN, captureBox.x + captureBox.width + GRAPH_AREA_EDGE_MARGIN);
   const canvasH =
     Number(canvasSize.height) ||
     Math.max(y + height + GRAPH_AREA_EDGE_MARGIN, captureBox.y + captureBox.height + GRAPH_AREA_EDGE_MARGIN);
+
+  // Keep the capture box left edge fixed (aligned to axis min). Only extend rightward
+  // when the box ends on an inner tick (e.g. 100) while config max goes further (1000).
+  if (graphConfig.xScale === 'Logarithmic') {
+    if (shouldExpandLogPlotRightFromCaptureBox(captureBox, xMin, xMax, canvasW)) {
+      const expandedRight = expandLogCanvasSpanFromMinAnchor(x, right, xMin, xMax);
+      x = captureBox.x;
+      width = Math.max(captureBox.width, expandedRight.max - captureBox.x);
+    }
+  } else if (xMax > xMin) {
+    const expandedRight = expandLinearCanvasSpanFromMinAnchor(x, right, xMin, xMax);
+    if (expandedRight.max - expandedRight.min > captureBox.width + 0.5) {
+      x = captureBox.x;
+      width = Math.max(captureBox.width, expandedRight.max - captureBox.x);
+    }
+  }
 
   return clampGraphAreaToCanvas({ x, y, width, height }, canvasW, canvasH);
 };
