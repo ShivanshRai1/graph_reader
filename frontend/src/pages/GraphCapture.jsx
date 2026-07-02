@@ -28,6 +28,7 @@ import {
   syncImportedOverlayCanvas,
 } from '../utils/aiCurveProcessing';
 import {
+  buildPlotReferenceAreaFromCaptureBox,
   graphAreasAreSimilar,
   suggestGraphAreaFromImportedPoints,
 } from '../utils/graphAreaHelpers';
@@ -852,6 +853,15 @@ const patchSavedCurvesWithAxisConfig = (curves, axisConfig, graphId) => {
   });
 };
 
+const resolvePersistedPlotReferenceArea = (persistedContext) => {
+  const captureArea = normalizePersistedGraphArea(persistedContext?.graphArea);
+  const plotRef = normalizePersistedGraphArea(persistedContext?.plotReferenceArea);
+  if (persistedContext?.plotReferenceLocked) {
+    return plotRef || captureArea;
+  }
+  return plotRef || captureArea;
+};
+
 const persistGraphContext = (graphId, area, axisConfig = {}, options = {}) => {
   const normalizedGraphId = String(graphId || '').trim();
   const normalizedArea = normalizePersistedGraphArea(area);
@@ -864,7 +874,9 @@ const persistGraphContext = (graphId, area, axisConfig = {}, options = {}) => {
     ? buildPersistedAxisPayload(axisConfig)
     : (existing?.axis || null);
   const normalizedPlotReference = options.plotReferenceLocked === true
-    ? normalizedArea
+    ? normalizePersistedGraphArea(
+        options.plotReferenceArea || existing?.plotReferenceArea || normalizedArea
+      )
     : normalizePersistedGraphArea(
         options.plotReferenceArea || existing?.plotReferenceArea || normalizedArea
       );
@@ -4294,7 +4306,8 @@ const GraphCapture = () => {
     if (persistedArea) {
       setCaptureGraphArea(persistedArea);
       if (axisConfirmed) {
-        restorePlotReferenceArea(persistedArea, { locked: true });
+        const persistedPlotRef = resolvePersistedPlotReferenceArea(persistedContext);
+        restorePlotReferenceArea(persistedPlotRef, { locked: true });
       }
     }
     if (persistedContext?.axis && hasValidAxisMapping(persistedContext.axis)) {
@@ -4315,7 +4328,8 @@ const GraphCapture = () => {
     if (axisConfirmed) {
       setIsAxisMappingConfirmed(true);
       setFrozenGraphConfig((prev) => prev || { ...persistedContext.axis });
-      lockPlotReference(persistedArea);
+      const persistedPlotRef = resolvePersistedPlotReferenceArea(persistedContext);
+      lockPlotReference(persistedPlotRef);
     }
 
     const cachedImage = getValidatedPersistedGraphImage(graphId);
@@ -4571,7 +4585,8 @@ const GraphCapture = () => {
     if (restoredArea) {
       setCaptureGraphArea(restoredArea);
       if (hasPersistedMappingContext(persistedContext)) {
-        restorePlotReferenceArea(restoredArea, { locked: true });
+        const persistedPlotRef = resolvePersistedPlotReferenceArea(persistedContext);
+        restorePlotReferenceArea(persistedPlotRef, { locked: true });
       }
     }
     // When no persisted area exists, keep the current box so GraphCanvas can show the default immediately.
@@ -4605,7 +4620,8 @@ const GraphCapture = () => {
         ...(persistedAxis && hasUsableAxisMapping(persistedAxis) ? persistedAxis : {}),
       });
       if (restoredArea) {
-        lockPlotReference(restoredArea);
+        const persistedPlotRef = resolvePersistedPlotReferenceArea(persistedContext);
+        lockPlotReference(persistedPlotRef);
       }
     } else {
       setIsAxisMappingConfirmed(false);
@@ -6904,7 +6920,7 @@ const GraphCapture = () => {
       {
         persistAxis: isAxisMappingConfirmed || hasValidAxisMapping(graphConfig),
         plotReferenceLocked: isAxisMappingConfirmed,
-        plotReferenceArea: graphArea,
+        plotReferenceArea: isAxisMappingConfirmed ? plotReferenceArea : graphArea,
       }
     );
   }, [
@@ -6912,6 +6928,10 @@ const GraphCapture = () => {
     graphArea.y,
     graphArea.width,
     graphArea.height,
+    plotReferenceArea.x,
+    plotReferenceArea.y,
+    plotReferenceArea.width,
+    plotReferenceArea.height,
     isAxisMappingConfirmed,
     graphConfig.xMin,
     graphConfig.xMax,
@@ -8191,24 +8211,33 @@ const GraphCapture = () => {
                 showManufacturerField={!Boolean(urlParams.manufacturer)}
                 showUsernameField={!Boolean(urlParams.username)}
                 onConfirmAxisMapping={() => {
-                  const mappingArea = getMappingArea();
+                  const captureArea = graphArea;
+                  const canvasSize = {
+                    width: Math.max(captureArea.x + captureArea.width + 48, 1),
+                    height: Math.max(captureArea.y + captureArea.height + 48, 1),
+                  };
+                  const plotRef =
+                    buildPlotReferenceAreaFromCaptureBox(captureArea, graphConfig, canvasSize) ||
+                    captureArea;
+                  const mappingArea =
+                    plotRef.width > 0 && plotRef.height > 0 ? plotRef : captureArea;
                   const syncedPoints = syncImportedOverlayCanvas(
                     dataPoints,
-                    mappingArea.width > 0 ? mappingArea : graphArea,
+                    mappingArea,
                     graphConfig
                   );
                   if (syncedPoints !== dataPoints) {
                     replaceDataPoints(syncedPoints);
                   }
-                  lockPlotReference(graphArea);
+                  lockPlotReference(plotRef);
                   setIsAxisMappingConfirmed(true);
                   setFrozenGraphConfig({ ...graphConfig });
                   setPartNumberLocked(true);
                   setShowCaptureAnotherGuidance(false);
                   const graphId = String(urlParams.graph_id || activeSessionGraphIdRef.current || '').trim();
-                  if (graphId && graphArea.width > 0 && graphArea.height > 0) {
-                    persistGraphContext(graphId, graphArea, graphConfig, {
-                      plotReferenceArea: graphArea,
+                  if (graphId && captureArea.width > 0 && captureArea.height > 0) {
+                    persistGraphContext(graphId, captureArea, graphConfig, {
+                      plotReferenceArea: plotRef,
                       plotReferenceLocked: true,
                     });
                     setSavedCurves((prev) => {

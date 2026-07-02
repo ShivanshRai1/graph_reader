@@ -215,6 +215,160 @@ export const suggestGraphAreaFromImportedPoints = (
   return clamped;
 };
 
+const isNearPowerOfTen = (value) => {
+  if (!Number.isFinite(value) || value <= 0) return false;
+  const exponent = Math.log10(value);
+  return Math.abs(exponent - Math.round(exponent)) < 0.02;
+};
+
+/**
+ * On log axes, datasheets often label up to 10^(n-1) while the grid extends to 10^n
+ * (e.g. ticks to 100 with grid to 1000). When the capture box is aligned to those
+ * inner ticks, extend the plot reference through the remaining decade.
+ */
+const inferLogVisibleMaxAtMinAnchor = (axisMin, axisMax) => {
+  if (!(axisMin > 0) || !(axisMax > axisMin)) return axisMax;
+  const logMin = Math.log10(axisMin);
+  const logMax = Math.log10(axisMax);
+  const decades = logMax - logMin;
+  if (decades < 3.5 || !isNearPowerOfTen(axisMax)) return axisMax;
+
+  const lastLabeled = Math.pow(10, Math.round(logMax) - 1);
+  if (!(lastLabeled > axisMin) || !(lastLabeled < axisMax)) return axisMax;
+  if (axisMax / lastLabeled < 9.5) return axisMax;
+
+  return lastLabeled;
+};
+
+const inferLogVisibleMinAtMaxAnchor = (axisMin, axisMax) => {
+  if (!(axisMin > 0) || !(axisMax > axisMin)) return axisMin;
+  const logMin = Math.log10(axisMin);
+  const logMax = Math.log10(axisMax);
+  const decades = logMax - logMin;
+  if (decades < 3.5 || !isNearPowerOfTen(axisMin)) return axisMin;
+
+  const firstLabeled = Math.pow(10, Math.round(logMin) + 1);
+  if (!(firstLabeled > axisMin) || !(firstLabeled < axisMax)) return axisMin;
+  if (firstLabeled / axisMin < 9.5) return axisMin;
+
+  return firstLabeled;
+};
+
+const expandLogCanvasSpanFromMinAnchor = (canvasMin, canvasMax, axisMin, axisMax) => {
+  const canvasSpan = canvasMax - canvasMin;
+  if (!(canvasSpan > 0) || !(axisMax > axisMin)) {
+    return { min: canvasMin, max: canvasMax };
+  }
+
+  const visibleMax = inferLogVisibleMaxAtMinAnchor(axisMin, axisMax);
+  const logVisible = Math.log10(visibleMax) - Math.log10(axisMin);
+  const logFull = Math.log10(axisMax) - Math.log10(axisMin);
+  if (!(logFull > logVisible + 0.01)) {
+    return { min: canvasMin, max: canvasMax };
+  }
+
+  const fullSpan = canvasSpan * (logFull / logVisible);
+  return { min: canvasMin, max: canvasMin + fullSpan };
+};
+
+const expandLogCanvasSpanFromMaxAnchor = (canvasMin, canvasMax, axisMin, axisMax) => {
+  const canvasSpan = canvasMax - canvasMin;
+  if (!(canvasSpan > 0) || !(axisMax > axisMin)) {
+    return { min: canvasMin, max: canvasMax };
+  }
+
+  const visibleMin = inferLogVisibleMinAtMaxAnchor(axisMin, axisMax);
+  const logVisible = Math.log10(axisMax) - Math.log10(visibleMin);
+  const logFull = Math.log10(axisMax) - Math.log10(axisMin);
+  if (!(logFull > logVisible + 0.01)) {
+    return { min: canvasMin, max: canvasMax };
+  }
+
+  const fullSpan = canvasSpan * (logFull / logVisible);
+  return { min: canvasMax - fullSpan, max: canvasMax };
+};
+
+const expandLinearCanvasSpanFromMinAnchor = (canvasMin, canvasMax, axisMin, axisMax) => {
+  return expandCanvasSpanForAxisFraction(
+    canvasMin,
+    canvasMax,
+    axisMin,
+    axisMax,
+    axisMin,
+    axisMax,
+    'Linear'
+  );
+};
+
+const expandLinearCanvasSpanFromMaxAnchor = (canvasMin, canvasMax, axisMin, axisMax) => {
+  const expanded = expandCanvasSpanForAxisFraction(
+    canvasMin,
+    canvasMax,
+    axisMin,
+    axisMax,
+    axisMin,
+    axisMax,
+    'Linear'
+  );
+  const canvasSpan = canvasMax - canvasMin;
+  const fullSpan = expanded.max - expanded.min;
+  if (!(fullSpan > canvasSpan + 0.5)) {
+    return { min: canvasMin, max: canvasMax };
+  }
+  return { min: canvasMax - fullSpan, max: canvasMax };
+};
+
+/**
+ * Build the full plot-reference rectangle from the capture box at axis confirm.
+ * Assumes the capture box is aligned to axis min on left/bottom (typical) and may
+ * end on an inner tick while config max extends further (e.g. box to 100, axis to 1000).
+ */
+export const buildPlotReferenceAreaFromCaptureBox = (
+  captureBox,
+  graphConfig = {},
+  canvasSize = {}
+) => {
+  if (!captureBox || captureBox.width <= 0 || captureBox.height <= 0) {
+    return null;
+  }
+
+  const xMin = parseAxisBound(graphConfig.xMin, graphConfig.xScale === 'Logarithmic' ? 1 : 0);
+  const xMax = parseAxisBound(graphConfig.xMax, 100);
+  const yMin = parseAxisBound(graphConfig.yMin, graphConfig.yScale === 'Logarithmic' ? 1 : 0);
+  const yMax = parseAxisBound(graphConfig.yMax, 100);
+
+  let x = captureBox.x;
+  let y = captureBox.y;
+  let width = captureBox.width;
+  let height = captureBox.height;
+  const right = x + width;
+
+  if (graphConfig.xScale === 'Logarithmic') {
+    const expandedRight = expandLogCanvasSpanFromMinAnchor(x, right, xMin, xMax);
+    x = expandedRight.min;
+    width = expandedRight.max - expandedRight.min;
+    const expandedLeft = expandLogCanvasSpanFromMaxAnchor(x, x + width, xMin, xMax);
+    x = expandedLeft.min;
+    width = expandedLeft.max - expandedLeft.min;
+  } else if (xMax > xMin) {
+    const expandedRight = expandLinearCanvasSpanFromMinAnchor(x, right, xMin, xMax);
+    x = expandedRight.min;
+    width = expandedRight.max - expandedRight.min;
+    const expandedLeft = expandLinearCanvasSpanFromMaxAnchor(x, x + width, xMin, xMax);
+    x = expandedLeft.min;
+    width = expandedLeft.max - expandedLeft.min;
+  }
+
+  const canvasW =
+    Number(canvasSize.width) ||
+    Math.max(x + width + GRAPH_AREA_EDGE_MARGIN, captureBox.x + captureBox.width + GRAPH_AREA_EDGE_MARGIN);
+  const canvasH =
+    Number(canvasSize.height) ||
+    Math.max(y + height + GRAPH_AREA_EDGE_MARGIN, captureBox.y + captureBox.height + GRAPH_AREA_EDGE_MARGIN);
+
+  return clampGraphAreaToCanvas({ x, y, width, height }, canvasW, canvasH);
+};
+
 export const graphAreasAreSimilar = (a, b, tolerancePx = 6) => {
   if (!a || !b) return false;
   return (

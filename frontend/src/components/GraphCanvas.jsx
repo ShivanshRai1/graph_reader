@@ -141,10 +141,9 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     !isEditingCurve &&
     canShowImportedCurveOverlay();
 
-  // Lock the blue box and map coordinates from it once axis mapping is confirmed.
+  // Plot reference drives coordinate math once locked; the blue box is the capture zone.
   const canAdjustCaptureBox = () => {
     if (isReadOnly && !isEditingCurve) return false;
-    if (isAxisMappingConfirmed && !isEditingCurve) return false;
     return true;
   };
   const EDGE_GAP = 12; // Hysteresis for edge checks to reduce flicker
