@@ -240,13 +240,13 @@ const inferLogVisibleMaxAtMinAnchor = (axisMin, axisMax) => {
   return lastLabeled;
 };
 
-const expandLogCanvasSpanFromMinAnchor = (canvasMin, canvasMax, axisMin, axisMax) => {
+const expandLogCanvasSpanFromMinAnchor = (canvasMin, canvasMax, axisMin, axisMax, visibleMaxOverride) => {
   const canvasSpan = canvasMax - canvasMin;
   if (!(canvasSpan > 0) || !(axisMax > axisMin)) {
     return { min: canvasMin, max: canvasMax };
   }
 
-  const visibleMax = inferLogVisibleMaxAtMinAnchor(axisMin, axisMax);
+  const visibleMax = visibleMaxOverride ?? inferLogVisibleMaxAtMinAnchor(axisMin, axisMax);
   const logVisible = Math.log10(visibleMax) - Math.log10(axisMin);
   const logFull = Math.log10(axisMax) - Math.log10(axisMin);
   if (!(logFull > logVisible + 0.01)) {
@@ -257,34 +257,73 @@ const expandLogCanvasSpanFromMinAnchor = (canvasMin, canvasMax, axisMin, axisMax
   return { min: canvasMin, max: canvasMin + fullSpan };
 };
 
-/**
- * Only extend plot reference past the capture box when the box likely ends on an inner
- * tick (e.g. 100) while config max goes further (1000). Skip when the box already
- * spans the full plot width on the image (right edge at the outer grid line).
- */
-const shouldExpandLogPlotRightFromCaptureBox = (captureBox, xMin, xMax, canvasW) => {
-  const visibleMax = inferLogVisibleMaxAtMinAnchor(xMin, xMax);
-  if (!(visibleMax < xMax)) return false;
-
-  const logSpanFull = Math.log10(xMax) - Math.log10(xMin);
-  const logSpanVisible = Math.log10(visibleMax) - Math.log10(xMin);
-  const expansionRatio = logSpanFull / logSpanVisible;
-  if (!(expansionRatio > 1.02)) return false;
-
-  const canvasWidth = Math.max(
-    Number(canvasW) || 0,
-    captureBox.x + captureBox.width + GRAPH_AREA_EDGE_MARGIN
-  );
-  const boxRight = captureBox.x + captureBox.width;
-
-  // Extra grid decade is already inside the box — no rightward extension needed.
-  const remainingRight = canvasWidth - boxRight;
-  const expansionGrowth = captureBox.width * (expansionRatio - 1);
-  if (remainingRight < expansionGrowth * 0.35) {
-    return false;
+const expandLogCanvasSpanFromBottomAnchor = (
+  canvasTop,
+  canvasBottom,
+  axisMin,
+  axisMax,
+  visibleMaxOverride
+) => {
+  const canvasSpan = canvasBottom - canvasTop;
+  if (!(canvasSpan > 0) || !(axisMax > axisMin)) {
+    return { top: canvasTop, bottom: canvasBottom };
   }
 
-  return true;
+  const visibleMax = visibleMaxOverride ?? inferLogVisibleMaxAtMinAnchor(axisMin, axisMax);
+  const logVisible = Math.log10(visibleMax) - Math.log10(axisMin);
+  const logFull = Math.log10(axisMax) - Math.log10(axisMin);
+  if (!(logFull > logVisible + 0.01)) {
+    return { top: canvasTop, bottom: canvasBottom };
+  }
+
+  const fullHeight = canvasSpan * (logFull / logVisible);
+  return { top: canvasBottom - fullHeight, bottom: canvasBottom };
+};
+
+/**
+ * Match the axis value at the capture-box inner edge to visible grid beyond the box.
+ * E.g. box height to the 100 tick with two decades of grid above → visible max 100, not 10000.
+ */
+const inferLogVisibleMaxAtInnerEdge = (axisMin, axisMax, innerSpanPx, outerSpanPx) => {
+  if (!(axisMin > 0) || !(axisMax > axisMin) || !(innerSpanPx > 0) || outerSpanPx < 0) {
+    return axisMax;
+  }
+
+  const logFull = Math.log10(axisMax) - Math.log10(axisMin);
+  let bestVisible = axisMax;
+  let bestScore = Infinity;
+
+  let exp = Math.floor(Math.log10(axisMax) + 1e-9);
+  const minExp = Math.ceil(Math.log10(axisMin) - 1e-9);
+  for (; exp >= minExp; exp -= 1) {
+    const candidate = Math.pow(10, exp);
+    if (!(candidate > axisMin) || !(candidate < axisMax)) continue;
+
+    const logVisible = Math.log10(candidate) - Math.log10(axisMin);
+    if (!(logVisible > 0.01)) continue;
+
+    const ratio = logFull / logVisible;
+    if (!(ratio > 1.02)) continue;
+
+    const predictedOuter = innerSpanPx * (ratio - 1);
+    const score = Math.abs(predictedOuter - outerSpanPx);
+    if (score < bestScore) {
+      bestScore = score;
+      bestVisible = candidate;
+    }
+  }
+
+  if (!(bestVisible < axisMax)) {
+    return axisMax;
+  }
+
+  const logVisible = Math.log10(bestVisible) - Math.log10(axisMin);
+  const predictedOuter = innerSpanPx * (logFull / logVisible - 1);
+  if (outerSpanPx < predictedOuter * 0.35) {
+    return axisMax;
+  }
+
+  return bestVisible;
 };
 
 const expandLinearCanvasSpanFromMinAnchor = (canvasMin, canvasMax, axisMin, axisMax) => {
@@ -331,11 +370,17 @@ export const buildPlotReferenceAreaFromCaptureBox = (
     Number(canvasSize.height) ||
     Math.max(y + height + GRAPH_AREA_EDGE_MARGIN, captureBox.y + captureBox.height + GRAPH_AREA_EDGE_MARGIN);
 
-  // Keep the capture box left edge fixed (aligned to axis min). Only extend rightward
-  // when the box ends on an inner tick (e.g. 100) while config max goes further (1000).
+  // Keep the capture box left/bottom edges fixed. Extend plot reference when the box
+  // ends on inner ticks while config max goes further (e.g. box to 100, axis to 1000).
   if (graphConfig.xScale === 'Logarithmic') {
-    if (shouldExpandLogPlotRightFromCaptureBox(captureBox, xMin, xMax, canvasW)) {
-      const expandedRight = expandLogCanvasSpanFromMinAnchor(x, right, xMin, xMax);
+    const canvasWidth = Math.max(
+      Number(canvasW) || 0,
+      captureBox.x + captureBox.width + GRAPH_AREA_EDGE_MARGIN
+    );
+    const remainingRight = canvasWidth - (captureBox.x + captureBox.width);
+    const visibleXMax = inferLogVisibleMaxAtInnerEdge(xMin, xMax, captureBox.width, remainingRight);
+    if (visibleXMax < xMax) {
+      const expandedRight = expandLogCanvasSpanFromMinAnchor(x, right, xMin, xMax, visibleXMax);
       x = captureBox.x;
       width = Math.max(captureBox.width, expandedRight.max - captureBox.x);
     }
@@ -344,6 +389,27 @@ export const buildPlotReferenceAreaFromCaptureBox = (
     if (expandedRight.max - expandedRight.min > captureBox.width + 0.5) {
       x = captureBox.x;
       width = Math.max(captureBox.width, expandedRight.max - captureBox.x);
+    }
+  }
+
+  const bottom = y + height;
+  if (graphConfig.yScale === 'Logarithmic') {
+    const canvasHeight = Math.max(
+      Number(canvasH) || 0,
+      captureBox.y + captureBox.height + GRAPH_AREA_EDGE_MARGIN
+    );
+    const remainingTop = captureBox.y;
+    const visibleYMax = inferLogVisibleMaxAtInnerEdge(yMin, yMax, captureBox.height, remainingTop);
+    if (visibleYMax < yMax) {
+      const expandedTop = expandLogCanvasSpanFromBottomAnchor(
+        y,
+        bottom,
+        yMin,
+        yMax,
+        visibleYMax
+      );
+      y = expandedTop.top;
+      height = Math.max(captureBox.height, expandedTop.bottom - expandedTop.top);
     }
   }
 
