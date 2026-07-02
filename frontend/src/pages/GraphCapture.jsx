@@ -30,6 +30,7 @@ import {
 import {
   buildPlotReferenceAreaFromCaptureBox,
   graphAreasAreSimilar,
+  isGraphAreaContainedIn,
   suggestGraphAreaFromImportedPoints,
 } from '../utils/graphAreaHelpers';
 import { useGraph, graphToCanvasWithBounds, getManualCapturePoints, MANUAL_CAPTURE_OVERLAY_ID } from '../context/GraphContext';
@@ -853,9 +854,45 @@ const patchSavedCurvesWithAxisConfig = (curves, axisConfig, graphId) => {
   });
 };
 
+const buildCanvasSizeHintFromArea = (area) => ({
+  width: Math.max(area.x + area.width + 48, 1),
+  height: Math.max(area.y + area.height + 48, 1),
+});
+
+const resolveLockedPlotReferenceArea = (captureArea, axisConfig, persistedPlotRef) => {
+  if (!captureArea) {
+    return persistedPlotRef;
+  }
+
+  const rebuilt =
+    buildPlotReferenceAreaFromCaptureBox(
+      captureArea,
+      axisConfig,
+      buildCanvasSizeHintFromArea(captureArea)
+    ) || captureArea;
+
+  if (!persistedPlotRef) {
+    return rebuilt;
+  }
+
+  const leftDrifted = Math.abs(persistedPlotRef.x - captureArea.x) > 8;
+  const captureOutsideRef = !isGraphAreaContainedIn(captureArea, persistedPlotRef, 8);
+  if (leftDrifted || captureOutsideRef) {
+    return rebuilt;
+  }
+
+  return persistedPlotRef.width >= rebuilt.width ? persistedPlotRef : rebuilt;
+};
+
 const resolvePersistedPlotReferenceArea = (persistedContext) => {
   const captureArea = normalizePersistedGraphArea(persistedContext?.graphArea);
   const plotRef = normalizePersistedGraphArea(persistedContext?.plotReferenceArea);
+  const axis = persistedContext?.axis;
+
+  if (persistedContext?.plotReferenceLocked && captureArea && axis && hasUsableAxisMapping(axis)) {
+    return resolveLockedPlotReferenceArea(captureArea, axis, plotRef);
+  }
+
   if (persistedContext?.plotReferenceLocked) {
     return plotRef || captureArea;
   }
@@ -8212,13 +8249,11 @@ const GraphCapture = () => {
                 showUsernameField={!Boolean(urlParams.username)}
                 onConfirmAxisMapping={() => {
                   const captureArea = graphArea;
-                  const canvasSize = {
-                    width: Math.max(captureArea.x + captureArea.width + 48, 1),
-                    height: Math.max(captureArea.y + captureArea.height + 48, 1),
-                  };
-                  const plotRef =
-                    buildPlotReferenceAreaFromCaptureBox(captureArea, graphConfig, canvasSize) ||
-                    captureArea;
+                  const plotRef = resolveLockedPlotReferenceArea(
+                    captureArea,
+                    graphConfig,
+                    null
+                  );
                   const mappingArea =
                     plotRef.width > 0 && plotRef.height > 0 ? plotRef : captureArea;
                   const syncedPoints = syncImportedOverlayCanvas(

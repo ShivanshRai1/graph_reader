@@ -240,20 +240,6 @@ const inferLogVisibleMaxAtMinAnchor = (axisMin, axisMax) => {
   return lastLabeled;
 };
 
-const inferLogVisibleMinAtMaxAnchor = (axisMin, axisMax) => {
-  if (!(axisMin > 0) || !(axisMax > axisMin)) return axisMin;
-  const logMin = Math.log10(axisMin);
-  const logMax = Math.log10(axisMax);
-  const decades = logMax - logMin;
-  if (decades < 3.5 || !isNearPowerOfTen(axisMin)) return axisMin;
-
-  const firstLabeled = Math.pow(10, Math.round(logMin) + 1);
-  if (!(firstLabeled > axisMin) || !(firstLabeled < axisMax)) return axisMin;
-  if (firstLabeled / axisMin < 9.5) return axisMin;
-
-  return firstLabeled;
-};
-
 const expandLogCanvasSpanFromMinAnchor = (canvasMin, canvasMax, axisMin, axisMax) => {
   const canvasSpan = canvasMax - canvasMin;
   if (!(canvasSpan > 0) || !(axisMax > axisMin)) {
@@ -271,23 +257,6 @@ const expandLogCanvasSpanFromMinAnchor = (canvasMin, canvasMax, axisMin, axisMax
   return { min: canvasMin, max: canvasMin + fullSpan };
 };
 
-const expandLogCanvasSpanFromMaxAnchor = (canvasMin, canvasMax, axisMin, axisMax) => {
-  const canvasSpan = canvasMax - canvasMin;
-  if (!(canvasSpan > 0) || !(axisMax > axisMin)) {
-    return { min: canvasMin, max: canvasMax };
-  }
-
-  const visibleMin = inferLogVisibleMinAtMaxAnchor(axisMin, axisMax);
-  const logVisible = Math.log10(axisMax) - Math.log10(visibleMin);
-  const logFull = Math.log10(axisMax) - Math.log10(axisMin);
-  if (!(logFull > logVisible + 0.01)) {
-    return { min: canvasMin, max: canvasMax };
-  }
-
-  const fullSpan = canvasSpan * (logFull / logVisible);
-  return { min: canvasMax - fullSpan, max: canvasMax };
-};
-
 const expandLinearCanvasSpanFromMinAnchor = (canvasMin, canvasMax, axisMin, axisMax) => {
   return expandCanvasSpanForAxisFraction(
     canvasMin,
@@ -298,24 +267,6 @@ const expandLinearCanvasSpanFromMinAnchor = (canvasMin, canvasMax, axisMin, axis
     axisMax,
     'Linear'
   );
-};
-
-const expandLinearCanvasSpanFromMaxAnchor = (canvasMin, canvasMax, axisMin, axisMax) => {
-  const expanded = expandCanvasSpanForAxisFraction(
-    canvasMin,
-    canvasMax,
-    axisMin,
-    axisMax,
-    axisMin,
-    axisMax,
-    'Linear'
-  );
-  const canvasSpan = canvasMax - canvasMin;
-  const fullSpan = expanded.max - expanded.min;
-  if (!(fullSpan > canvasSpan + 0.5)) {
-    return { min: canvasMin, max: canvasMax };
-  }
-  return { min: canvasMax - fullSpan, max: canvasMax };
 };
 
 /**
@@ -343,20 +294,16 @@ export const buildPlotReferenceAreaFromCaptureBox = (
   let height = captureBox.height;
   const right = x + width;
 
+  // Keep the capture box left edge fixed (aligned to axis min). Only extend rightward
+  // when the box ends on an inner tick (e.g. 100) while config max goes further (1000).
   if (graphConfig.xScale === 'Logarithmic') {
     const expandedRight = expandLogCanvasSpanFromMinAnchor(x, right, xMin, xMax);
-    x = expandedRight.min;
-    width = expandedRight.max - expandedRight.min;
-    const expandedLeft = expandLogCanvasSpanFromMaxAnchor(x, x + width, xMin, xMax);
-    x = expandedLeft.min;
-    width = expandedLeft.max - expandedLeft.min;
+    x = captureBox.x;
+    width = Math.max(captureBox.width, expandedRight.max - captureBox.x);
   } else if (xMax > xMin) {
     const expandedRight = expandLinearCanvasSpanFromMinAnchor(x, right, xMin, xMax);
-    x = expandedRight.min;
-    width = expandedRight.max - expandedRight.min;
-    const expandedLeft = expandLinearCanvasSpanFromMaxAnchor(x, x + width, xMin, xMax);
-    x = expandedLeft.min;
-    width = expandedLeft.max - expandedLeft.min;
+    x = captureBox.x;
+    width = Math.max(captureBox.width, expandedRight.max - captureBox.x);
   }
 
   const canvasW =

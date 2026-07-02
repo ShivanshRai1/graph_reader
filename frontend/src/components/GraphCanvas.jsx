@@ -144,6 +144,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   // Plot reference drives coordinate math once locked; the blue box is the capture zone.
   const canAdjustCaptureBox = () => {
     if (isReadOnly && !isEditingCurve) return false;
+    if (isAxisMappingConfirmed && !isEditingCurve) return false;
     return true;
   };
   const EDGE_GAP = 12; // Hysteresis for edge checks to reduce flicker
@@ -1214,8 +1215,12 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     }
     
     coordinateUpdateTimeoutRef.current = setTimeout(() => {
-      setMousePos({ x: graphX, y: graphY });
-      setShowCoords(true);
+      if (isGraphCoordCaptureValid(graphX, graphY)) {
+        setMousePos({ x: graphX, y: graphY });
+        setShowCoords(true);
+      } else {
+        setShowCoords(false);
+      }
     }, 16); // ~60fps
 
     // Detect if values are stuck (any constant value, positive or negative) while cursor moves
