@@ -843,7 +843,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
                 Use axis settings from similar captures
               </button>
               <p className="text-xs text-amber-800 mt-2">
-                Uses past graphs like this one from your saved curves and company records. You still align the blue box and click Final Check.
+                Uses past graphs like this one from your saved curves. You still align the blue box and click Final Check.
               </p>
             </div>
           ) : null}

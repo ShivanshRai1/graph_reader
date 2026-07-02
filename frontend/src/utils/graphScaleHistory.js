@@ -532,18 +532,62 @@ const fetchRenderScaleSuggestionWithTimeout = async (apiUrl, params = {}) =>
     }),
   ]);
 
+const stripInternalSuggestionLabel = (message = '') =>
+  String(message || '')
+    .replace(/^(Render database|Company database|Saved curves on this graph):\s*/i, '')
+    .trim();
+
+const suggestionHasBounds = (suggestion = {}) =>
+  Boolean(suggestion.xMin && suggestion.xMax && suggestion.yMin && suggestion.yMax);
+
+const buildUnifiedHistoricalMessage = (companyResult, renderResult, mergedSuggestion) => {
+  if (companyResult?.message) {
+    return stripInternalSuggestionLabel(companyResult.message);
+  }
+  if (renderResult?.message) {
+    return stripInternalSuggestionLabel(renderResult.message);
+  }
+  if (!mergedSuggestion) return null;
+
+  const sampleCount = companyResult?.sample_count || renderResult?.sample_count || 0;
+  const parts = [];
+  const refPart = mergedSuggestion.referencePartNumber;
+  const refClause = refPart ? ` (example: ${refPart})` : '';
+  if (sampleCount >= MIN_SAMPLES) {
+    parts.push(`Based on ${sampleCount} similar past captures${refClause}`);
+  }
+  if (mergedSuggestion.xScale) {
+    parts.push(`X was ${mergedSuggestion.xScale}`);
+  }
+  if (mergedSuggestion.yScale) {
+    parts.push(`Y was ${mergedSuggestion.yScale}`);
+  }
+  if (suggestionHasBounds(mergedSuggestion)) {
+    parts.push(
+      `typical axis X [${mergedSuggestion.xMin}, ${mergedSuggestion.xMax}], Y [${mergedSuggestion.yMin}, ${mergedSuggestion.yMax}]`
+    );
+  }
+  if (!parts.length) return null;
+  return `${parts.join('. ')}.`;
+};
+
 const mergeHistoricalScaleSuggestions = (renderResult, companyResult) => {
   if (!renderResult?.suggestion && !companyResult?.suggestion) {
     return null;
   }
 
   if (renderResult?.suggestion && !companyResult?.suggestion) {
-    return { ...renderResult, sources: ['render'] };
+    return {
+      ...renderResult,
+      message: stripInternalSuggestionLabel(renderResult.message),
+      sources: ['render'],
+    };
   }
 
   if (!renderResult?.suggestion && companyResult?.suggestion) {
     return {
       ...companyResult,
+      message: stripInternalSuggestionLabel(companyResult.message),
       sources: [companyResult.source === 'session' ? 'session' : 'company'],
     };
   }
@@ -572,35 +616,22 @@ const mergeHistoricalScaleSuggestions = (renderResult, companyResult) => {
     mergedSuggestion.referenceCurveId = renderResult.suggestion.referenceCurveId;
   }
 
-  const messageParts = [];
-  if (renderResult.sample_count >= MIN_SAMPLES && renderResult.message) {
-    messageParts.push(`Render database: ${renderResult.message.replace(/\.$/, '')}`);
-  }
-  if (companyResult.sample_count >= MIN_SAMPLES && companyResult.message) {
-    const label =
-      companyResult.source === 'session'
-        ? 'Saved curves on this graph'
-        : 'Company database';
-    messageParts.push(`${label}: ${companyResult.message.replace(/\.$/, '')}`);
-  }
+  const message = buildUnifiedHistoricalMessage(companyResult, renderResult, mergedSuggestion);
 
   return {
     suggestion: mergedSuggestion,
-    pattern_id: renderResult.pattern_id || companyResult.pattern_id,
-    pattern_label: renderResult.pattern_label || companyResult.pattern_label,
-    sample_count: (renderResult.sample_count || 0) + (companyResult.sample_count || 0),
-    message: messageParts.length
-      ? `${messageParts.join(' ')}.`
-      : renderResult.message || companyResult.message,
-    sources: ['render', 'company'],
+    pattern_id: companyResult.pattern_id || renderResult.pattern_id,
+    pattern_label: companyResult.pattern_label || renderResult.pattern_label,
+    sample_count: companyResult.sample_count || renderResult.sample_count || 0,
+    message,
+    sources: ['company', 'render'],
   };
 };
 
 const buildEmptyHistoricalHint = (targetPattern, companyResult = null, renderResult = null) => {
   if (!targetPattern) return null;
 
-  const totalSamples =
-    (companyResult?.sample_count || 0) + (renderResult?.sample_count || 0);
+  const totalSamples = companyResult?.sample_count || renderResult?.sample_count || 0;
   const sessionSampleCount = companyResult?.sessionSampleCount || 0;
 
   return {
@@ -627,10 +658,19 @@ export const fetchHistoricalScaleSuggestion = async (
   if (!targetPattern) return null;
 
   try {
-    const [renderResult, companyResult] = await Promise.all([
-      fetchRenderScaleSuggestionWithTimeout(apiUrl, params),
-      buildCompanyAndSessionSuggestion(params, sessionCurves, targetPattern),
-    ]);
+    const companyResult = await buildCompanyAndSessionSuggestion(
+      params,
+      sessionCurves,
+      targetPattern
+    );
+
+    const needsRenderFallback =
+      !companyResult?.suggestion ||
+      !suggestionHasBounds(companyResult?.suggestion || {});
+
+    const renderResult = needsRenderFallback
+      ? await fetchRenderScaleSuggestionWithTimeout(apiUrl, params)
+      : null;
 
     const merged = mergeHistoricalScaleSuggestions(renderResult, companyResult);
     if (merged?.suggestion) return merged;
@@ -638,10 +678,17 @@ export const fetchHistoricalScaleSuggestion = async (
     if (companyResult?.suggestion) {
       return {
         ...companyResult,
+        message: stripInternalSuggestionLabel(companyResult.message),
         sources: [companyResult.source === 'session' ? 'session' : 'company'],
       };
     }
-    if (renderResult?.suggestion) return { ...renderResult, sources: ['render'] };
+    if (renderResult?.suggestion) {
+      return {
+        ...renderResult,
+        message: stripInternalSuggestionLabel(renderResult.message),
+        sources: ['render'],
+      };
+    }
 
     return buildEmptyHistoricalHint(targetPattern, companyResult, renderResult);
   } catch {
