@@ -2,7 +2,7 @@ from fastapi import FastAPI, Depends, HTTPException, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response, FileResponse
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from database import engine, get_db, Base
 from models import Curve, DataPoint, GraphImageMirror
 from schemas import (
@@ -172,7 +172,7 @@ def decode_mirror_graph_image_to_png_bytes(value: Optional[str]) -> bytes:
         return b""
 
 
-def resolve_mirror_graph_image_for_graph_id(db: Session, graph_id: str) -> tuple[str, Optional[object]]:
+def resolve_mirror_graph_image_for_graph_id(db: Session, graph_id: str) -> Tuple[str, Optional[object]]:
     normalized_graph_id = str(graph_id or "").strip()
     if not normalized_graph_id:
         return "", None
