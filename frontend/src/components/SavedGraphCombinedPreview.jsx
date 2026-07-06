@@ -136,56 +136,93 @@ const resolveTooltipLayout = (point, chartWidth, chartHeight, tooltipWidth, tool
   };
 };
 
-const LEGEND_ROW_HEIGHT = 21;
+const LEGEND_ROW_HEIGHT = 18;
 const LEGEND_SWATCH_WIDTH = 22;
-const LEGEND_TEXT_OFFSET = 32;
-const LEGEND_PADDING_X = 10;
-const LEGEND_PADDING_Y = 10;
-const LEGEND_GUTTER_GAP = 8;
-const LEGEND_FONT_SIZE = 11;
+const LEGEND_PADDING_X = 8;
+const LEGEND_PADDING_Y = 8;
+const LEGEND_EDGE_INSET = 6;
+const LEGEND_PREFIX_GAP = 10;
+const LEGEND_FONT_SIZE = 10;
+const LEGEND_SIGN_COL_WIDTH = 8;
+const LEGEND_NUM_CHAR_WIDTH = 6.2;
+const LEGEND_SUFFIX_GAP = 2;
 
-const measureLegendDimensions = (curves, fullLegendLabels = false) => {
-  if (!Array.isArray(curves) || curves.length < 2) {
-    return { width: 0, height: 0, entryCount: 0 };
+const legendSwatchEndOffset = () => LEGEND_PADDING_X + LEGEND_SWATCH_WIDTH;
+const legendTextStartOffset = () => legendSwatchEndOffset() + LEGEND_PREFIX_GAP;
+
+const parseAlignedLegendLabel = (label) => {
+  const value = String(label ?? '').trim();
+  if (!value) return null;
+
+  const tempMatch = value.match(/^([+-])?\s*(\d+(?:\.\d+)?)\s*°?\s*C?$/i);
+  if (tempMatch) {
+    return {
+      sign: tempMatch[1] === '-' ? '-' : '+',
+      number: tempMatch[2],
+      suffix: '°C',
+    };
   }
 
-  const labels = curves.map((curve, curveIndex) => {
-    const name = curve?.config?.curveName || curve?.curve_name || curve?.name || `Curve ${curveIndex + 1}`;
-    const label = curve?.label || name;
-    return fullLegendLabels
-      ? String(name || label || '-').trim()
-      : shortCurveLabel(name || label);
-  });
-  const maxLabelWidth = Math.max(
-    ...labels.map((label) => label.length * (LEGEND_FONT_SIZE * 0.58)),
-    48
-  );
-  const width = LEGEND_TEXT_OFFSET + maxLabelWidth + LEGEND_PADDING_X;
-  const height = curves.length * LEGEND_ROW_HEIGHT + LEGEND_PADDING_Y * 2;
+  const signedMatch = value.match(/^([+-])\s*(\d+(?:\.\d+)?)(?:\s*(.+))?$/);
+  if (signedMatch) {
+    return {
+      sign: signedMatch[1],
+      number: signedMatch[2],
+      suffix: String(signedMatch[3] || '').trim(),
+    };
+  }
 
-  return { width, height, entryCount: curves.length };
+  return null;
 };
 
-const buildLegendLayout = (curves, plotRight, plotBottom, plotTop, fullLegendLabels = false) => {
-  const entries = curves.map((curve) => ({
-    id: curve.id,
-    curveName: curve.curveName,
-    curveLabel: curve.label,
-    color: curve.color,
-    lineDash: curve.lineDash,
-    label: fullLegendLabels
+const buildLegendEntries = (curves, fullLegendLabels = false) =>
+  curves.map((curve) => {
+    const rawLabel = fullLegendLabels
       ? String(curve.curveName || curve.label || '-').trim()
-      : shortCurveLabel(curve.curveName || curve.label),
-  }));
+      : shortCurveLabel(curve.curveName || curve.label);
+    return {
+      id: curve.id,
+      curveName: curve.curveName,
+      curveLabel: curve.label,
+      color: curve.color,
+      lineDash: curve.lineDash,
+      label: rawLabel,
+      aligned: parseAlignedLegendLabel(rawLabel),
+    };
+  });
+
+const measureLegendEntryTextWidth = (entry, maxNumberLen = 0) => {
+  if (entry.aligned) {
+    const suffixWidth = entry.aligned.suffix ? entry.aligned.suffix.length * 5.4 + LEGEND_SUFFIX_GAP : 0;
+    return LEGEND_SIGN_COL_WIDTH + maxNumberLen * LEGEND_NUM_CHAR_WIDTH + suffixWidth;
+  }
+  return Math.max(entry.label.length * 5.8, 24);
+};
+
+const buildLegendLayout = (curves, plotRight, plotBottom, fullLegendLabels = false) => {
+  const entries = buildLegendEntries(curves, fullLegendLabels);
+  const alignedEntries = entries.filter((entry) => entry.aligned);
+  const maxNumberLen = alignedEntries.length > 0
+    ? Math.max(...alignedEntries.map((entry) => entry.aligned.number.length))
+    : 0;
+
   const maxLabelWidth = Math.max(
-    ...entries.map((entry) => entry.label.length * (LEGEND_FONT_SIZE * 0.58)),
-    48
+    ...entries.map((entry) => measureLegendEntryTextWidth(entry, maxNumberLen)),
+    32
   );
-  const boxWidth = LEGEND_TEXT_OFFSET + maxLabelWidth + LEGEND_PADDING_X;
+  const boxWidth = legendTextStartOffset() + maxLabelWidth + LEGEND_PADDING_X;
   const boxHeight = entries.length * LEGEND_ROW_HEIGHT + LEGEND_PADDING_Y * 2;
-  const boxX = plotRight + LEGEND_GUTTER_GAP;
-  const boxY = Math.max(plotTop, plotBottom - boxHeight);
-  return { entries, boxX, boxY, boxWidth, boxHeight };
+  const boxX = plotRight - boxWidth - LEGEND_EDGE_INSET;
+  const boxY = plotBottom - boxHeight - LEGEND_EDGE_INSET;
+
+  return {
+    entries,
+    boxX,
+    boxY,
+    boxWidth,
+    boxHeight,
+    maxNumberLen,
+  };
 };
 
 const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260, sortByX = false, fullLegendLabels = false }) => {
@@ -317,23 +354,7 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260, 
     });
   }, [parsedCurves, baseConfig, xScale, yScale, baseLogModeX, baseLogModeY]);
 
-  const legendDimensions = useMemo(
-    () => measureLegendDimensions(safeCurves, fullLegendLabels),
-    [safeCurves, fullLegendLabels]
-  );
-
-  const padding = useMemo(
-    () => ({
-      left: 58,
-      right:
-        legendDimensions.entryCount >= 2
-          ? Math.max(24, Math.ceil(legendDimensions.width) + 16)
-          : 20,
-      top: 16,
-      bottom: 40,
-    }),
-    [legendDimensions]
-  );
+  const padding = { left: 58, right: 20, top: 16, bottom: 40 };
   const drawableWidth = Math.max(width - padding.left - padding.right, 1);
   const drawableHeight = Math.max(height - padding.top - padding.bottom, 1);
 
@@ -438,7 +459,7 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260, 
     if (curveSvgData.length < 2) return null;
     const plotRight = padding.left + drawableWidth;
     const plotBottom = padding.top + drawableHeight;
-    return buildLegendLayout(curveSvgData, plotRight, plotBottom, padding.top, fullLegendLabels);
+    return buildLegendLayout(curveSvgData, plotRight, plotBottom, fullLegendLabels);
   }, [curveSvgData, padding, drawableWidth, drawableHeight, fullLegendLabels]);
 
   const tooltipLayout = useMemo(() => {
@@ -640,28 +661,48 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260, 
             const rowCenterY = rowY + LEGEND_ROW_HEIGHT / 2;
             const isActive = hoveredPoint
               && (hoveredPoint.curveName === entry.curveName || hoveredPoint.curveLabel === entry.curveLabel);
+            const textStartX = legendLayout.boxX + legendTextStartOffset();
+            const signX = textStartX;
+            const numberColumnEndX = signX + LEGEND_SIGN_COL_WIDTH + legendLayout.maxNumberLen * LEGEND_NUM_CHAR_WIDTH;
+            const suffixX = numberColumnEndX + LEGEND_SUFFIX_GAP;
             return (
               <g key={`legend-${entry.id}-${index}`}>
                 <line
                   x1={legendLayout.boxX + LEGEND_PADDING_X}
                   y1={rowCenterY}
-                  x2={legendLayout.boxX + LEGEND_PADDING_X + LEGEND_SWATCH_WIDTH}
+                  x2={legendLayout.boxX + legendSwatchEndOffset()}
                   y2={rowCenterY}
                   stroke={entry.color}
-                  strokeWidth={isActive ? 3 : 2}
+                  strokeWidth={isActive ? 3.5 : 3}
                   strokeLinecap="round"
                   strokeDasharray={entry.lineDash || undefined}
                 />
-                <text
-                  x={legendLayout.boxX + LEGEND_TEXT_OFFSET}
-                  y={rowCenterY}
-                  fontSize={LEGEND_FONT_SIZE}
-                  fontWeight={isActive ? '700' : '600'}
-                  dominantBaseline="middle"
-                  fill="#111827"
-                >
-                  {entry.label}
-                </text>
+                {entry.aligned ? (
+                  <text
+                    y={rowCenterY}
+                    fontSize={LEGEND_FONT_SIZE}
+                    fontWeight="700"
+                    dominantBaseline="middle"
+                    fill="#111827"
+                  >
+                    <tspan x={signX}>{entry.aligned.sign}</tspan>
+                    <tspan x={numberColumnEndX} textAnchor="end">{entry.aligned.number}</tspan>
+                    {entry.aligned.suffix ? (
+                      <tspan x={suffixX}>{entry.aligned.suffix}</tspan>
+                    ) : null}
+                  </text>
+                ) : (
+                  <text
+                    x={textStartX}
+                    y={rowCenterY}
+                    fontSize={LEGEND_FONT_SIZE}
+                    fontWeight={isActive ? '700' : '600'}
+                    dominantBaseline="middle"
+                    fill="#111827"
+                  >
+                    {entry.label}
+                  </text>
+                )}
               </g>
             );
           })}
