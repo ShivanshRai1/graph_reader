@@ -140,7 +140,7 @@ const LEGEND_ROW_HEIGHT = 18;
 const LEGEND_SWATCH_WIDTH = 22;
 const LEGEND_PADDING_X = 8;
 const LEGEND_PADDING_Y = 8;
-const LEGEND_EDGE_INSET = 6;
+const LEGEND_BELOW_GAP = 8;
 const LEGEND_PREFIX_GAP = 10;
 const LEGEND_FONT_SIZE = 10;
 const LEGEND_SIGN_COL_WIDTH = 8;
@@ -199,7 +199,7 @@ const measureLegendEntryTextWidth = (entry, maxNumberLen = 0) => {
   return Math.max(entry.label.length * 5.8, 24);
 };
 
-const buildLegendLayout = (curves, plotRight, plotBottom, fullLegendLabels = false) => {
+const buildLegendLayout = (curves, plotRight, chartHeight, fullLegendLabels = false) => {
   const entries = buildLegendEntries(curves, fullLegendLabels);
   const alignedEntries = entries.filter((entry) => entry.aligned);
   const maxNumberLen = alignedEntries.length > 0
@@ -212,8 +212,8 @@ const buildLegendLayout = (curves, plotRight, plotBottom, fullLegendLabels = fal
   );
   const boxWidth = legendTextStartOffset() + maxLabelWidth + LEGEND_PADDING_X;
   const boxHeight = entries.length * LEGEND_ROW_HEIGHT + LEGEND_PADDING_Y * 2;
-  const boxX = plotRight - boxWidth - LEGEND_EDGE_INSET;
-  const boxY = plotBottom - boxHeight - LEGEND_EDGE_INSET;
+  const boxX = Math.max(8, plotRight - boxWidth);
+  const boxY = chartHeight + LEGEND_BELOW_GAP;
 
   return {
     entries,
@@ -458,9 +458,12 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260, 
   const legendLayout = useMemo(() => {
     if (curveSvgData.length < 2) return null;
     const plotRight = padding.left + drawableWidth;
-    const plotBottom = padding.top + drawableHeight;
-    return buildLegendLayout(curveSvgData, plotRight, plotBottom, fullLegendLabels);
-  }, [curveSvgData, padding, drawableWidth, drawableHeight, fullLegendLabels]);
+    return buildLegendLayout(curveSvgData, plotRight, height, fullLegendLabels);
+  }, [curveSvgData, padding, drawableWidth, height, fullLegendLabels]);
+
+  const svgHeight = legendLayout
+    ? height + legendLayout.boxHeight + LEGEND_BELOW_GAP + 4
+    : height;
 
   const tooltipLayout = useMemo(() => {
     if (!hoveredPoint) return null;
@@ -498,13 +501,13 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260, 
     <div style={{ width, overflow: 'visible' }}>
       <svg
         width={width}
-        height={height}
-        viewBox={`0 0 ${width} ${height}`}
+        height={svgHeight}
+        viewBox={`0 0 ${width} ${svgHeight}`}
         style={{ border: '1px solid var(--color-border)', borderRadius: 8, background: '#ffffff', overflow: 'visible' }}
         onMouseMove={handleMouseMove}
         onMouseLeave={() => setHoveredPoint(null)}
       >
-      <rect x={0} y={0} width={width} height={height} fill="#ffffff" />
+      <rect x={0} y={0} width={width} height={svgHeight} fill="#ffffff" />
       {/* Grid lines */}
       {/* Vertical grid lines */}
       {xTicks.map((tick) => {
