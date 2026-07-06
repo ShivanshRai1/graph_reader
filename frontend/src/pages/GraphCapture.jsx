@@ -7406,7 +7406,11 @@ const GraphCapture = () => {
 
       const persistGraphId = String(urlParams.graph_id || companyGraphId || '').trim();
       if (persistGraphId && graphArea.width > 0 && graphArea.height > 0) {
-        persistGraphContext(persistGraphId, graphArea, graphConfig);
+        persistGraphContext(persistGraphId, graphArea, graphConfig, {
+          persistAxis: true,
+          plotReferenceLocked: isAxisMappingConfirmed,
+          plotReferenceArea: isAxisMappingConfirmed ? plotReferenceArea : graphArea,
+        });
       }
 
       clearDataPoints();
@@ -7460,20 +7464,12 @@ const GraphCapture = () => {
       sessionIdentifier: activeSessionIdentifierRef.current,
       currentUrl: window.location.href,
     });
-    // CRITICAL: Close the modal and prepare for next curve capture
-    // But preserve the session state (graph_id and identifier) for the append-to-graph flow
+    // Close the modal and continue on the same graph. saveCurveToBackend already cleared
+    // points, cleared curve name, and enabled next-curve guidance while keeping axis locked.
     setShowReturnDecisionModal(false);
+    setPendingReturnUrl('');
     setShowCaptureAnotherGuidance(true);
-    setIsAxisMappingConfirmed(false);
-    setFrozenGraphConfig(null);
-    setGraphConfig((prevConfig) => ({
-      ...prevConfig,
-      curveName: '',
-    }));
-    
-    // Clear data points to show a clean canvas for the next curve
-    clearDataPoints();
-    
+
     // Clear the selected curve details modal if any is open
     setSelectedCurveId('');
     setCombinedGroupId('');
@@ -8780,7 +8776,7 @@ const GraphCapture = () => {
             alignItems: 'center',
             justifyContent: 'center',
           }}
-          onClick={handleCaptureAnotherCurve}
+          onClick={() => setShowReturnDecisionModal(false)}
         >
           <div
             style={{
