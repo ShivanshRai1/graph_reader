@@ -9092,9 +9092,10 @@ const GraphCapture = () => {
             setCombinedGroupId('');
               clearSavedViewOverlay();
             }}
-            defaultWidth={700}
+            defaultWidth={760}
             minWidth={560}
-            maxWidth={820}
+            maxWidth={860}
+            maxHeightFactor={0.88}
           >
             <ViewModalBackdropDimControl
               value={viewModalBackdropOpacity}
@@ -9221,6 +9222,7 @@ const GraphCapture = () => {
             </div>
             <div style={{ marginTop: 12 }}>
               {selectedGroup.curves.length === 1 ? (
+                <div style={{ border: '1px solid var(--color-border)', borderRadius: 8, padding: 12, background: '#ffffff' }}>
                 <SavedGraphPreview
                   points={selectedGroup.curves[0]?.points ?? selectedGroup.curves[0]?.data_points ?? []}
                   config={buildSavedGraphPreviewConfig(selectedGroup.curves[0], {
@@ -9233,12 +9235,17 @@ const GraphCapture = () => {
                     liveGraphConfig: graphConfig,
                     urlParams,
                   })}
-                  width={700}
-                  height={280}
+                  width={760}
+                  height={300}
                   animate
                   sortByX={previewSortByX}
                 />
+                </div>
               ) : (
+                <div style={{ border: '1px solid var(--color-border)', borderRadius: 8, padding: 12, background: '#ffffff' }}>
+                  <div className="font-semibold mb-2" style={{ color: '#213547', fontSize: 14 }}>
+                    X {normalizeCurveConfig(selectedGroup.curves[0]).xScale || 'Linear'}, Y {normalizeCurveConfig(selectedGroup.curves[0]).yScale || 'Linear'} ({selectedGroup.curves.length} curves)
+                  </div>
                 <SavedGraphCombinedPreview
                   curves={selectedGroup.curves}
                   config={buildSavedGraphCombinedPreviewConfig(selectedGroup.curves, {
@@ -9251,10 +9258,11 @@ const GraphCapture = () => {
                     liveGraphConfig: graphConfig,
                     urlParams,
                   })}
-                  width={700}
-                  height={280}
+                  width={760}
+                  height={300}
                   sortByX={previewSortByX}
                 />
+                </div>
               )}
             </div>
           </ViewModalPanel>
