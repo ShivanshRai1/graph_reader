@@ -786,6 +786,16 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       return false;
     }
 
+    if (
+      requireAxisConfirmed &&
+      isAxisMappingConfirmed &&
+      !isEditingCurve &&
+      !String(graphConfig.curveName || '').trim()
+    ) {
+      alert('⚠️ Please enter a Curve or Line Name before capturing data points.');
+      return false;
+    }
+
     if (applyDoubleClickGuard) {
       const now = Date.now();
       const last = lastCaptureClickRef.current;

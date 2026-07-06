@@ -11,7 +11,7 @@ import { useEffect, useState } from 'react';
 
 const SHOW_CAPTURED_POINTS_TOOLBAR = false;
 
-const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false, isEditingCurve = false }) => {
+const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false, isEditingCurve = false, isAxisMappingConfirmed = false }) => {
   const { dataPoints, clearDataPoints, importDataPoints, uploadedImage, updateDataPoint, deleteDataPoint, graphConfig, graphArea, convertCanvasToGraphCoordinates } = useGraph();
   const manualCapturePoints = getManualCapturePoints(dataPoints);
   const importedOverlayCount = dataPoints.filter((point) => point.imported).length;
@@ -331,7 +331,11 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false, isEditin
             </p>
           )}
           {manualCapturePoints.length === 0 && importedOverlayCount === 0 && (
-            <p className="text-xs text-gray-500 mt-1">No points captured yet. Confirm axis mapping first, then click on the graph.</p>
+            <p className="text-xs text-gray-500 mt-1">
+              {isAxisMappingConfirmed && !String(graphConfig.curveName || '').trim() && !isEditingCurve
+                ? 'No points captured yet. Enter a Curve or Line Name, then click on the graph.'
+                : 'No points captured yet. Confirm axis mapping first, then click on the graph.'}
+            </p>
           )}
 
         </div>

@@ -8206,7 +8206,7 @@ const GraphCapture = () => {
                   imageSizeRef.current = size;
                 }}
               />
-              <CapturedPointsList isReadOnly={isReadOnly} hasReturnUrl={!!urlParams.return_url} isEditingCurve={Boolean(editingCurveId)} />
+              <CapturedPointsList isReadOnly={isReadOnly} hasReturnUrl={!!urlParams.return_url} isEditingCurve={Boolean(editingCurveId)} isAxisMappingConfirmed={isAxisMappingConfirmed} />
             </div>
             <div className="w-full lg:w-3/5">
               {showCaptureAnotherGuidance ? (
