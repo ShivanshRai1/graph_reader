@@ -353,20 +353,16 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
 
   const getUnitLabel = (value) => getUnitPrefixLabel(value);
 
-  const formatUnitOptionLabel = (option, { primaryPrefix, recommendedPrefixes }) => {
+  const formatUnitOptionLabel = (option, primaryPrefix) => {
     if (!option.value) return option.label;
     if (primaryPrefix && option.value === primaryPrefix) {
       return `${option.label} — recommended`;
-    }
-    if (recommendedPrefixes.includes(option.value)) {
-      return `${option.label} — suggested`;
     }
     return option.label;
   };
 
   const renderUnitSelect = (name, value, recommendations) => {
-    const { primaryPrefix, recommendedPrefixes } = recommendations;
-    const hasRecommendations = recommendedPrefixes.length > 0;
+    const { primaryPrefix } = recommendations;
 
     return (
       <label className="block mb-3">
@@ -377,13 +373,12 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
           onChange={handleChange}
           disabled={isAxisMappingConfirmed || isEditingCurve}
           className={`w-full px-3 py-2 border rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed ${
-            hasRecommendations ? 'border-amber-400' : 'border-gray-300'
+            primaryPrefix ? 'border-amber-400' : 'border-gray-300'
           }`}
         >
           <option value="">-select-</option>
           {UNIT_PREFIX_SELECT_OPTIONS.map((option) => {
             const isPrimary = primaryPrefix && option.value === primaryPrefix;
-            const isSuggested = recommendedPrefixes.includes(option.value);
             return (
               <option
                 key={option.value}
@@ -391,24 +386,26 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
                 style={
                   isPrimary
                     ? { fontWeight: 'bold', backgroundColor: '#fef3c7' }
-                    : isSuggested
-                      ? { backgroundColor: '#fffbeb' }
-                      : undefined
+                    : undefined
                 }
               >
-                {formatUnitOptionLabel(option, { primaryPrefix, recommendedPrefixes })}
+                {formatUnitOptionLabel(option, primaryPrefix)}
               </option>
             );
           })}
         </select>
-        {primaryPrefix ? (
-          <p className="mt-1 text-xs text-amber-800">
-            Recommended: <span className="font-semibold">{getUnitPrefixLabel(primaryPrefix)}</span>
-            {recommendedPrefixes.length > 1
-              ? ' (other suggested options are marked in the list)'
-              : ''}
-          </p>
-        ) : null}
+        <p
+          className="mt-1 text-xs text-amber-800 leading-snug"
+          style={{ minHeight: '2.25rem' }}
+        >
+          {primaryPrefix ? (
+            <>
+              Recommended: <span className="font-semibold">{getUnitPrefixLabel(primaryPrefix)}</span>
+            </>
+          ) : (
+            <span aria-hidden="true">&nbsp;</span>
+          )}
+        </p>
       </label>
     );
   };
