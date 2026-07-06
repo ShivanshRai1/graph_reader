@@ -136,15 +136,37 @@ const resolveTooltipLayout = (point, chartWidth, chartHeight, tooltipWidth, tool
   };
 };
 
-const LEGEND_ROW_HEIGHT = 23;
+const LEGEND_ROW_HEIGHT = 21;
 const LEGEND_SWATCH_WIDTH = 22;
 const LEGEND_TEXT_OFFSET = 32;
 const LEGEND_PADDING_X = 10;
 const LEGEND_PADDING_Y = 10;
-const LEGEND_EDGE_INSET = 14;
+const LEGEND_GUTTER_GAP = 8;
 const LEGEND_FONT_SIZE = 11;
 
-const buildLegendLayout = (curves, plotRight, plotBottom, fullLegendLabels = false) => {
+const measureLegendDimensions = (curves, fullLegendLabels = false) => {
+  if (!Array.isArray(curves) || curves.length < 2) {
+    return { width: 0, height: 0, entryCount: 0 };
+  }
+
+  const labels = curves.map((curve, curveIndex) => {
+    const name = curve?.config?.curveName || curve?.curve_name || curve?.name || `Curve ${curveIndex + 1}`;
+    const label = curve?.label || name;
+    return fullLegendLabels
+      ? String(name || label || '-').trim()
+      : shortCurveLabel(name || label);
+  });
+  const maxLabelWidth = Math.max(
+    ...labels.map((label) => label.length * (LEGEND_FONT_SIZE * 0.58)),
+    48
+  );
+  const width = LEGEND_TEXT_OFFSET + maxLabelWidth + LEGEND_PADDING_X;
+  const height = curves.length * LEGEND_ROW_HEIGHT + LEGEND_PADDING_Y * 2;
+
+  return { width, height, entryCount: curves.length };
+};
+
+const buildLegendLayout = (curves, plotRight, plotBottom, plotTop, fullLegendLabels = false) => {
   const entries = curves.map((curve) => ({
     id: curve.id,
     curveName: curve.curveName,
@@ -161,8 +183,8 @@ const buildLegendLayout = (curves, plotRight, plotBottom, fullLegendLabels = fal
   );
   const boxWidth = LEGEND_TEXT_OFFSET + maxLabelWidth + LEGEND_PADDING_X;
   const boxHeight = entries.length * LEGEND_ROW_HEIGHT + LEGEND_PADDING_Y * 2;
-  const boxX = plotRight - boxWidth - LEGEND_EDGE_INSET;
-  const boxY = plotBottom - boxHeight - LEGEND_EDGE_INSET;
+  const boxX = plotRight + LEGEND_GUTTER_GAP;
+  const boxY = Math.max(plotTop, plotBottom - boxHeight);
   return { entries, boxX, boxY, boxWidth, boxHeight };
 };
 
@@ -295,7 +317,23 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260, 
     });
   }, [parsedCurves, baseConfig, xScale, yScale, baseLogModeX, baseLogModeY]);
 
-  const padding = { left: 58, right: 28, top: 16, bottom: 48 };
+  const legendDimensions = useMemo(
+    () => measureLegendDimensions(safeCurves, fullLegendLabels),
+    [safeCurves, fullLegendLabels]
+  );
+
+  const padding = useMemo(
+    () => ({
+      left: 58,
+      right:
+        legendDimensions.entryCount >= 2
+          ? Math.max(24, Math.ceil(legendDimensions.width) + 16)
+          : 20,
+      top: 16,
+      bottom: 40,
+    }),
+    [legendDimensions]
+  );
   const drawableWidth = Math.max(width - padding.left - padding.right, 1);
   const drawableHeight = Math.max(height - padding.top - padding.bottom, 1);
 
@@ -400,7 +438,7 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260, 
     if (curveSvgData.length < 2) return null;
     const plotRight = padding.left + drawableWidth;
     const plotBottom = padding.top + drawableHeight;
-    return buildLegendLayout(curveSvgData, plotRight, plotBottom, fullLegendLabels);
+    return buildLegendLayout(curveSvgData, plotRight, plotBottom, padding.top, fullLegendLabels);
   }, [curveSvgData, padding, drawableWidth, drawableHeight, fullLegendLabels]);
 
   const tooltipLayout = useMemo(() => {
