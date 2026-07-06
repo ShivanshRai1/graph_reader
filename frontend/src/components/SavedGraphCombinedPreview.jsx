@@ -136,9 +136,13 @@ const resolveTooltipLayout = (point, chartWidth, chartHeight, tooltipWidth, tool
   };
 };
 
-const LEGEND_ROW_HEIGHT = 17;
+const LEGEND_ROW_HEIGHT = 23;
 const LEGEND_SWATCH_WIDTH = 22;
-const LEGEND_TEXT_OFFSET = 28;
+const LEGEND_TEXT_OFFSET = 32;
+const LEGEND_PADDING_X = 10;
+const LEGEND_PADDING_Y = 10;
+const LEGEND_EDGE_INSET = 14;
+const LEGEND_FONT_SIZE = 11;
 
 const buildLegendLayout = (curves, plotRight, plotBottom, fullLegendLabels = false) => {
   const entries = curves.map((curve) => ({
@@ -152,13 +156,13 @@ const buildLegendLayout = (curves, plotRight, plotBottom, fullLegendLabels = fal
       : shortCurveLabel(curve.curveName || curve.label),
   }));
   const maxLabelWidth = Math.max(
-    ...entries.map((entry) => entry.label.length * 5.8),
+    ...entries.map((entry) => entry.label.length * (LEGEND_FONT_SIZE * 0.58)),
     48
   );
-  const boxWidth = LEGEND_TEXT_OFFSET + maxLabelWidth + 10;
-  const boxHeight = entries.length * LEGEND_ROW_HEIGHT + 8;
-  const boxX = plotRight - boxWidth - 6;
-  const boxY = plotBottom - boxHeight - 6;
+  const boxWidth = LEGEND_TEXT_OFFSET + maxLabelWidth + LEGEND_PADDING_X;
+  const boxHeight = entries.length * LEGEND_ROW_HEIGHT + LEGEND_PADDING_Y * 2;
+  const boxX = plotRight - boxWidth - LEGEND_EDGE_INSET;
+  const boxY = plotBottom - boxHeight - LEGEND_EDGE_INSET;
   return { entries, boxX, boxY, boxWidth, boxHeight };
 };
 
@@ -291,7 +295,7 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260, 
     });
   }, [parsedCurves, baseConfig, xScale, yScale, baseLogModeX, baseLogModeY]);
 
-  const padding = { left: 58, right: 20, top: 16, bottom: 40 };
+  const padding = { left: 58, right: 28, top: 16, bottom: 48 };
   const drawableWidth = Math.max(width - padding.left - padding.right, 1);
   const drawableHeight = Math.max(height - padding.top - padding.bottom, 1);
 
@@ -594,16 +598,17 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260, 
             strokeWidth="1"
           />
           {legendLayout.entries.map((entry, index) => {
-            const rowY = legendLayout.boxY + 6 + index * LEGEND_ROW_HEIGHT;
+            const rowY = legendLayout.boxY + LEGEND_PADDING_Y + index * LEGEND_ROW_HEIGHT;
+            const rowCenterY = rowY + LEGEND_ROW_HEIGHT / 2;
             const isActive = hoveredPoint
               && (hoveredPoint.curveName === entry.curveName || hoveredPoint.curveLabel === entry.curveLabel);
             return (
               <g key={`legend-${entry.id}-${index}`}>
                 <line
-                  x1={legendLayout.boxX + 6}
-                  y1={rowY + 7}
-                  x2={legendLayout.boxX + 6 + LEGEND_SWATCH_WIDTH}
-                  y2={rowY + 7}
+                  x1={legendLayout.boxX + LEGEND_PADDING_X}
+                  y1={rowCenterY}
+                  x2={legendLayout.boxX + LEGEND_PADDING_X + LEGEND_SWATCH_WIDTH}
+                  y2={rowCenterY}
                   stroke={entry.color}
                   strokeWidth={isActive ? 3 : 2}
                   strokeLinecap="round"
@@ -611,9 +616,10 @@ const SavedGraphCombinedPreview = ({ curves, config, width = 640, height = 260, 
                 />
                 <text
                   x={legendLayout.boxX + LEGEND_TEXT_OFFSET}
-                  y={rowY + 10}
-                  fontSize="10"
+                  y={rowCenterY}
+                  fontSize={LEGEND_FONT_SIZE}
                   fontWeight={isActive ? '700' : '600'}
+                  dominantBaseline="middle"
                   fill="#111827"
                 >
                   {entry.label}
