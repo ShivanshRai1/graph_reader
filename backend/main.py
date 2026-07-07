@@ -81,14 +81,34 @@ def normalize_tc_part_number(part_number: str) -> str:
     return safe
 
 
-def resolve_tc_part_dir(part_number: str) -> Path:
+def resolve_part_subdirectory(root: Path, part_number: str, *, missing_detail: str) -> Path:
     safe_part = normalize_tc_part_number(part_number)
-    part_dir = (TC_ROOT / safe_part).resolve()
-    if TC_ROOT.resolve() not in part_dir.parents and part_dir != TC_ROOT.resolve():
+    candidate = (root / safe_part).resolve()
+    if root.resolve() not in candidate.parents and candidate != root.resolve():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid part number path")
-    if not part_dir.is_dir():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"No TC files found for part '{safe_part}'")
-    return part_dir
+    if candidate.is_dir():
+        return candidate
+
+    if root.is_dir():
+        for child in root.iterdir():
+            if not child.is_dir() or child.name.lower() != safe_part:
+                continue
+            resolved = child.resolve()
+            if root.resolve() in resolved.parents:
+                return resolved
+
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=missing_detail.format(safe_part=safe_part),
+    )
+
+
+def resolve_tc_part_dir(part_number: str) -> Path:
+    return resolve_part_subdirectory(
+        TC_ROOT,
+        part_number,
+        missing_detail="No TC files found for part '{safe_part}'",
+    )
 
 
 def resolve_tc_file_path(part_number: str, filename: str) -> Path:
@@ -108,13 +128,11 @@ def resolve_tc_file_path(part_number: str, filename: str) -> Path:
 
 
 def resolve_image_part_dir(part_number: str) -> Path:
-    safe_part = normalize_tc_part_number(part_number)
-    part_dir = (IMAGE_ROOT / safe_part).resolve()
-    if IMAGE_ROOT.resolve() not in part_dir.parents and part_dir != IMAGE_ROOT.resolve():
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid part number path")
-    if not part_dir.is_dir():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"No graph images found for part '{safe_part}'")
-    return part_dir
+    return resolve_part_subdirectory(
+        IMAGE_ROOT,
+        part_number,
+        missing_detail="No graph images found for part '{safe_part}'",
+    )
 
 
 def resolve_image_file_path(part_number: str, filename: str) -> Path:
