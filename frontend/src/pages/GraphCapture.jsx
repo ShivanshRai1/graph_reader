@@ -1143,17 +1143,20 @@ const collectCompanyDetailIds = (curves = []) => {
 };
 
 /** Drop stale browser-cache curves whose detail_id no longer exists on DiscoverEE. */
-const filterPersistedCurvesForCompanyApi = (companyCurves = [], persistedCurves = []) => {
+const filterPersistedCurvesForCompanyApi = (companyCurves = [], persistedCurves = [], graphId = '') => {
   const apiDetailIds = collectCompanyDetailIds(companyCurves);
   const list = Array.isArray(persistedCurves) ? persistedCurves : [];
+  const canonicalId = String(graphId || '').trim();
+
   if (apiDetailIds.size === 0) {
-    return list;
+    // No company curves at all — keep only what belongs to this exact graph_id
+    if (!canonicalId) return list;
+    return list.filter((curve) => String(curve?.graphId || '').trim() === canonicalId);
   }
 
   return list.filter((curve) => {
-    if (curve?.locallyModified || curveHasPersistableCaptureData(curve)) {
-      return true;
-    }
+    // Always require graph_id to match when we have it
+    if (canonicalId && String(curve?.graphId || '').trim() !== canonicalId) return false;
     const detailId = String(curve?.detailId || curve?.detail_id || '').trim();
     if (!detailId) return false;
     return apiDetailIds.has(detailId);
@@ -1438,7 +1441,8 @@ const buildRestoredSavedCurves = ({
   );
   const prunedPersisted = filterPersistedCurvesForCompanyApi(
     companyCurves,
-    persisted?.curves || []
+    persisted?.curves || [],
+    graphId
   );
   if (
     Array.isArray(persisted?.curves) &&
@@ -6984,6 +6988,15 @@ const GraphCapture = () => {
             console.log('[DEBUG] Total fetched curves:', fetched.length, 'after dedupe:', dedupedFetched.length);
             if (dedupedFetched.length > 0) {
               const resolvedGraphIdForCurves = String(discovereeGraph.graph_id || graphId).trim();
+
+              // If localStorage has more curves than DiscoverEE returned, it's corrupted — clear it
+              // so buildRestoredSavedCurves starts from a clean state with the API as truth.
+              const persistedCheck = getPersistedSavedCurves(resolvedGraphIdForCurves);
+              if (persistedCheck?.curves?.length > dedupedFetched.length * 3) {
+                console.warn('[GRAPH SESSION] Clearing corrupted localStorage for graph_id (had', persistedCheck.curves.length, ', API returned', dedupedFetched.length, ')');
+                clearPersistedSavedCurves(resolvedGraphIdForCurves);
+              }
+
               const restoredBundle = buildRestoredSavedCurves({
                 graphId: resolvedGraphIdForCurves,
                 companyCurves: dedupedFetched,
