@@ -1157,6 +1157,9 @@ const filterPersistedCurvesForCompanyApi = (companyCurves = [], persistedCurves 
   return list.filter((curve) => {
     // Always require graph_id to match when we have it
     if (canonicalId && String(curve?.graphId || '').trim() !== canonicalId) return false;
+    // Keep freshly-saved curves for this graph that DiscoverEE may not have echoed yet.
+    // Bounded to this exact graph_id; gross corruption is handled by the load-time purge.
+    if (curve?.locallyModified) return true;
     const detailId = String(curve?.detailId || curve?.detail_id || '').trim();
     if (!detailId) return false;
     return apiDetailIds.has(detailId);
@@ -7930,9 +7933,14 @@ const GraphCapture = () => {
 
       // Build the JSON payload for company's API
       const uniqueIdentifier = `usergraph_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
-      // Keep append identifier stable. If identifier is invalid (e.g. "0"), leave it empty and rely on graph_id.
+      // Synthetic identifiers (usergraph_gid_<id>) are generated locally when the real one is lost
+      // (e.g. DiscoverEE returns identifier "0" after refresh). Sending a synthetic identifier that
+      // does NOT match the graph's real identifier makes the server create a NEW graph (split).
+      // When appending, if we only have a synthetic identifier, send EMPTY and rely on graph_id.
+      const isSyntheticIdentifier = (value) =>
+        String(value || '').startsWith(GRAPH_STABLE_IDENTIFIER_PREFIX);
       const resolvedOutgoingIdentifier = isAppendingToExistingGraph
-        ? resolvedAppendIdentifier
+        ? (isSyntheticIdentifier(resolvedAppendIdentifier) ? '' : resolvedAppendIdentifier)
         : uniqueIdentifier;
       const appendDiscovereeCatId = isAppendingToExistingGraph
         ? String(
