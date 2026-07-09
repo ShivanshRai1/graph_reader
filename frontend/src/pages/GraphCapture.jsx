@@ -651,6 +651,34 @@ const resolveIdentifierForGraph = ({
   return ensureStableGraphIdentifier(targetGraphId);
 };
 
+/** Keep multi-curve sessions on one graph_id even when URL/session values drift after refresh. */
+const resolveCanonicalSessionGraphId = ({
+  urlGraphId = '',
+  sessionGraphId = '',
+  savedCurves = [],
+} = {}) => {
+  const urlId = String(urlGraphId || '').trim();
+  const sessionId = String(sessionGraphId || '').trim();
+  const curveIds = (Array.isArray(savedCurves) ? savedCurves : [])
+    .map((curve) => String(curve?.graphId || '').trim())
+    .filter(Boolean);
+
+  if (curveIds.length === 0) {
+    return urlId || sessionId;
+  }
+
+  const counts = curveIds.reduce((accumulator, id) => {
+    accumulator[id] = (accumulator[id] || 0) + 1;
+    return accumulator;
+  }, {});
+  const dominantId =
+    Object.entries(counts).sort((left, right) => right[1] - left[1])[0]?.[0] || curveIds[0];
+
+  if (urlId && counts[urlId]) return urlId;
+  if (sessionId && counts[sessionId]) return sessionId;
+  return dominantId || urlId || sessionId;
+};
+
 /** Pick the detail_id for a newly saved curve without reusing an existing curve's id. */
 const resolveDetailIdFromRefetch = ({
   refetchDetails = [],
@@ -4428,6 +4456,12 @@ const GraphCapture = () => {
       if (axisConfirmed) {
         setShowCaptureAnotherGuidance(true);
       }
+      const sessionIdentifier = ensureStableGraphIdentifier(
+        graphId,
+        persistedCurves.curves[0]?.identifier || ''
+      );
+      activateAppendSession(graphId, cachedImage || '', 'persisted-layout-restore');
+      activeSessionIdentifierRef.current = sessionIdentifier;
     }
 
     if (cachedImage || persistedCurves?.curves?.length > 0) {
@@ -5467,6 +5501,40 @@ const GraphCapture = () => {
     }
     window.history.replaceState({}, '', currentUrl.toString());
   };
+
+  // After refresh, re-pin graph_id + identifier in the URL so append saves stay on the same graph.
+  useEffect(() => {
+    if (isInitialGraphFetchPending) return;
+
+    const graphId = resolveCanonicalSessionGraphId({
+      urlGraphId: urlParams.graph_id,
+      sessionGraphId: activeSessionGraphIdRef.current,
+      savedCurves,
+    });
+    if (!graphId || savedCurves.length === 0) return;
+
+    const sessionIdentifier = ensureStableGraphIdentifier(
+      graphId,
+      savedCurves.find((curve) => String(curve?.graphId || '').trim() === graphId)?.identifier ||
+        savedCurves[0]?.identifier ||
+        activeSessionIdentifierRef.current
+    );
+
+    const needsSessionRestore =
+      !hasActiveAppendSessionRef.current ||
+      activeSessionGraphIdRef.current !== graphId ||
+      !activeSessionIdentifierRef.current;
+
+    if (!needsSessionRestore) return;
+
+    activateAppendSession(
+      graphId,
+      activeSessionImageKeyRef.current || uploadedImage || '',
+      'saved-curves-session-restore'
+    );
+    activeSessionIdentifierRef.current = sessionIdentifier;
+    syncGraphIdContext(graphId, sessionIdentifier);
+  }, [isInitialGraphFetchPending, savedCurves, urlParams.graph_id, uploadedImage]);
 
   const syncAxisTitleContext = (nextXTitle, nextYTitle) => {
     const normalizedXTitle = String(nextXTitle || '').trim();
@@ -7000,6 +7068,16 @@ const GraphCapture = () => {
             ? graphAreaRef.current
             : null,
       });
+      const sessionIdentifier = ensureStableGraphIdentifier(
+        graphId,
+        firstCurve?.identifier || activeSessionIdentifierRef.current
+      );
+      activateAppendSession(
+        graphId,
+        activeSessionImageKeyRef.current || uploadedImage || firstCurve?.graphImageUrl || '',
+        'auto-load-graph-context'
+      );
+      activeSessionIdentifierRef.current = sessionIdentifier;
       setShowCaptureAnotherGuidance(true);
       setIsReadOnly(false);
 
@@ -7320,6 +7398,7 @@ const GraphCapture = () => {
       const companyGraphId = companyResult?.graphId ?? null;
       const companyDetailId = companyResult?.detailId ?? null;
       const companyIdentifier = companyResult?.identifier ?? '';
+      const detailRefetchGraphId = companyResult?.detailRefetchGraphId || companyGraphId;
       console.log('sendToCompanyDatabase returned:', {
         graphId: companyGraphId,
         detailId: companyDetailId,
@@ -7336,9 +7415,9 @@ const GraphCapture = () => {
       let detailsVerifiedOnDiscoveree = false;
       if (companyGraphId) {
         try {
-          console.log('[RE-FETCH] Fetching details for graph_id:', companyGraphId);
+          console.log('[RE-FETCH] Fetching details for graph_id:', detailRefetchGraphId);
           const { details: refetchDetails, result: refetchResult } = await fetchCompanyGraphDetailsWithRetry(
-            companyGraphId
+            detailRefetchGraphId
           );
           if (refetchResult) {
             console.log('[RE-FETCH] Full API response:', refetchResult);
@@ -7399,7 +7478,9 @@ const GraphCapture = () => {
         id: realDetailId ? `${companyGraphId}_${realDetailId}` : result.id,
         graphId: String(companyGraphId || ''),
         identifier: String(companyIdentifier || ''),
-        discoveree_cat_id: String(urlParams.discoveree_cat_id || companyGraphId || ''),
+        discoveree_cat_id: String(
+          savedCurves[0]?.discoveree_cat_id || urlParams.discoveree_cat_id || companyGraphId || ''
+        ),
         detailId: realDetailId,
         testuser_id: urlParams.testuser_id || '',
         name: payload.curve_name,
@@ -7442,18 +7523,22 @@ const GraphCapture = () => {
       }
       
       setSavedCurves((prev) => {
-        const next = [...prev, savedCurve];
-        const persistGraphId = String(urlParams.graph_id || companyGraphId || '').trim();
-        if (persistGraphId) {
-          const curvesForGraph = next.filter(
-            (curve) => (curve.graphId || getGraphIdForCurve(curve)) === persistGraphId
-          );
-          persistSavedCurves(persistGraphId, curvesForGraph, savedCurvesSource);
+        const canonicalGraphId = String(companyGraphId || urlParams.graph_id || '').trim();
+        const normalizedPrev = canonicalGraphId
+          ? prev.map((curve) => ({
+              ...curve,
+              graphId: canonicalGraphId,
+              identifier: companyIdentifier || curve.identifier || '',
+            }))
+          : prev;
+        const next = [...normalizedPrev, savedCurve];
+        if (canonicalGraphId) {
+          persistSavedCurves(canonicalGraphId, next, savedCurvesSource);
         }
         return next;
       });
 
-      const persistGraphId = String(urlParams.graph_id || companyGraphId || '').trim();
+      const persistGraphId = String(companyGraphId || urlParams.graph_id || '').trim();
       if (persistGraphId && graphArea.width > 0 && graphArea.height > 0) {
         persistGraphContext(persistGraphId, graphArea, graphConfig, {
           persistAxis: true,
@@ -7666,29 +7751,35 @@ const GraphCapture = () => {
         String(urlParams.graph_id || '').trim() ||
         getLastNonEmptyQueryValue(searchParams, 'return_graph_id') ||
         String(activeSessionGraphIdRef.current || '').trim() ||
-        String(savedCurves[0]?.graphId || '').trim() ||
         '';
-      // Prefer URL graph_id, then in-session refs, so multi-curve append still works after refresh.
-      const existingGraphId = incomingUrlGraphId;
+      const existingGraphId = resolveCanonicalSessionGraphId({
+        urlGraphId: incomingUrlGraphId,
+        sessionGraphId: activeSessionGraphIdRef.current,
+        savedCurves,
+      }) || incomingUrlGraphId;
+      const anchorCurve =
+        savedCurves.find(
+          (savedCurve) => String(savedCurve?.graphId || '').trim() === String(existingGraphId).trim()
+        ) || savedCurves[0] || null;
       const existingGraphIdentifier = normalizeSessionIdentifier(
         getLastNonEmptyQueryValue(searchParams, 'identifier') ||
         urlParams.identifier ||
-        (savedCurves[0]?.identifier ? String(savedCurves[0].identifier) : '')
+        anchorCurve?.identifier ||
+        getPersistedStableGraphIdentifier(existingGraphId)
       );
       const isAppendingToExistingGraph = Boolean(existingGraphId);
-      // Use the stored session identifier (from original create-new save) to avoid API creating a new graph.
-      // Falls back to URL identifier param, then to stored identifier from response.
-      // CRITICAL: Never use graph_id as identifier fallback - this causes Company API to create new graphs!
-      const appendIdentifier = resolveIdentifierForGraph({
-        graphId: existingGraphId,
-        curve: savedCurves.find(
-          (savedCurve) => String(savedCurve?.graphId || '').trim() === String(existingGraphId).trim()
-        ),
-        savedCurves,
-        urlParams,
-        sessionGraphId: activeSessionGraphIdRef.current,
-        sessionIdentifier: activeSessionIdentifierRef.current,
-      }) || existingGraphIdentifier;
+      const appendIdentifier =
+        resolveIdentifierForGraph({
+          graphId: existingGraphId,
+          curve: anchorCurve,
+          savedCurves,
+          urlParams,
+          sessionGraphId: activeSessionGraphIdRef.current,
+          sessionIdentifier: activeSessionIdentifierRef.current,
+        }) || existingGraphIdentifier;
+      const resolvedAppendIdentifier = isAppendingToExistingGraph
+        ? (appendIdentifier || ensureStableGraphIdentifier(existingGraphId))
+        : '';
 
       console.log('=== GRAPH SESSION STATE BEFORE SAVE ===', {
         sessionActive: hasActiveAppendSessionRef.current,
@@ -7699,13 +7790,24 @@ const GraphCapture = () => {
         currentUrlFull: window.location.href,
         allGraphIdParamsInUrl: searchParams.getAll('graph_id'),
         allIdentifierParamsInUrl: searchParams.getAll('identifier'),
-        effectiveIdentifierForAppend: appendIdentifier || '(none)',
+        effectiveIdentifierForAppend: resolvedAppendIdentifier || appendIdentifier || '(none)',
       });
 
       // Build the JSON payload for company's API
       const uniqueIdentifier = `usergraph_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
       // Keep append identifier stable. If identifier is invalid (e.g. "0"), leave it empty and rely on graph_id.
-      const resolvedOutgoingIdentifier = isAppendingToExistingGraph ? appendIdentifier : uniqueIdentifier;
+      const resolvedOutgoingIdentifier = isAppendingToExistingGraph
+        ? resolvedAppendIdentifier
+        : uniqueIdentifier;
+      const appendDiscovereeCatId = isAppendingToExistingGraph
+        ? String(
+            anchorCurve?.discoveree_cat_id ||
+            anchorCurve?.graphId ||
+            urlParams.discoveree_cat_id ||
+            existingGraphId ||
+            ''
+          )
+        : (urlParams.discoveree_cat_id ? String(urlParams.discoveree_cat_id) : '');
       const effectiveGraphImageUrl =
         normalizeImageCandidate(graphImageUrl) || resolveGraphImageForCompanyPayload();
       if (effectiveGraphImageUrl && !normalizeImageCandidate(graphImageUrl)) {
@@ -7722,7 +7824,7 @@ const GraphCapture = () => {
         graph: {
           // Include graph_id explicitly during append to reduce graph split risk.
           graph_id: isAppendingToExistingGraph ? String(existingGraphId) : '',
-          discoveree_cat_id: urlParams.discoveree_cat_id ? String(urlParams.discoveree_cat_id) : '',
+          discoveree_cat_id: appendDiscovereeCatId,
           identifier: resolvedOutgoingIdentifier,
           partno: urlParams.partno || '',
           manf: urlParams.manf || urlParams.manufacturer || graphConfig.manufacturer || '',
@@ -7820,9 +7922,12 @@ const GraphCapture = () => {
       const appendGraphMismatch = Boolean(
         isAppendingToExistingGraph && requestedGraphId && returnedGraphId && returnedGraphId !== requestedGraphId
       );
-      const effectiveGraphId =
-        appendGraphMismatch && returnedGraphId ? returnedGraphId : (returnedGraphId || requestedGraphId);
-      const companyGraphId = effectiveGraphId || null;
+      const sessionGraphId = isAppendingToExistingGraph
+        ? (requestedGraphId || returnedGraphId)
+        : (returnedGraphId || requestedGraphId);
+      const companyGraphId = sessionGraphId || null;
+      const detailRefetchGraphId =
+        appendGraphMismatch && returnedGraphId ? returnedGraphId : sessionGraphId;
 
       if (result?.status && result.status !== 'success') {
         throw new Error(result?.msg || 'Company API returned non-success status');
@@ -7858,10 +7963,11 @@ const GraphCapture = () => {
       });
 
       if (appendGraphMismatch) {
-        console.warn('Graph ID mismatch during append. Company API saved to a different graph_id; switching session to returned id.', {
+        console.warn('Graph ID mismatch during append. Keeping session on requested graph_id; re-fetching detail from returned id.', {
           requestedGraphId,
           returnedGraphId,
-          effectiveGraphId,
+          sessionGraphId,
+          detailRefetchGraphId,
         });
       }
 
@@ -7890,7 +7996,8 @@ const GraphCapture = () => {
         sentGraphId: String(companyApiPayload?.graph?.graph_id || ''),
         sentIdentifier: String(companyApiPayload?.graph?.identifier || ''),
         returnedGraphId,
-        effectiveGraphId,
+        sessionGraphId,
+        detailRefetchGraphId,
         returnedDetailId: companyDetailId,
         matchesRequested: !requestedGraphId || requestedGraphId === returnedGraphId,
         note: 'If matchesRequested is false during append-existing-graph, API is returning a different graph_id than requested.',
@@ -7986,6 +8093,7 @@ const GraphCapture = () => {
         graphId: companyGraphId, 
         detailId: companyDetailId ? String(companyDetailId) : '',
         identifier: resolvedOutgoingIdentifier,
+        detailRefetchGraphId: detailRefetchGraphId ? String(detailRefetchGraphId) : '',
       };
     } catch (error) {
       console.error('Full error object:', error);
