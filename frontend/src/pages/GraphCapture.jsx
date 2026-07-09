@@ -651,6 +651,55 @@ const resolveIdentifierForGraph = ({
   return ensureStableGraphIdentifier(targetGraphId);
 };
 
+/** Pick the detail_id for a newly saved curve without reusing an existing curve's id. */
+const resolveDetailIdFromRefetch = ({
+  refetchDetails = [],
+  savedPoints = [],
+  curveTitle = '',
+  usedDetailIds = [],
+  immediateDetailId = '',
+} = {}) => {
+  const used = usedDetailIds instanceof Set ? usedDetailIds : new Set(usedDetailIds || []);
+
+  if (immediateDetailId && !used.has(String(immediateDetailId))) {
+    return String(immediateDetailId);
+  }
+
+  const savedXyStr = (savedPoints || [])
+    .map((point) => `{x:${point.x_value ?? point.x},y:${point.y_value ?? point.y}}`)
+    .join(',');
+
+  if (savedXyStr) {
+    const xyMatch = refetchDetails.find((detail) => {
+      if (!detail?.xy || !detail?.id) return false;
+      const normalizedSavedXy = savedXyStr.replace(/\s/g, '').toLowerCase();
+      const normalizedApiXy = detail.xy.replace(/\s/g, '').toLowerCase();
+      return normalizedSavedXy === normalizedApiXy;
+    });
+    if (xyMatch?.id && !used.has(String(xyMatch.id))) {
+      return String(xyMatch.id);
+    }
+  }
+
+  const normalizedTitle = String(curveTitle || '').trim().toLowerCase();
+  if (normalizedTitle) {
+    const titleMatch = refetchDetails.find((detail) => {
+      if (!detail?.id || used.has(String(detail.id))) return false;
+      return String(detail.curve_title || '').trim().toLowerCase() === normalizedTitle;
+    });
+    if (titleMatch?.id) {
+      return String(titleMatch.id);
+    }
+  }
+
+  const unusedDetails = refetchDetails.filter((detail) => detail?.id && !used.has(String(detail.id)));
+  if (unusedDetails.length > 0) {
+    return String(unusedDetails[unusedDetails.length - 1].id);
+  }
+
+  return '';
+};
+
 const UNIT_PREFIX_SYMBOL_MAP = {
   '1e-12': 'p',
   '1e-9': 'n',
@@ -4376,6 +4425,9 @@ const GraphCapture = () => {
     if (persistedCurves?.curves?.length > 0) {
       setSavedCurves(persistedCurves.curves);
       setSavedCurvesSource(persistedCurves.source || 'company');
+      if (axisConfirmed) {
+        setShowCaptureAnotherGuidance(true);
+      }
     }
 
     if (cachedImage || persistedCurves?.curves?.length > 0) {
@@ -4387,6 +4439,18 @@ const GraphCapture = () => {
     if (!Array.isArray(savedCurves)) return [];
     return dedupeCurves(savedCurves);
   }, [savedCurves]);
+
+  const allowNextCurveNameEntry = useMemo(() => {
+    if (!isAxisMappingConfirmed || editingCurveId) return false;
+    if (showCaptureAnotherGuidance) return true;
+    return savedCurves.length > 0 && !String(graphConfig.curveName || '').trim();
+  }, [
+    isAxisMappingConfirmed,
+    editingCurveId,
+    showCaptureAnotherGuidance,
+    savedCurves.length,
+    graphConfig.curveName,
+  ]);
 
   const groupedCurves = useMemo(() => {
     const uniqueCurves = uniqueSavedCurves;
@@ -6936,6 +7000,7 @@ const GraphCapture = () => {
             ? graphAreaRef.current
             : null,
       });
+      setShowCaptureAnotherGuidance(true);
       setIsReadOnly(false);
 
       console.log('[DEBUG] Graph context restored after refresh (overlay points hidden until View/Edit).');
@@ -7299,45 +7364,27 @@ const GraphCapture = () => {
           } else {
             detailsVerifiedOnDiscoveree = true;
 
-              // Try to match by XY data first
-              const savedPoints = payload?.data_points || [];
-              const savedXyStr = savedPoints.map((p) => `{x:${p.x_value},y:${p.y_value}}`).join(',');
-              
-              console.log('[RE-FETCH] Attempting XY match with:', {
-                pointCount: savedPoints.length,
-                xyLength: savedXyStr.length,
+            const usedDetailIds = new Set(
+              savedCurves.map((curve) => String(curve.detailId || '')).filter(Boolean)
+            );
+            const savedPoints = payload?.data_points || [];
+
+            realDetailId = resolveDetailIdFromRefetch({
+              refetchDetails,
+              savedPoints,
+              curveTitle: payload.curve_name,
+              usedDetailIds,
+              immediateDetailId: companyDetailId,
+            });
+
+            if (realDetailId) {
+              console.log('[RE-FETCH] ✓ Resolved detail_id:', realDetailId);
+            } else {
+              console.warn('[RE-FETCH] Could not resolve a unique detail_id from company API', {
+                usedDetailIds: [...usedDetailIds],
+                totalDetails: refetchDetails.length,
               });
-              
-              let matchedDetail = refetchDetails.find((d) => {
-                if (!savedXyStr || !d?.xy) return false;
-                const normalizedSavedXy = savedXyStr.replace(/\s/g, '').toLowerCase();
-                const normalizedApiXy = d.xy.replace(/\s/g, '').toLowerCase();
-                const matches = normalizedSavedXy === normalizedApiXy;
-                if (matches) {
-                  console.log('[RE-FETCH] XY MATCH FOUND for detail:', d?.id);
-                }
-                return matches;
-              });
-              
-              // If no XY match, use the LAST detail (most recently added)
-              if (!matchedDetail && refetchDetails.length > 0) {
-                matchedDetail = refetchDetails[refetchDetails.length - 1];
-                console.log('[RE-FETCH] No XY match, using last (newest) detail:', {
-                  id: matchedDetail?.id,
-                  curve_title: matchedDetail?.curve_title,
-                });
-              }
-              
-              // Extract the detail_id
-              if (matchedDetail && matchedDetail.id) {
-                realDetailId = String(matchedDetail.id);
-                console.log('[RE-FETCH] ✓ Successfully extracted detail_id:', realDetailId);
-              } else {
-                console.warn('[RE-FETCH] Matched detail has no id field', {
-                  matchedDetail,
-                  keys: matchedDetail ? Object.keys(matchedDetail) : 'null',
-                });
-              }
+            }
           }
         } catch (refetchErr) {
           console.error('[RE-FETCH] Error fetching details:', refetchErr.message);
@@ -7381,6 +7428,8 @@ const GraphCapture = () => {
           existingCurveDetailIds: savedCurves.map(c => c.detailId),
           issue: 'Multiple curves have the same detail_id - Company API may have merged them',
         });
+        savedCurve.detailId = '';
+        savedCurve.id = result.id;
       }
       
       if (savedCurve.detailId) {
@@ -7616,9 +7665,10 @@ const GraphCapture = () => {
         getLastNonEmptyQueryValue(searchParams, 'graph_id') ||
         String(urlParams.graph_id || '').trim() ||
         getLastNonEmptyQueryValue(searchParams, 'return_graph_id') ||
+        String(activeSessionGraphIdRef.current || '').trim() ||
+        String(savedCurves[0]?.graphId || '').trim() ||
         '';
-      // Use URL graph_id as the single source of truth for append mode.
-      // clearGraphIdContext() always removes graph_id from the URL when starting fresh.
+      // Prefer URL graph_id, then in-session refs, so multi-curve append still works after refresh.
       const existingGraphId = incomingUrlGraphId;
       const existingGraphIdentifier = normalizeSessionIdentifier(
         getLastNonEmptyQueryValue(searchParams, 'identifier') ||
@@ -7770,9 +7820,8 @@ const GraphCapture = () => {
       const appendGraphMismatch = Boolean(
         isAppendingToExistingGraph && requestedGraphId && returnedGraphId && returnedGraphId !== requestedGraphId
       );
-      const effectiveGraphId = appendGraphMismatch
-        ? requestedGraphId
-        : (returnedGraphId || requestedGraphId);
+      const effectiveGraphId =
+        appendGraphMismatch && returnedGraphId ? returnedGraphId : (returnedGraphId || requestedGraphId);
       const companyGraphId = effectiveGraphId || null;
 
       if (result?.status && result.status !== 'success') {
@@ -7809,10 +7858,10 @@ const GraphCapture = () => {
       });
 
       if (appendGraphMismatch) {
-        console.error('Graph ID mismatch during append. Keeping current session pinned to requested graph_id.', {
+        console.warn('Graph ID mismatch during append. Company API saved to a different graph_id; switching session to returned id.', {
           requestedGraphId,
           returnedGraphId,
-          pinnedGraphId: requestedGraphId,
+          effectiveGraphId,
         });
       }
 
@@ -8209,7 +8258,7 @@ const GraphCapture = () => {
               <CapturedPointsList isReadOnly={isReadOnly} hasReturnUrl={!!urlParams.return_url} isEditingCurve={Boolean(editingCurveId)} isAxisMappingConfirmed={isAxisMappingConfirmed} />
             </div>
             <div className="w-full lg:w-3/5">
-              {showCaptureAnotherGuidance ? (
+              {allowNextCurveNameEntry ? (
                 <div className="mb-4 rounded border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                   {isAxisMappingConfirmed ? (
                     <>
@@ -8237,7 +8286,7 @@ const GraphCapture = () => {
                 ).trim()}
                 sessionSavedCurves={savedCurves}
                 isAxisMappingConfirmed={isAxisMappingConfirmed}
-                allowNextCurveNameEntry={showCaptureAnotherGuidance && isAxisMappingConfirmed}
+                allowNextCurveNameEntry={allowNextCurveNameEntry}
                 isEditingCurve={Boolean(editingCurveId)}
                 isPartNumberFromUrl={Boolean(urlParams.partno)}
                 isPartNumberLocked={partNumberLocked}
