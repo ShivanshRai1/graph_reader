@@ -1432,18 +1432,21 @@ const buildRestoredSavedCurves = ({
   localApiCurvesRaw = [],
   graphImageUrl = '',
 }) => {
-  const persistedCurves = collectRelatedPersistedCurves(graphId, companyCurves);
+  const persisted = getPersistedSavedCurves(graphId);
   const localApiCurves = localApiCurvesRaw.map((curve) =>
     mapLocalApiCurveToSavedCurve(curve, graphId, graphImageUrl)
   );
   const prunedPersisted = filterPersistedCurvesForCompanyApi(
     companyCurves,
-    persistedCurves
+    persisted?.curves || []
   );
-  if (persistedCurves.length > 0 && prunedPersisted.length !== persistedCurves.length) {
+  if (
+    Array.isArray(persisted?.curves) &&
+    prunedPersisted.length !== persisted.curves.length
+  ) {
     console.log('[GRAPH SESSION] Pruned stale browser-cache curves not on DiscoverEE:', {
       graphId,
-      before: persistedCurves.length,
+      before: persisted.curves.length,
       after: prunedPersisted.length,
     });
   }
@@ -1464,7 +1467,7 @@ const buildRestoredSavedCurves = ({
       graphId
     ),
     source:
-      getPersistedSavedCurves(graphId)?.source ||
+      persisted?.source ||
       (companyCurves.length > 0 ? 'company' : localApiCurves.length > 0 ? 'local' : 'company'),
   };
 };
