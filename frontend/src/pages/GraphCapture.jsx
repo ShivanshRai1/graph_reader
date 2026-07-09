@@ -679,6 +679,86 @@ const resolveCanonicalSessionGraphId = ({
   return dominantId || urlId || sessionId;
 };
 
+const normalizeCurvesToGraphId = (curves = [], graphId = '') => {
+  const canonicalId = String(graphId || '').trim();
+  if (!canonicalId) return Array.isArray(curves) ? curves : [];
+  return (Array.isArray(curves) ? curves : []).map((curve) => ({
+    ...curve,
+    graphId: canonicalId,
+  }));
+};
+
+const curveHasPersistableCaptureData = (curve) => {
+  const points = Array.isArray(curve?.points) ? curve.points : [];
+  const hasPoints = points.some((point) => {
+    const x = Number(point?.x_value ?? point?.x);
+    const y = Number(point?.y_value ?? point?.y);
+    return Number.isFinite(x) && Number.isFinite(y);
+  });
+  const name = String(curve?.name || curve?.config?.curveName || curve?.curve_name || '').trim();
+  return Boolean(curve?.locallyModified || (hasPoints && name));
+};
+
+const prepareCurvesForSessionPersistence = (curves = [], canonicalGraphId = '') => {
+  const graphId = String(canonicalGraphId || '').trim();
+  if (!graphId) return dedupeCurves(curves);
+  return normalizeCurvesToGraphId(dedupeCurves(curves), graphId);
+};
+
+/** Merge browser-cache curves saved under a sibling graph_id key for the same plot session. */
+const collectRelatedPersistedCurves = (canonicalGraphId, anchorCurves = []) => {
+  const graphId = String(canonicalGraphId || '').trim();
+  const primary = getPersistedSavedCurves(graphId)?.curves || [];
+  const anchors = [...primary, ...(Array.isArray(anchorCurves) ? anchorCurves : [])];
+  const anchorGroupIds = new Set(
+    anchors
+      .map((curve) => curve?.graphGroupId || buildGraphGroupId(curve?.graphImageUrl || curve?.graph_img || ''))
+      .filter(Boolean)
+  );
+  const anchorTitles = new Set(
+    anchors
+      .map((curve) => String(curve?.config?.graphTitle || curve?.graph_title || '').trim().toLowerCase())
+      .filter(Boolean)
+  );
+
+  const merged = [...primary];
+  const seenKeys = new Set(merged.map((curve) => buildCurveDedupKey(curve)));
+
+  try {
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const storageKey = localStorage.key(index);
+      if (!storageKey || !storageKey.startsWith('saved_curves_')) continue;
+
+      const siblingGraphId = storageKey.slice('saved_curves_'.length);
+      if (!siblingGraphId || siblingGraphId === graphId) continue;
+
+      const siblingBundle = getPersistedSavedCurves(siblingGraphId);
+      if (!siblingBundle?.curves?.length) continue;
+
+      siblingBundle.curves.forEach((curve) => {
+        const groupId = curve?.graphGroupId || buildGraphGroupId(curve?.graphImageUrl || curve?.graph_img || '');
+        const title = String(curve?.config?.graphTitle || curve?.graph_title || '').trim().toLowerCase();
+        const samePlot =
+          (groupId && anchorGroupIds.has(groupId)) ||
+          (title && anchorTitles.has(title)) ||
+          curveHasPersistableCaptureData(curve);
+
+        if (!samePlot) return;
+
+        const normalizedCurve = { ...curve, graphId: graphId || siblingGraphId };
+        const key = buildCurveDedupKey(normalizedCurve);
+        if (seenKeys.has(key)) return;
+        seenKeys.add(key);
+        merged.push(normalizedCurve);
+      });
+    }
+  } catch (error) {
+    console.warn('[GRAPH SESSION] Failed to scan related persisted curves:', error);
+  }
+
+  return merged;
+};
+
 /** Pick the detail_id for a newly saved curve without reusing an existing curve's id. */
 const resolveDetailIdFromRefetch = ({
   refetchDetails = [],
@@ -1065,11 +1145,15 @@ const collectCompanyDetailIds = (curves = []) => {
 /** Drop stale browser-cache curves whose detail_id no longer exists on DiscoverEE. */
 const filterPersistedCurvesForCompanyApi = (companyCurves = [], persistedCurves = []) => {
   const apiDetailIds = collectCompanyDetailIds(companyCurves);
+  const list = Array.isArray(persistedCurves) ? persistedCurves : [];
   if (apiDetailIds.size === 0) {
-    return Array.isArray(persistedCurves) ? persistedCurves : [];
+    return list;
   }
 
-  return (Array.isArray(persistedCurves) ? persistedCurves : []).filter((curve) => {
+  return list.filter((curve) => {
+    if (curve?.locallyModified || curveHasPersistableCaptureData(curve)) {
+      return true;
+    }
     const detailId = String(curve?.detailId || curve?.detail_id || '').trim();
     if (!detailId) return false;
     return apiDetailIds.has(detailId);
@@ -1348,21 +1432,18 @@ const buildRestoredSavedCurves = ({
   localApiCurvesRaw = [],
   graphImageUrl = '',
 }) => {
-  const persisted = getPersistedSavedCurves(graphId);
+  const persistedCurves = collectRelatedPersistedCurves(graphId, companyCurves);
   const localApiCurves = localApiCurvesRaw.map((curve) =>
     mapLocalApiCurveToSavedCurve(curve, graphId, graphImageUrl)
   );
   const prunedPersisted = filterPersistedCurvesForCompanyApi(
     companyCurves,
-    persisted?.curves || []
+    persistedCurves
   );
-  if (
-    Array.isArray(persisted?.curves) &&
-    prunedPersisted.length !== persisted.curves.length
-  ) {
+  if (persistedCurves.length > 0 && prunedPersisted.length !== persistedCurves.length) {
     console.log('[GRAPH SESSION] Pruned stale browser-cache curves not on DiscoverEE:', {
       graphId,
-      before: persisted.curves.length,
+      before: persistedCurves.length,
       after: prunedPersisted.length,
     });
   }
@@ -1378,9 +1459,12 @@ const buildRestoredSavedCurves = ({
   }));
 
   return {
-    curves: dedupeCurves(hydrated.map((curve) => applyAiPointLimitToCurve(curve))),
+    curves: prepareCurvesForSessionPersistence(
+      hydrated.map((curve) => applyAiPointLimitToCurve(curve)),
+      graphId
+    ),
     source:
-      persisted?.source ||
+      getPersistedSavedCurves(graphId)?.source ||
       (companyCurves.length > 0 ? 'company' : localApiCurves.length > 0 ? 'local' : 'company'),
   };
 };
@@ -4403,6 +4487,7 @@ const GraphCapture = () => {
   const singleDragRef = useRef({ wasDragged: false, wasResized: false });
   const combinedDragRef = useRef({ wasDragged: false, wasResized: false });
   const allCombinedDragRef = useRef({ wasDragged: false, wasResized: false });
+  const repairedSessionGraphIdsRef = useRef('');
 
   const selectedCurve = savedCurves.find((curve) => curve.id === selectedCurveId);
 
@@ -4451,8 +4536,10 @@ const GraphCapture = () => {
 
     const persistedCurves = getPersistedSavedCurves(graphId);
     if (persistedCurves?.curves?.length > 0) {
-      setSavedCurves(persistedCurves.curves);
+      const normalizedCurves = prepareCurvesForSessionPersistence(persistedCurves.curves, graphId);
+      setSavedCurves(normalizedCurves);
       setSavedCurvesSource(persistedCurves.source || 'company');
+      persistSavedCurves(graphId, normalizedCurves, persistedCurves.source || 'company');
       if (axisConfirmed) {
         setShowCaptureAnotherGuidance(true);
       }
@@ -7003,15 +7090,54 @@ const GraphCapture = () => {
   useEffect(() => {
     if (isInitialGraphFetchPending) return;
 
-    const graphId = String(urlParams.graph_id || activeSessionGraphIdRef.current || '').trim();
-    if (!graphId || savedCurves.length === 0) return;
+    const canonicalGraphId = resolveCanonicalSessionGraphId({
+      urlGraphId: urlParams.graph_id,
+      sessionGraphId: activeSessionGraphIdRef.current,
+      savedCurves,
+    });
+    if (!canonicalGraphId || savedCurves.length === 0) return;
 
-    const curvesForGraph = savedCurves.filter(
-      (curve) => (curve.graphId || getGraphIdForCurve(curve)) === graphId
+    const curvesToPersist = prepareCurvesForSessionPersistence(savedCurves, canonicalGraphId);
+    if (curvesToPersist.length === 0) return;
+
+    persistSavedCurves(canonicalGraphId, curvesToPersist, savedCurvesSource);
+  }, [savedCurves, urlParams.graph_id, savedCurvesSource, isInitialGraphFetchPending]);
+
+  // Repair split graph_id values in the live session so refresh keeps every curve together.
+  useEffect(() => {
+    if (isInitialGraphFetchPending || savedCurves.length === 0) return;
+
+    const graphIds = [
+      ...new Set(
+        savedCurves.map((curve) => String(curve?.graphId || '').trim()).filter(Boolean)
+      ),
+    ];
+    if (graphIds.length <= 1) return;
+
+    const canonicalGraphId = resolveCanonicalSessionGraphId({
+      urlGraphId: urlParams.graph_id,
+      sessionGraphId: activeSessionGraphIdRef.current,
+      savedCurves,
+    });
+    if (!canonicalGraphId) return;
+
+    const repairKey = `${canonicalGraphId}:${savedCurves.map((curve) => curve.id).join('|')}`;
+    if (repairedSessionGraphIdsRef.current === repairKey) return;
+
+    const normalized = prepareCurvesForSessionPersistence(savedCurves, canonicalGraphId);
+    const changed = normalized.some(
+      (curve, index) => String(curve.graphId || '') !== String(savedCurves[index]?.graphId || '')
     );
-    if (curvesForGraph.length === 0) return;
+    if (!changed) return;
 
-    persistSavedCurves(graphId, curvesForGraph, savedCurvesSource);
+    repairedSessionGraphIdsRef.current = repairKey;
+    setSavedCurves(normalized);
+    persistSavedCurves(canonicalGraphId, normalized, savedCurvesSource);
+    console.log('[GRAPH SESSION] Repaired split graph_id values for multi-curve session:', {
+      canonicalGraphId,
+      previousGraphIds: graphIds,
+      curveCount: normalized.length,
+    });
   }, [savedCurves, urlParams.graph_id, savedCurvesSource, isInitialGraphFetchPending]);
 
   // Auto-load graph context (image + axis settings) and restore saved curve points after refresh.
@@ -7524,14 +7650,7 @@ const GraphCapture = () => {
       
       setSavedCurves((prev) => {
         const canonicalGraphId = String(companyGraphId || urlParams.graph_id || '').trim();
-        const normalizedPrev = canonicalGraphId
-          ? prev.map((curve) => ({
-              ...curve,
-              graphId: canonicalGraphId,
-              identifier: companyIdentifier || curve.identifier || '',
-            }))
-          : prev;
-        const next = [...normalizedPrev, savedCurve];
+        const next = prepareCurvesForSessionPersistence([...prev, savedCurve], canonicalGraphId);
         if (canonicalGraphId) {
           persistSavedCurves(canonicalGraphId, next, savedCurvesSource);
         }
@@ -8017,13 +8136,12 @@ const GraphCapture = () => {
       const otherGraphIds = savedCurves.map(curve => curve.graphId || getGraphIdForCurve(curve)).filter(id => id !== String(companyGraphId));
       
       if (otherGraphIds.length > 0) {
-        console.warn('[GRAPH_ID_WARNING] Multiple graph_ids found in local savedCurves state.', {
+        console.warn('[GRAPH_ID_WARNING] Multiple graph_ids found in local savedCurves state. Session will be repaired on next state sync.', {
           currentCurveGraphId: String(companyGraphId),
           otherGraphIdsInSavedCurves: [...new Set(otherGraphIds)],
-          issue: 'Multiple different graph_ids in same session - curves may have been split across graphs',
-          affectedCurves: savedCurves.map((c, idx) => ({ 
-            index: idx, 
-            graphId: c.graphId || getGraphIdForCurve(c), 
+          affectedCurves: savedCurves.map((c, idx) => ({
+            index: idx,
+            graphId: c.graphId || getGraphIdForCurve(c),
             identifier: c.identifier,
             detailId: c.detailId,
           })),
