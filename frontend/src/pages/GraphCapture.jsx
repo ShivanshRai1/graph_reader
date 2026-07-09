@@ -4498,6 +4498,11 @@ const GraphCapture = () => {
   const combinedDragRef = useRef({ wasDragged: false, wasResized: false });
   const allCombinedDragRef = useRef({ wasDragged: false, wasResized: false });
   const repairedSessionGraphIdsRef = useRef('');
+  // graph_id of a graph we created fresh in THIS browser session (create-new save).
+  // For such graphs the session identifier is trustworthy for append. For reopened graphs
+  // (loaded via URL graph_id) the identifier may route to a duplicate graph on the server,
+  // so we append by graph_id only.
+  const sessionCreatedNewGraphIdRef = useRef('');
 
   const selectedCurve = savedCurves.find((curve) => curve.id === selectedCurveId);
 
@@ -7931,6 +7936,12 @@ const GraphCapture = () => {
       const resolvedAppendIdentifier = isAppendingToExistingGraph
         ? (appendIdentifier || ensureStableGraphIdentifier(existingGraphId))
         : '';
+      // Only trust the identifier when appending to a graph we created THIS session.
+      // For reopened graphs, the identifier can point to a duplicate/older graph on the
+      // server (observed: append to 17646 routed to 17641), so append by graph_id alone.
+      const createdThisSession =
+        isAppendingToExistingGraph &&
+        String(sessionCreatedNewGraphIdRef.current || '').trim() === String(existingGraphId).trim();
 
       console.log('=== GRAPH SESSION STATE BEFORE SAVE ===', {
         sessionActive: hasActiveAppendSessionRef.current,
@@ -7952,9 +7963,11 @@ const GraphCapture = () => {
       // When appending, if we only have a synthetic identifier, send EMPTY and rely on graph_id.
       const isSyntheticIdentifier = (value) =>
         String(value || '').startsWith(GRAPH_STABLE_IDENTIFIER_PREFIX);
-      const resolvedOutgoingIdentifier = isAppendingToExistingGraph
-        ? (isSyntheticIdentifier(resolvedAppendIdentifier) ? '' : resolvedAppendIdentifier)
-        : uniqueIdentifier;
+      const resolvedOutgoingIdentifier = !isAppendingToExistingGraph
+        ? uniqueIdentifier
+        : createdThisSession && !isSyntheticIdentifier(resolvedAppendIdentifier)
+          ? resolvedAppendIdentifier
+          : '';
       const appendDiscovereeCatId = isAppendingToExistingGraph
         ? String(
             anchorCurve?.discoveree_cat_id ||
@@ -8091,6 +8104,11 @@ const GraphCapture = () => {
 
       if (!companyGraphId || String(companyGraphId).trim() === '' || String(companyGraphId) === '0') {
         throw new Error('Company API did not return a valid graph_id');
+      }
+
+      // Remember graphs we created fresh this session so future appends can trust the identifier.
+      if (!isAppendingToExistingGraph && companyGraphId) {
+        sessionCreatedNewGraphIdRef.current = String(companyGraphId);
       }
       
       // Extract detail_id from multiple possible locations in API response
