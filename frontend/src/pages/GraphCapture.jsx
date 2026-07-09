@@ -6816,6 +6816,16 @@ const GraphCapture = () => {
     const searchParams = new URLSearchParams(window.location.search);
     const graphId = searchParams.get('graph_id');
     const discovereeCatIdFromUrl = searchParams.get('discoveree_cat_id') || '';
+    // The URL carries the ORIGINAL identifier used when the graph was first created.
+    // DiscoverEE returns identifier "0" on read, so this URL value is the only way to
+    // recover the real identifier (works in any browser). Ignore locally-generated
+    // synthetic identifiers (usergraph_gid_*) that a previous buggy save may have written.
+    const rawUrlIdentifier = normalizeSessionIdentifier(
+      getLastNonEmptyQueryValue(searchParams, 'identifier')
+    );
+    const urlIdentifierFromLoad = String(rawUrlIdentifier).startsWith(GRAPH_STABLE_IDENTIFIER_PREFIX)
+      ? ''
+      : rawUrlIdentifier;
     const hydratedSymbolNames =
       Array.isArray(symbolNames) && symbolNames.length > 0
         ? symbolNames
@@ -7021,7 +7031,10 @@ const GraphCapture = () => {
                 resolvedGraphIdForCurves,
                 ensureStableGraphIdentifier(
                   resolvedGraphIdForCurves,
-                  discovereeGraph.identifier || curvesToUse[0]?.identifier || ''
+                  discovereeGraph.identifier ||
+                    urlIdentifierFromLoad ||
+                    curvesToUse[0]?.identifier ||
+                    ''
                 )
               );
 
