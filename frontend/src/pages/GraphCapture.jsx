@@ -6711,12 +6711,15 @@ const GraphCapture = () => {
     setSymbolValues(initialSymbolValues);
     setSymbolLabels(labelMap);
 
-    // Extract return parameters (format: return_paramName=value, excluding return_url)
+    // Extract return parameters (format: return_paramName=value, excluding return_url).
+    // Never treat return_graph_id as a sticky return param — it must be set fresh from the
+    // graph just saved, otherwise RC Ladder keeps receiving a stale ID (e.g. 16933).
     const returnParamsObj = {};
     const keys = Array.from(searchParams.keys());
     keys.forEach((key) => {
-      if (key.startsWith('return_') && key !== 'return_url') {
+      if (key.startsWith('return_') && key !== 'return_url' && key !== 'return_graph_id') {
         const paramName = key.substring(7); // Remove 'return_' prefix
+        if (paramName === 'graph_id') return;
         const paramValue = searchParams.get(key);
         returnParamsObj[paramName] = paramValue;
       }
@@ -6729,10 +6732,9 @@ const GraphCapture = () => {
     const curveTitle = searchParams.get('curve_title') || '';
     const graphTitle = searchParams.get('graph_title') || '';
     const tctjValue = detectedTemperatureValue;
-    const graphIdFromUrl =
-      getLastNonEmptyQueryValue(searchParams, 'graph_id') ||
-      getLastNonEmptyQueryValue(searchParams, 'return_graph_id') ||
-      '';
+    // Only pin the capture session to an explicit graph_id. return_graph_id is an OUTPUT
+    // for the RC Ladder return URL — using it here causes new captures to append to an old graph.
+    const graphIdFromUrl = getLastNonEmptyQueryValue(searchParams, 'graph_id') || '';
     const restoredPending = consumeAiPendingCapture(graphIdFromUrl);
 
     const xTitleFromUrl = (searchParams.get('x_label') || searchParams.get('x_title') || searchParams.get('xlabel') || '').trim();
@@ -7789,6 +7791,8 @@ const GraphCapture = () => {
     if (urlParams.return_url) {
       const searchParams = new URLSearchParams(window.location.search);
       const graphIdForReturn =
+        activeSessionGraphIdRef.current ||
+        savedCurves[0]?.graphId ||
         searchParams.get('graph_id') ||
         urlParams.graph_id ||
         selectedCurve?.discoveree_cat_id ||
@@ -7806,6 +7810,8 @@ const GraphCapture = () => {
     if (urlParams.return_url) {
       const searchParams = new URLSearchParams(window.location.search);
       const graphIdForReturn =
+        activeSessionGraphIdRef.current ||
+        savedCurves[0]?.graphId ||
         searchParams.get('graph_id') ||
         urlParams.graph_id ||
         selectedCurve?.discoveree_cat_id ||
@@ -7902,10 +7908,10 @@ const GraphCapture = () => {
       };
 
       const searchParams = new URLSearchParams(window.location.search);
+      // Do not use return_graph_id here — that is an outbound RC Ladder param and is often stale.
       const incomingUrlGraphId =
         getLastNonEmptyQueryValue(searchParams, 'graph_id') ||
         String(urlParams.graph_id || '').trim() ||
-        getLastNonEmptyQueryValue(searchParams, 'return_graph_id') ||
         String(activeSessionGraphIdRef.current || '').trim() ||
         '';
       const existingGraphId = resolveCanonicalSessionGraphId({
@@ -8296,8 +8302,17 @@ const GraphCapture = () => {
 
     const url = new URL(baseUrl);
 
+    // Drop any stale graph ids already embedded in return_url (common when RC Ladder
+    // reuses a previous return link). Otherwise the page may read the OLD return_graph_id first.
+    url.searchParams.delete('return_graph_id');
+    url.searchParams.delete('graph_id');
+    while (url.searchParams.has('return_graph_id')) {
+      url.searchParams.delete('return_graph_id');
+    }
+
     // Add return parameters
     Object.entries(returnParams).forEach(([key, value]) => {
+      if (key === 'graph_id' || key === 'return_graph_id') return;
       console.log(`Adding param: ${key} = ${value}`);
       url.searchParams.append(key, value);
     });
@@ -8318,10 +8333,10 @@ const GraphCapture = () => {
       }
     });
 
-    // Add return_graph_id
+    // Add return_graph_id from the graph just saved (never a stale URL value)
     if (graphId) {
       console.log(`Adding return_graph_id = ${graphId}`);
-      url.searchParams.append('return_graph_id', graphId);
+      url.searchParams.set('return_graph_id', String(graphId));
     }
 
     return url.toString();
