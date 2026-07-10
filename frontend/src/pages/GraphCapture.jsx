@@ -8132,8 +8132,8 @@ const GraphCapture = () => {
         : 'https://www.discoveree.io/graph_capture_api.php';
 
       console.log('Company save mode:', isAppendingToExistingGraph ? 'append-existing-graph' : 'create-new-graph', {
-        existingGraphId,
-        existingGraphIdentifier: appendIdentifier,
+        existingGraphId: existingGraphId || '(create-new)',
+        existingGraphIdentifier: resolvedAppendIdentifier || resolvedOutgoingIdentifier || '(none)',
         sentGraphId: companyApiPayload?.graph?.graph_id || '',
         sentIdentifier: companyApiPayload?.graph?.identifier || '(none)',
       });
