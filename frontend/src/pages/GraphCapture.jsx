@@ -6732,13 +6732,34 @@ const GraphCapture = () => {
     const curveTitle = searchParams.get('curve_title') || '';
     const graphTitle = searchParams.get('graph_title') || '';
     const tctjValue = detectedTemperatureValue;
+    const isRcLadderFitFlow = String(graphTitle).trim().toLowerCase() === 'rth_cth';
     // Only pin the capture session to an explicit graph_id. return_graph_id is an OUTPUT
     // for the RC Ladder return URL — using it here causes new captures to append to an old graph.
-    const graphIdFromUrl = getLastNonEmptyQueryValue(searchParams, 'graph_id') || '';
+    // RC Ladder "Click here" links often still carry a stale graph_id / return_graph_id (e.g. 16933).
+    // For that flow, always start a fresh graph so Fit/export returns a new ID.
+    let graphIdFromUrl = getLastNonEmptyQueryValue(searchParams, 'graph_id') || '';
+    if (isRcLadderFitFlow) {
+      graphIdFromUrl = '';
+    }
     const restoredPending = consumeAiPendingCapture(graphIdFromUrl);
 
     const xTitleFromUrl = (searchParams.get('x_label') || searchParams.get('x_title') || searchParams.get('xlabel') || '').trim();
     const yTitleFromUrl = (searchParams.get('y_label') || searchParams.get('y_title') || searchParams.get('ylabel') || '').trim();
+
+    let sanitizedReturnUrl = searchParams.get('return_url') || '';
+    if (sanitizedReturnUrl) {
+      try {
+        const returnUrlObj = new URL(sanitizedReturnUrl);
+        returnUrlObj.searchParams.delete('return_graph_id');
+        returnUrlObj.searchParams.delete('graph_id');
+        while (returnUrlObj.searchParams.has('return_graph_id')) {
+          returnUrlObj.searchParams.delete('return_graph_id');
+        }
+        sanitizedReturnUrl = returnUrlObj.toString();
+      } catch {
+        // keep original if return_url is not a valid absolute URL
+      }
+    }
 
     setUrlParams({
       partno,
@@ -6755,9 +6776,23 @@ const GraphCapture = () => {
       ),
       testuser_id: searchParams.get('testuser_id') || '',
       tctj: tctjValue,
-      return_url: searchParams.get('return_url') || '',
+      return_url: sanitizedReturnUrl,
       graph_id: graphIdFromUrl,
     });
+
+    if (isRcLadderFitFlow) {
+      // Drop stale graph_id from the address bar so save cannot append to an old RC Ladder graph.
+      const cleanUrl = new URL(window.location.href);
+      if (cleanUrl.searchParams.has('graph_id') || cleanUrl.searchParams.has('return_graph_id')) {
+        cleanUrl.searchParams.delete('graph_id');
+        cleanUrl.searchParams.delete('return_graph_id');
+        window.history.replaceState({}, '', cleanUrl.toString());
+      }
+      sessionCreatedNewGraphIdRef.current = '';
+      hasActiveAppendSessionRef.current = false;
+      activeSessionGraphIdRef.current = '';
+      activeSessionIdentifierRef.current = '';
+    }
     setShouldSkipCaptureChoiceAfterAi(false);
     setRestoredPendingCapture(restoredPending);
     restoredPendingImageRef.current = String(restoredPending?.imageBase64 || '');
@@ -6823,6 +6858,8 @@ const GraphCapture = () => {
     const searchParams = new URLSearchParams(window.location.search);
     const graphId = searchParams.get('graph_id');
     const discovereeCatIdFromUrl = searchParams.get('discoveree_cat_id') || '';
+    const isRcLadderFitFlow =
+      String(searchParams.get('graph_title') || '').trim().toLowerCase() === 'rth_cth';
     // The URL carries the ORIGINAL identifier used when the graph was first created.
     // DiscoverEE returns identifier "0" on read, so this URL value is the only way to
     // recover the real identifier (works in any browser). Ignore locally-generated
@@ -6848,8 +6885,12 @@ const GraphCapture = () => {
             });
           })();
     
-    if (!graphId) {
-      console.log('[DEBUG] No graph_id in URL params, skipping fetch');
+    if (!graphId || isRcLadderFitFlow) {
+      if (isRcLadderFitFlow) {
+        console.log('[DEBUG] RC Ladder fit flow — skipping auto-fetch of stale graph_id:', graphId || '(none)');
+      } else {
+        console.log('[DEBUG] No graph_id in URL params, skipping fetch');
+      }
       setIsInitialGraphFetchPending(false);
       return;
     }
@@ -7908,16 +7949,35 @@ const GraphCapture = () => {
       };
 
       const searchParams = new URLSearchParams(window.location.search);
+      const isRcLadderFitFlow = String(urlParams.graph_title || searchParams.get('graph_title') || '')
+        .trim()
+        .toLowerCase() === 'rth_cth';
       // Do not use return_graph_id here — that is an outbound RC Ladder param and is often stale.
-      const incomingUrlGraphId =
+      let incomingUrlGraphId =
         getLastNonEmptyQueryValue(searchParams, 'graph_id') ||
         String(urlParams.graph_id || '').trim() ||
         String(activeSessionGraphIdRef.current || '').trim() ||
         '';
+      // RC Ladder fit flow: only append to a graph created in THIS browser session.
+      // Otherwise every "Click here" revisit reuses a stale id (observed: 16933 forever).
+      if (isRcLadderFitFlow) {
+        const createdThisSessionId = String(sessionCreatedNewGraphIdRef.current || '').trim();
+        if (!createdThisSessionId || incomingUrlGraphId !== createdThisSessionId) {
+          incomingUrlGraphId = createdThisSessionId;
+        }
+      }
       const existingGraphId = resolveCanonicalSessionGraphId({
         urlGraphId: incomingUrlGraphId,
-        sessionGraphId: activeSessionGraphIdRef.current,
-        savedCurves,
+        sessionGraphId: isRcLadderFitFlow
+          ? String(sessionCreatedNewGraphIdRef.current || activeSessionGraphIdRef.current || '')
+          : activeSessionGraphIdRef.current,
+        savedCurves: isRcLadderFitFlow
+          ? savedCurves.filter(
+              (curve) =>
+                String(curve?.graphId || '').trim() ===
+                String(sessionCreatedNewGraphIdRef.current || '').trim()
+            )
+          : savedCurves,
       }) || incomingUrlGraphId;
       const anchorCurve =
         savedCurves.find(
