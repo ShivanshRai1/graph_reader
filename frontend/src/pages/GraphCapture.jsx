@@ -7952,88 +7952,100 @@ const GraphCapture = () => {
       const isRcLadderFitFlow = String(urlParams.graph_title || searchParams.get('graph_title') || '')
         .trim()
         .toLowerCase() === 'rth_cth';
-      // Do not use return_graph_id here — that is an outbound RC Ladder param and is often stale.
-      let incomingUrlGraphId =
-        getLastNonEmptyQueryValue(searchParams, 'graph_id') ||
-        String(urlParams.graph_id || '').trim() ||
-        String(activeSessionGraphIdRef.current || '').trim() ||
-        '';
-      // RC Ladder fit flow: only append to a graph created in THIS browser session.
-      // Otherwise every "Click here" revisit reuses a stale id (observed: 16933 forever).
+
+      let existingGraphId = '';
+      let isAppendingToExistingGraph = false;
+      let anchorCurve = null;
+      let resolvedAppendIdentifier = '';
+      let resolvedOutgoingIdentifier = '';
+
       if (isRcLadderFitFlow) {
+        // RC Ladder only: never reuse URL / session / localStorage leftovers (that is how 16933 stuck).
+        // Append only if THIS tab already created a graph on a prior Fit/export in the same session.
         const createdThisSessionId = String(sessionCreatedNewGraphIdRef.current || '').trim();
-        if (!createdThisSessionId || incomingUrlGraphId !== createdThisSessionId) {
-          incomingUrlGraphId = createdThisSessionId;
+        existingGraphId = createdThisSessionId;
+        isAppendingToExistingGraph = Boolean(createdThisSessionId);
+        anchorCurve = createdThisSessionId
+          ? savedCurves.find(
+              (savedCurve) => String(savedCurve?.graphId || '').trim() === createdThisSessionId
+            ) || null
+          : null;
+        const uniqueIdentifier = `usergraph_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+        resolvedOutgoingIdentifier = isAppendingToExistingGraph
+          ? (normalizeSessionIdentifier(activeSessionIdentifierRef.current) ||
+              normalizeSessionIdentifier(anchorCurve?.identifier) ||
+              uniqueIdentifier)
+          : uniqueIdentifier;
+        if (isAppendingToExistingGraph) {
+          resolvedAppendIdentifier = resolvedOutgoingIdentifier;
         }
-      }
-      const existingGraphId = resolveCanonicalSessionGraphId({
-        urlGraphId: incomingUrlGraphId,
-        sessionGraphId: isRcLadderFitFlow
-          ? String(sessionCreatedNewGraphIdRef.current || activeSessionGraphIdRef.current || '')
-          : activeSessionGraphIdRef.current,
-        savedCurves: isRcLadderFitFlow
-          ? savedCurves.filter(
-              (curve) =>
-                String(curve?.graphId || '').trim() ===
-                String(sessionCreatedNewGraphIdRef.current || '').trim()
-            )
-          : savedCurves,
-      }) || incomingUrlGraphId;
-      const anchorCurve =
-        savedCurves.find(
-          (savedCurve) => String(savedCurve?.graphId || '').trim() === String(existingGraphId).trim()
-        ) || savedCurves[0] || null;
-      const existingGraphIdentifier = normalizeSessionIdentifier(
-        getLastNonEmptyQueryValue(searchParams, 'identifier') ||
-        urlParams.identifier ||
-        anchorCurve?.identifier ||
-        getPersistedStableGraphIdentifier(existingGraphId)
-      );
-      const isAppendingToExistingGraph = Boolean(existingGraphId);
-      const appendIdentifier =
-        resolveIdentifierForGraph({
-          graphId: existingGraphId,
-          curve: anchorCurve,
-          savedCurves,
-          urlParams,
+        console.log('=== RC LADDER SAVE MODE ===', {
+          createdThisSessionId: createdThisSessionId || '(none — will create NEW graph)',
+          isAppendingToExistingGraph,
+          outgoingIdentifier: resolvedOutgoingIdentifier,
+        });
+      } else {
+        // Normal capture flow (unchanged)
+        const incomingUrlGraphId =
+          getLastNonEmptyQueryValue(searchParams, 'graph_id') ||
+          String(urlParams.graph_id || '').trim() ||
+          String(activeSessionGraphIdRef.current || '').trim() ||
+          '';
+        existingGraphId = resolveCanonicalSessionGraphId({
+          urlGraphId: incomingUrlGraphId,
           sessionGraphId: activeSessionGraphIdRef.current,
-          sessionIdentifier: activeSessionIdentifierRef.current,
-        }) || existingGraphIdentifier;
-      const resolvedAppendIdentifier = isAppendingToExistingGraph
-        ? (appendIdentifier || ensureStableGraphIdentifier(existingGraphId))
-        : '';
-      // Only trust the identifier when appending to a graph we created THIS session.
-      // For reopened graphs, the identifier can point to a duplicate/older graph on the
-      // server (observed: append to 17646 routed to 17641), so append by graph_id alone.
-      const createdThisSession =
-        isAppendingToExistingGraph &&
-        String(sessionCreatedNewGraphIdRef.current || '').trim() === String(existingGraphId).trim();
+          savedCurves,
+        }) || incomingUrlGraphId;
+        anchorCurve =
+          savedCurves.find(
+            (savedCurve) => String(savedCurve?.graphId || '').trim() === String(existingGraphId).trim()
+          ) || savedCurves[0] || null;
+        const existingGraphIdentifier = normalizeSessionIdentifier(
+          getLastNonEmptyQueryValue(searchParams, 'identifier') ||
+          urlParams.identifier ||
+          anchorCurve?.identifier ||
+          getPersistedStableGraphIdentifier(existingGraphId)
+        );
+        isAppendingToExistingGraph = Boolean(existingGraphId);
+        const appendIdentifier =
+          resolveIdentifierForGraph({
+            graphId: existingGraphId,
+            curve: anchorCurve,
+            savedCurves,
+            urlParams,
+            sessionGraphId: activeSessionGraphIdRef.current,
+            sessionIdentifier: activeSessionIdentifierRef.current,
+          }) || existingGraphIdentifier;
+        resolvedAppendIdentifier = isAppendingToExistingGraph
+          ? (appendIdentifier || ensureStableGraphIdentifier(existingGraphId))
+          : '';
+        const uniqueIdentifier = `usergraph_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+        const createdThisSession =
+          isAppendingToExistingGraph &&
+          String(sessionCreatedNewGraphIdRef.current || '').trim() === String(existingGraphId).trim();
+        const isSyntheticIdentifier = (value) =>
+          String(value || '').startsWith(GRAPH_STABLE_IDENTIFIER_PREFIX);
+        resolvedOutgoingIdentifier = !isAppendingToExistingGraph
+          ? uniqueIdentifier
+          : createdThisSession && !isSyntheticIdentifier(resolvedAppendIdentifier)
+            ? resolvedAppendIdentifier
+            : '';
+      }
 
       console.log('=== GRAPH SESSION STATE BEFORE SAVE ===', {
         sessionActive: hasActiveAppendSessionRef.current,
         sessionGraphId: activeSessionGraphIdRef.current || '',
-        incomingUrlGraphId,
+        isRcLadderFitFlow,
+        existingGraphId: existingGraphId || '(create-new)',
         storedIdentifier: activeSessionIdentifierRef.current || '(none)',
         isAppendingToExistingGraph,
         currentUrlFull: window.location.href,
         allGraphIdParamsInUrl: searchParams.getAll('graph_id'),
         allIdentifierParamsInUrl: searchParams.getAll('identifier'),
-        effectiveIdentifierForAppend: resolvedAppendIdentifier || appendIdentifier || '(none)',
+        effectiveIdentifierForAppend: resolvedOutgoingIdentifier || '(none)',
       });
 
       // Build the JSON payload for company's API
-      const uniqueIdentifier = `usergraph_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
-      // Synthetic identifiers (usergraph_gid_<id>) are generated locally when the real one is lost
-      // (e.g. DiscoverEE returns identifier "0" after refresh). Sending a synthetic identifier that
-      // does NOT match the graph's real identifier makes the server create a NEW graph (split).
-      // When appending, if we only have a synthetic identifier, send EMPTY and rely on graph_id.
-      const isSyntheticIdentifier = (value) =>
-        String(value || '').startsWith(GRAPH_STABLE_IDENTIFIER_PREFIX);
-      const resolvedOutgoingIdentifier = !isAppendingToExistingGraph
-        ? uniqueIdentifier
-        : createdThisSession && !isSyntheticIdentifier(resolvedAppendIdentifier)
-          ? resolvedAppendIdentifier
-          : '';
       const appendDiscovereeCatId = isAppendingToExistingGraph
         ? String(
             anchorCurve?.discoveree_cat_id ||
