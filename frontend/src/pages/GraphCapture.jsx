@@ -35,6 +35,11 @@ import {
 import { useGraph, graphToCanvasWithBounds, getManualCapturePoints, MANUAL_CAPTURE_OVERLAY_ID } from '../context/GraphContext';
 import { clearAnnotationsForCurve } from '../utils/annotationStorage';
 import { getPreferredApiUrlSync, resolveApiUrl } from '../utils/apiBase';
+import {
+  getPreferredRcLadderUrlSync,
+  resolveRcLadderUrl,
+  rewriteRcLadderUrl,
+} from '../utils/rcLadderBase';
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 
 const MiniGraphCanvas = ({ points }) => {
@@ -4208,10 +4213,14 @@ const GraphCapture = () => {
   const [isRemovingCurveId, setIsRemovingCurveId] = useState('');
   const [isRemovingAllGraphs, setIsRemovingAllGraphs] = useState(false);
   const [apiUrl, setApiUrl] = useState(() => getPreferredApiUrlSync());
+  const [rcLadderBaseUrl, setRcLadderBaseUrl] = useState(() => getPreferredRcLadderUrlSync());
   useEffect(() => {
     let cancelled = false;
     resolveApiUrl().then((url) => {
       if (!cancelled && url) setApiUrl(url);
+    });
+    resolveRcLadderUrl().then((url) => {
+      if (!cancelled && url) setRcLadderBaseUrl(url);
     });
     return () => {
       cancelled = true;
@@ -8382,7 +8391,13 @@ const GraphCapture = () => {
     console.log('Graph ID:', graphId);
     console.log('Return params to add:', returnParams);
 
-    const url = new URL(baseUrl);
+    // Prefer DigitalOcean RC Ladder; fall back to Render when DO is down.
+    const preferredBase = rcLadderBaseUrl || getPreferredRcLadderUrlSync();
+    const rewrittenBase = rewriteRcLadderUrl(baseUrl, preferredBase);
+    if (rewrittenBase !== baseUrl) {
+      console.log('RC Ladder return host rewritten:', baseUrl, '->', rewrittenBase);
+    }
+    const url = new URL(rewrittenBase);
 
     // Drop any stale graph ids already embedded in return_url (common when RC Ladder
     // reuses a previous return link). Otherwise the page may read the OLD return_graph_id first.
