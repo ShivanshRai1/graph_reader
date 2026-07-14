@@ -283,15 +283,24 @@ const expandLogCanvasSpanFromBottomAnchor = (
 /**
  * Match the axis value at the capture-box inner edge to visible grid beyond the box.
  * E.g. box height to the 100 tick with two decades of grid above → visible max 100, not 10000.
+ *
+ * Must be strict: leftover image margin past a correctly drawn full-range box must NOT
+ * look like a missing decade, or Final Check maps the blue-box edge below axis max.
  */
 const inferLogVisibleMaxAtInnerEdge = (axisMin, axisMax, innerSpanPx, outerSpanPx) => {
   if (!(axisMin > 0) || !(axisMax > axisMin) || !(innerSpanPx > 0) || outerSpanPx < 0) {
     return axisMax;
   }
 
+  // Tiny strip past the box is normal datasheet padding, not an uncaptured decade.
+  if (outerSpanPx < Math.max(8, innerSpanPx * 0.06)) {
+    return axisMax;
+  }
+
   const logFull = Math.log10(axisMax) - Math.log10(axisMin);
   let bestVisible = axisMax;
   let bestScore = Infinity;
+  let bestPredictedOuter = 0;
 
   let exp = Math.floor(Math.log10(axisMax) + 1e-9);
   const minExp = Math.ceil(Math.log10(axisMin) - 1e-9);
@@ -310,20 +319,36 @@ const inferLogVisibleMaxAtInnerEdge = (axisMin, axisMax, innerSpanPx, outerSpanP
     if (score < bestScore) {
       bestScore = score;
       bestVisible = candidate;
+      bestPredictedOuter = predictedOuter;
     }
   }
 
-  if (!(bestVisible < axisMax)) {
+  if (!(bestVisible < axisMax) || !(bestPredictedOuter > 0)) {
     return axisMax;
   }
 
-  const logVisible = Math.log10(bestVisible) - Math.log10(axisMin);
-  const predictedOuter = innerSpanPx * (logFull / logVisible - 1);
-  if (outerSpanPx < predictedOuter * 0.35) {
+  // Require the leftover canvas to closely match the missing-decade prediction.
+  // (Previously 0.35 was too loose and treated plot margins as an extra decade.)
+  if (outerSpanPx < bestPredictedOuter * 0.7 || outerSpanPx > bestPredictedOuter * 1.35) {
+    return axisMax;
+  }
+  if (bestScore / bestPredictedOuter > 0.3) {
     return axisMax;
   }
 
   return bestVisible;
+};
+
+/** True when clamp would not shrink/shift the area (full expansion fits on the image). */
+const plotReferenceFitsOnCanvas = (area, canvasW, canvasH) => {
+  if (!area || !(area.width > 0) || !(area.height > 0)) return false;
+  const clamped = clampGraphAreaToCanvas(area, canvasW, canvasH);
+  return (
+    Math.abs(clamped.x - area.x) <= 0.5 &&
+    Math.abs(clamped.y - area.y) <= 0.5 &&
+    Math.abs(clamped.width - area.width) <= 0.5 &&
+    Math.abs(clamped.height - area.height) <= 0.5
+  );
 };
 
 const expandLinearCanvasSpanFromMinAnchor = (canvasMin, canvasMax, axisMin, axisMax) => {
@@ -372,6 +397,7 @@ export const buildPlotReferenceAreaFromCaptureBox = (
 
   // Keep the capture box left/bottom edges fixed. Extend plot reference when the box
   // ends on inner ticks while config max goes further (e.g. box to 100, axis to 1000).
+  // Never keep a clipped/partial expansion — that maps the blue-box edge below axis max.
   if (graphConfig.xScale === 'Logarithmic') {
     const canvasWidth = Math.max(
       Number(canvasW) || 0,
@@ -381,14 +407,22 @@ export const buildPlotReferenceAreaFromCaptureBox = (
     const visibleXMax = inferLogVisibleMaxAtInnerEdge(xMin, xMax, captureBox.width, remainingRight);
     if (visibleXMax < xMax) {
       const expandedRight = expandLogCanvasSpanFromMinAnchor(x, right, xMin, xMax, visibleXMax);
-      x = captureBox.x;
-      width = Math.max(captureBox.width, expandedRight.max - captureBox.x);
+      const nextWidth = Math.max(captureBox.width, expandedRight.max - captureBox.x);
+      const candidate = { x: captureBox.x, y, width: nextWidth, height };
+      if (plotReferenceFitsOnCanvas(candidate, canvasW, canvasH)) {
+        x = captureBox.x;
+        width = nextWidth;
+      }
     }
   } else if (xMax > xMin) {
     const expandedRight = expandLinearCanvasSpanFromMinAnchor(x, right, xMin, xMax);
     if (expandedRight.max - expandedRight.min > captureBox.width + 0.5) {
-      x = captureBox.x;
-      width = Math.max(captureBox.width, expandedRight.max - captureBox.x);
+      const nextWidth = Math.max(captureBox.width, expandedRight.max - captureBox.x);
+      const candidate = { x: captureBox.x, y, width: nextWidth, height };
+      if (plotReferenceFitsOnCanvas(candidate, canvasW, canvasH)) {
+        x = captureBox.x;
+        width = nextWidth;
+      }
     }
   }
 
@@ -408,8 +442,13 @@ export const buildPlotReferenceAreaFromCaptureBox = (
         yMax,
         visibleYMax
       );
-      y = expandedTop.top;
-      height = Math.max(captureBox.height, expandedTop.bottom - expandedTop.top);
+      const nextY = expandedTop.top;
+      const nextHeight = Math.max(captureBox.height, expandedTop.bottom - expandedTop.top);
+      const candidate = { x, y: nextY, width, height: nextHeight };
+      if (plotReferenceFitsOnCanvas(candidate, canvasW, canvasH)) {
+        y = nextY;
+        height = nextHeight;
+      }
     }
   }
 
