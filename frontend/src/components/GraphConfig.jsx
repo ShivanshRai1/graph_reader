@@ -12,8 +12,7 @@ import {
   UNIT_PREFIX_SELECT_OPTIONS,
 } from '../utils/quantityUnitGuidance';
 import { fetchHistoricalScaleSuggestion, applyHistoricalAxisSuggestion, historicalSuggestionHasAxisSettings, PAST_CAPTURES_EMPTY_MESSAGE } from '../utils/graphScaleHistory';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+import { getPreferredApiUrlSync, resolveApiUrl } from '../utils/apiBase';
 
 const LOG_FIELDS = ['xMin', 'xMax', 'yMin', 'yMax'];
 
@@ -70,6 +69,7 @@ const convertTemperatureToCelsius = (rawValue, unit) => {
 
 const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNameReadOnly = false, isXTitleReadOnly = false, isYTitleReadOnly = false, initialCurveName = '', initialGraphTitle = '', initialXTitle = '', initialYTitle = '', isAxisMappingConfirmed = false, isEditingCurve = false, allowNextCurveNameEntry = false, isPartNumberFromUrl = false, isPartNumberLocked = false, showManufacturerField = false, showUsernameField = false, companyGraphId = '', sessionSavedCurves = [], onConfirmAxisMapping = () => {}, onRetakeAxis = () => {}, children = null }) => {
   const { graphConfig, setGraphConfig } = useGraph();
+  const [apiUrl, setApiUrl] = useState(() => getPreferredApiUrlSync());
   const [logError, setLogError] = useState({ x: '', y: '' });
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [logPairInputs, setLogPairInputs] = useState(EMPTY_LOG_PAIR_INPUTS);
@@ -81,6 +81,16 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
   const isCurveNameFieldLocked = Boolean(
     isEditingCurve || isCurveNameReadOnly || (isAxisMappingConfirmed && !allowNextCurveNameEntry)
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    resolveApiUrl().then((url) => {
+      if (!cancelled && url) setApiUrl(url);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const quantityUnitGuidance = useMemo(
     () =>
@@ -263,7 +273,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
     const timer = window.setTimeout(async () => {
       try {
         const result = await fetchHistoricalScaleSuggestion(
-          API_URL,
+          apiUrl,
           {
             graphTitle: graphConfig.graphTitle,
             xLabel: graphConfig.xLabel,
@@ -302,6 +312,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
       window.clearTimeout(timer);
     };
   }, [
+    apiUrl,
     graphConfig.graphTitle,
     graphConfig.xLabel,
     graphConfig.yLabel,

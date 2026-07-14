@@ -10,4 +10,14 @@ export default defineConfig({
       },
     }),
   ],
+  server: {
+    proxy: {
+      // Mirror Netlify /do-api → DigitalOcean for local failover testing
+      '/do-api': {
+        target: 'http://165.22.212.92:8010',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/do-api/, ''),
+      },
+    },
+  },
 })

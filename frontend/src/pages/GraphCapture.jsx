@@ -34,6 +34,7 @@ import {
 } from '../utils/graphAreaHelpers';
 import { useGraph, graphToCanvasWithBounds, getManualCapturePoints, MANUAL_CAPTURE_OVERLAY_ID } from '../context/GraphContext';
 import { clearAnnotationsForCurve } from '../utils/annotationStorage';
+import { getPreferredApiUrlSync, resolveApiUrl } from '../utils/apiBase';
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 
 const MiniGraphCanvas = ({ points }) => {
@@ -4206,7 +4207,16 @@ const GraphCapture = () => {
   const [isUpdatingCurveId, setIsUpdatingCurveId] = useState('');
   const [isRemovingCurveId, setIsRemovingCurveId] = useState('');
   const [isRemovingAllGraphs, setIsRemovingAllGraphs] = useState(false);
-  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  const [apiUrl, setApiUrl] = useState(() => getPreferredApiUrlSync());
+  useEffect(() => {
+    let cancelled = false;
+    resolveApiUrl().then((url) => {
+      if (!cancelled && url) setApiUrl(url);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const [urlParams, setUrlParams] = useState({
     partno: '',
     manufacturer: '',

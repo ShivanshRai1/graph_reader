@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import SavedGraphPreview from '../components/SavedGraphPreview';
+import { getPreferredApiUrlSync, resolveApiUrl } from '../utils/apiBase';
 
 const buildCurveConfig = (curve) => ({
   xMin: curve.x_min,
@@ -34,7 +35,17 @@ const SavedGraphView = ({ curveId }) => {
   const [curve, setCurve] = useState(null);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
-  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  const [apiUrl, setApiUrl] = useState(() => getPreferredApiUrlSync());
+
+  useEffect(() => {
+    let cancelled = false;
+    resolveApiUrl().then((url) => {
+      if (!cancelled && url) setApiUrl(url);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!curveId) {
