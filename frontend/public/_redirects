@@ -1,2 +1,4 @@
 /do-api/*  http://165.22.212.92:8010/:splat  200
 /do-api    http://165.22.212.92:8010/  200
+/rc-ladder-proxy/*  http://165.22.212.92:8020/:splat  200
+/rc-ladder-proxy    http://165.22.212.92:8020/  200

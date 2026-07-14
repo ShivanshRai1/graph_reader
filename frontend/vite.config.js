@@ -18,6 +18,11 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/do-api/, ''),
       },
+      '/rc-ladder-proxy': {
+        target: 'http://165.22.212.92:8020',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/rc-ladder-proxy/, ''),
+      },
     },
   },
 })

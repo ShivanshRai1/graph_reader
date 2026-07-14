@@ -1,9 +1,14 @@
 /**
  * RC Ladder app routing: DigitalOcean first, Render as backup.
  * Used when Graph Capture returns to the ladder after fit/export.
+ *
+ * Health probes use same-origin `/rc-ladder-proxy` on Netlify so HTTPS pages
+ * can check the HTTP DO host without mixed-content blocks. Navigation still
+ * uses absolute DO/Render origins (top-level redirects to http are allowed).
  */
 
 const DO_RC_LADDER = 'http://165.22.212.92:8020';
+const DO_RC_LADDER_PROBE = '/rc-ladder-proxy';
 const RENDER_RC_LADDER = 'https://spice-ladder-sim.onrender.com';
 
 const CACHE_KEY = 'graphCapture.rcLadderBaseUrl';
@@ -12,15 +17,26 @@ const HEALTH_TIMEOUT_MS = 2500;
 const stripSlash = (url) => String(url || '').trim().replace(/\/$/, '');
 
 export const getPrimaryRcLadderUrl = () => {
-  const explicit = stripSlash(import.meta.env.VITE_RC_LADDER_PRIMARY_URL || '');
+  const explicit = stripSlash(import.meta.env?.VITE_RC_LADDER_PRIMARY_URL || '');
   if (explicit) return explicit;
   return DO_RC_LADDER;
 };
 
 export const getBackupRcLadderUrl = () => {
-  const explicit = stripSlash(import.meta.env.VITE_RC_LADDER_BACKUP_URL || '');
+  const explicit = stripSlash(import.meta.env?.VITE_RC_LADDER_BACKUP_URL || '');
   if (explicit) return explicit;
   return RENDER_RC_LADDER;
+};
+
+/** Same-origin probe target for production Netlify → DO. */
+const getPrimaryProbeUrl = () => {
+  if (import.meta.env?.DEV) return getPrimaryRcLadderUrl();
+  const explicit = stripSlash(import.meta.env?.VITE_RC_LADDER_PRIMARY_URL || '');
+  // Custom absolute primary: probe it directly when not our DO HTTP host.
+  if (explicit && !/^http:\/\/165\.22\.212\.92:8020$/i.test(explicit)) {
+    return explicit;
+  }
+  return DO_RC_LADDER_PROBE;
 };
 
 export const getPreferredRcLadderUrlSync = () => {
@@ -53,7 +69,6 @@ const probeRcLadder = async (baseUrl, timeoutMs = HEALTH_TIMEOUT_MS) => {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    // Root serves the SPA HTML; CORS allows * on DO/Render Flask.
     const response = await fetch(`${base}/`, {
       method: 'GET',
       signal: controller.signal,
@@ -62,7 +77,6 @@ const probeRcLadder = async (baseUrl, timeoutMs = HEALTH_TIMEOUT_MS) => {
     });
     return response.ok;
   } catch {
-    // Opaque/network failures still allow navigation fallback later.
     return false;
   } finally {
     clearTimeout(timer);
@@ -77,19 +91,21 @@ export const resolveRcLadderUrl = async ({ force = false } = {}) => {
   resolveInFlight = (async () => {
     const primary = getPrimaryRcLadderUrl();
     const backup = getBackupRcLadderUrl();
+    const primaryProbe = getPrimaryProbeUrl();
 
     if (!force && typeof window !== 'undefined') {
       try {
         const cached = stripSlash(sessionStorage.getItem(CACHE_KEY));
-        if (cached && cached === primary && (await probeRcLadder(cached, 1200))) {
-          return cached;
+        if (cached && cached === primary) {
+          const probeForCached = cached === DO_RC_LADDER ? primaryProbe : cached;
+          if (await probeRcLadder(probeForCached, 1200)) return cached;
         }
       } catch {
         /* ignore */
       }
     }
 
-    if (await probeRcLadder(primary)) return remember(primary);
+    if (await probeRcLadder(primaryProbe)) return remember(primary);
     if (await probeRcLadder(backup)) return remember(backup);
     return remember(primary);
   })();
@@ -133,5 +149,6 @@ export const rewriteRcLadderUrl = (url, preferredBase = getPreferredRcLadderUrlS
 
 export const RC_LADDER_DEFAULTS = {
   doPrimary: DO_RC_LADDER,
+  doProbe: DO_RC_LADDER_PROBE,
   renderBackup: RENDER_RC_LADDER,
 };

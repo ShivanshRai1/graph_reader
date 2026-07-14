@@ -23,3 +23,16 @@
   to = "http://165.22.212.92:8010/"
   status = 200
   force = true
+
+# DigitalOcean RC Ladder health/proxy (probe only from HTTPS Netlify).
+[[redirects]]
+  from = "/rc-ladder-proxy/*"
+  to = "http://165.22.212.92:8020/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/rc-ladder-proxy"
+  to = "http://165.22.212.92:8020/"
+  status = 200
+  force = true
