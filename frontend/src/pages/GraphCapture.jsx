@@ -565,6 +565,20 @@ const getLastNonEmptyQueryValue = (searchParams, key) => {
   return values.length > 0 ? values[values.length - 1] : '';
 };
 
+/** DiscoverEE may return graph_id as number or string — always compare as trimmed text. */
+const normalizeDiscoverEeGraphId = (value) => {
+  if (value == null) return '';
+  const normalized = String(value).trim();
+  if (!normalized || normalized === '0') return '';
+  return normalized;
+};
+
+const discoverEeGraphIdsEqual = (left, right) => {
+  const a = normalizeDiscoverEeGraphId(left);
+  const b = normalizeDiscoverEeGraphId(right);
+  return Boolean(a) && a === b;
+};
+
 const normalizeSessionIdentifier = (rawValue) => {
   const value = String(rawValue || '').trim();
   if (!value) return '';
@@ -8196,10 +8210,15 @@ const GraphCapture = () => {
       const result = JSON.parse(jsonMatch ? jsonMatch[0] : rawText);
       console.log('Company API Response received:', result);
       console.log('Company Graph ID from API:', result?.graph_id);
-      const returnedGraphId = result?.graph_id ? String(result.graph_id) : '';
-      const requestedGraphId = isAppendingToExistingGraph ? String(existingGraphId || '') : '';
+      const returnedGraphId = normalizeDiscoverEeGraphId(result?.graph_id);
+      const requestedGraphId = isAppendingToExistingGraph
+        ? normalizeDiscoverEeGraphId(existingGraphId)
+        : '';
       const appendGraphMismatch = Boolean(
-        isAppendingToExistingGraph && requestedGraphId && returnedGraphId && returnedGraphId !== requestedGraphId
+        isAppendingToExistingGraph &&
+          requestedGraphId &&
+          returnedGraphId &&
+          !discoverEeGraphIdsEqual(returnedGraphId, requestedGraphId)
       );
       const sessionGraphId = isAppendingToExistingGraph
         ? (requestedGraphId || returnedGraphId)
@@ -8283,7 +8302,7 @@ const GraphCapture = () => {
         sessionGraphId,
         detailRefetchGraphId,
         returnedDetailId: companyDetailId,
-        matchesRequested: !requestedGraphId || requestedGraphId === returnedGraphId,
+        matchesRequested: !requestedGraphId || discoverEeGraphIdsEqual(requestedGraphId, returnedGraphId),
         note: 'If matchesRequested is false during append-existing-graph, API is returning a different graph_id than requested.',
       });
       
