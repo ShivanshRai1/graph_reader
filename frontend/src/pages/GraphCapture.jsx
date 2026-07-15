@@ -6068,8 +6068,8 @@ const GraphCapture = () => {
       );
     }
 
-    const returnedGraphId = appendResult?.result?.graph_id ? String(appendResult.result.graph_id) : '';
-    if (returnedGraphId && returnedGraphId !== String(companyGraphId)) {
+    const returnedGraphId = normalizeDiscoverEeGraphId(appendResult?.result?.graph_id);
+    if (returnedGraphId && !discoverEeGraphIdsEqual(returnedGraphId, companyGraphId)) {
       throw new Error(
         `Re-save was written to graph ${returnedGraphId} instead of ${companyGraphId}. ` +
         'The edited curve was removed from the current graph. Check the other graph on DiscoverEE or re-capture this curve.'
@@ -6077,11 +6077,11 @@ const GraphCapture = () => {
     }
     console.log('=== GRAPH ID CONSISTENCY CHECK (EDIT) ===', {
       editMode: 'remove-and-resave',
-      expectedGraphId: String(companyGraphId),
-      sentGraphId: String(companyGraphId),
+      expectedGraphId: normalizeDiscoverEeGraphId(companyGraphId),
+      sentGraphId: normalizeDiscoverEeGraphId(companyGraphId),
       sentIdentifier: String(resolvedEditIdentifier || ''),
       returnedGraphId,
-      matchesExpected: !returnedGraphId || returnedGraphId === String(companyGraphId),
+      matchesExpected: !returnedGraphId || discoverEeGraphIdsEqual(returnedGraphId, companyGraphId),
       note: 'If matchesExpected is false, API is creating/updating a different graph context than requested.',
     });
 
