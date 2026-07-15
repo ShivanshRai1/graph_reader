@@ -41,6 +41,7 @@ import {
   rewriteRcLadderUrl,
 } from '../utils/rcLadderBase';
 import {
+  parseDiscoverEeTextField,
   prepareDiscoverEeTextField,
 } from '../utils/discovereeText';
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
@@ -476,6 +477,8 @@ const resolveGraphTitle = (graph = {}, details = []) => {
     graph?.graph_id ? `Graph ${graph.graph_id}` : '',
   ];
 
+  // Return DiscoverEE's raw title — UI display repairs via parseDiscoverEeTextField at set sites.
+  // Wire/append must keep the raw key or DiscoverEE remaps to another graph_id.
   return candidates.find((value) => String(value || '').trim() !== '') || '';
 };
 
@@ -578,6 +581,14 @@ const discoverEeGraphIdsEqual = (left, right) => {
   const b = normalizeDiscoverEeGraphId(right);
   return Boolean(a) && a === b;
 };
+
+const extractDiscoverEeGraphIdFromResponse = (result = {}) =>
+  normalizeDiscoverEeGraphId(
+    result?.graph_id ??
+      result?.graph?.graph_id ??
+      result?.result?.graph_id ??
+      result?.data?.graph_id
+  );
 
 const normalizeSessionIdentifier = (rawValue) => {
   const value = String(rawValue || '').trim();
@@ -4073,7 +4084,9 @@ const GraphCapture = () => {
       
       // Extract metadata from AI response for auto-population
       const extractedMetadata = normalizeAiExtractedMetadata({
-        graphTitle: String(aiResponsePayload?.graph_title || aiResponsePayload?.title || '').trim(),
+        graphTitle: parseDiscoverEeTextField(
+          String(aiResponsePayload?.graph_title || aiResponsePayload?.title || '').trim()
+        ),
         curveName: String(aiResponsePayload?.curve_title || aiResponsePayload?.curve_name || aiResponsePayload?.line_name || '').trim(),
         xLabel: String(aiResponsePayload?.x_title || aiResponsePayload?.x_label || '').trim(),
         yLabel: String(aiResponsePayload?.y_title || aiResponsePayload?.y_label || '').trim(),
@@ -4802,8 +4815,22 @@ const GraphCapture = () => {
       : [curve.config?.yMax, curve.y_max, persistedAxis?.yMax, prevConfig.yMax];
 
     return {
-      graphTitle: curve.config?.graphTitle || curve.graph_title || prevConfig.graphTitle || '',
-      curveName: curve.config?.curveName || curve.curve_name || curve.name || prevConfig.curveName || '',
+      graphTitle: parseDiscoverEeTextField(
+        curve.config?.graphTitle || curve.graph_title || prevConfig.graphTitle || ''
+      ),
+      discoverEeRawGraphTitle:
+        curve.config?.discoverEeRawGraphTitle ||
+        prevConfig.discoverEeRawGraphTitle ||
+        String(curve.config?.graphTitle || curve.graph_title || '').trim() ||
+        '',
+      curveName: parseDiscoverEeTextField(
+        curve.config?.curveName || curve.curve_name || curve.name || prevConfig.curveName || ''
+      ),
+      discoverEeRawCurveTitle:
+        curve.config?.discoverEeRawCurveTitle ||
+        prevConfig.discoverEeRawCurveTitle ||
+        String(curve.config?.curveName || curve.curve_name || curve.name || '').trim() ||
+        '',
       partNumber: curve.config?.partNumber || curve.part_number || prevConfig.partNumber || '',
       xScale: preferPersistedAxis
         ? (persistedAxis?.xScale || curve.config?.xScale || curve.x_scale || prevConfig.xScale || 'Linear')
@@ -4821,12 +4848,26 @@ const GraphCapture = () => {
       xMax: resolveAxisValue(...xMaxSources),
       yMin: resolveAxisValue(...yMinSources),
       yMax: resolveAxisValue(...yMaxSources),
-      xLabel: preferPersistedAxis
-        ? (persistedAxis?.xLabel || curve.config?.xLabel || curve.x_label || prevConfig.xLabel || '')
-        : (curve.config?.xLabel || curve.x_label || persistedAxis?.xLabel || prevConfig.xLabel || ''),
-      yLabel: preferPersistedAxis
-        ? (persistedAxis?.yLabel || curve.config?.yLabel || curve.y_label || prevConfig.yLabel || '')
-        : (curve.config?.yLabel || curve.y_label || persistedAxis?.yLabel || prevConfig.yLabel || ''),
+      xLabel: parseDiscoverEeTextField(
+        preferPersistedAxis
+          ? (persistedAxis?.xLabel || curve.config?.xLabel || curve.x_label || prevConfig.xLabel || '')
+          : (curve.config?.xLabel || curve.x_label || persistedAxis?.xLabel || prevConfig.xLabel || '')
+      ),
+      yLabel: parseDiscoverEeTextField(
+        preferPersistedAxis
+          ? (persistedAxis?.yLabel || curve.config?.yLabel || curve.y_label || prevConfig.yLabel || '')
+          : (curve.config?.yLabel || curve.y_label || persistedAxis?.yLabel || prevConfig.yLabel || '')
+      ),
+      discoverEeRawXTitle:
+        curve.config?.discoverEeRawXTitle ||
+        prevConfig.discoverEeRawXTitle ||
+        String(curve.config?.xLabel || curve.x_label || '').trim() ||
+        '',
+      discoverEeRawYTitle:
+        curve.config?.discoverEeRawYTitle ||
+        prevConfig.discoverEeRawYTitle ||
+        String(curve.config?.yLabel || curve.y_label || '').trim() ||
+        '',
       temperature: curve.config?.temperature || curve.temperature || prevConfig.temperature || '',
     };
   };
@@ -6068,7 +6109,7 @@ const GraphCapture = () => {
       );
     }
 
-    const returnedGraphId = normalizeDiscoverEeGraphId(appendResult?.result?.graph_id);
+    const returnedGraphId = extractDiscoverEeGraphIdFromResponse(appendResult?.result);
     if (returnedGraphId && !discoverEeGraphIdsEqual(returnedGraphId, companyGraphId)) {
       throw new Error(
         `Re-save was written to graph ${returnedGraphId} instead of ${companyGraphId}. ` +
@@ -6673,7 +6714,12 @@ const GraphCapture = () => {
     setGraphConfig((prev) => {
       let next = {
         ...prev,
-        graphTitle: resolvedGraphTitle || discovereeGraph.graph_title || prev.graphTitle || '',
+        graphTitle: parseDiscoverEeTextField(
+          resolvedGraphTitle || discovereeGraph.graph_title || prev.graphTitle || ''
+        ),
+        discoverEeRawGraphTitle: String(
+          resolvedGraphTitle || discovereeGraph.graph_title || prev.discoverEeRawGraphTitle || ''
+        ).trim(),
         partNumber: discovereeGraph.partno || prev.partNumber || '',
         manufacturer: discovereeGraph.manf || prev.manufacturer || '',
       };
@@ -6684,8 +6730,18 @@ const GraphCapture = () => {
 
       next = {
         ...next,
-        xLabel: resolvedAxisFields.xLabel || discovereeGraph.x_title || discovereeGraph.x_label || prev.xLabel || '',
-        yLabel: resolvedAxisFields.yLabel || discovereeGraph.y_title || discovereeGraph.y_label || prev.yLabel || '',
+        xLabel: parseDiscoverEeTextField(
+          resolvedAxisFields.xLabel || discovereeGraph.x_title || discovereeGraph.x_label || prev.xLabel || ''
+        ),
+        yLabel: parseDiscoverEeTextField(
+          resolvedAxisFields.yLabel || discovereeGraph.y_title || discovereeGraph.y_label || prev.yLabel || ''
+        ),
+        discoverEeRawXTitle: String(
+          resolvedAxisFields.xLabel || discovereeGraph.x_title || discovereeGraph.x_label || prev.discoverEeRawXTitle || ''
+        ).trim(),
+        discoverEeRawYTitle: String(
+          resolvedAxisFields.yLabel || discovereeGraph.y_title || discovereeGraph.y_label || prev.discoverEeRawYTitle || ''
+        ).trim(),
         ...buildGraphConfigAxisPatch(resolvedAxisFields),
         ...(resolvedAxisFields.xScale ? { xScale: resolvedAxisFields.xScale } : {}),
         ...(resolvedAxisFields.yScale ? { yScale: resolvedAxisFields.yScale } : {}),
@@ -6773,8 +6829,10 @@ const GraphCapture = () => {
     const partno = searchParams.get('partno') || '';
     const manufacturer = searchParams.get('manufacturer') || searchParams.get('manufactuer') || searchParams.get('manf') || '';
     const username = searchParams.get('username') || searchParams.get('uname') || '';
-    const curveTitle = searchParams.get('curve_title') || '';
-    const graphTitle = searchParams.get('graph_title') || '';
+    const rawCurveTitleFromUrl = searchParams.get('curve_title') || '';
+    const rawGraphTitleFromUrl = searchParams.get('graph_title') || '';
+    const curveTitle = parseDiscoverEeTextField(rawCurveTitleFromUrl);
+    const graphTitle = parseDiscoverEeTextField(rawGraphTitleFromUrl);
     const tctjValue = detectedTemperatureValue;
     const isRcLadderFitFlow = String(graphTitle).trim().toLowerCase() === 'rth_cth';
     // Only pin the capture session to an explicit graph_id. return_graph_id is an OUTPUT
@@ -6787,8 +6845,14 @@ const GraphCapture = () => {
     }
     const restoredPending = consumeAiPendingCapture(graphIdFromUrl);
 
-    const xTitleFromUrl = (searchParams.get('x_label') || searchParams.get('x_title') || searchParams.get('xlabel') || '').trim();
-    const yTitleFromUrl = (searchParams.get('y_label') || searchParams.get('y_title') || searchParams.get('ylabel') || '').trim();
+    const xTitleFromUrlRaw = (
+      searchParams.get('x_label') || searchParams.get('x_title') || searchParams.get('xlabel') || ''
+    ).trim();
+    const yTitleFromUrlRaw = (
+      searchParams.get('y_label') || searchParams.get('y_title') || searchParams.get('ylabel') || ''
+    ).trim();
+    const xTitleFromUrl = parseDiscoverEeTextField(xTitleFromUrlRaw);
+    const yTitleFromUrl = parseDiscoverEeTextField(yTitleFromUrlRaw);
 
     let sanitizedReturnUrl = searchParams.get('return_url') || '';
     if (sanitizedReturnUrl) {
@@ -6854,8 +6918,12 @@ const GraphCapture = () => {
       username: username || prevConfig.username,
       curveName: curveTitle || prevConfig.curveName,
       graphTitle: graphTitle || prevConfig.graphTitle,
+      discoverEeRawGraphTitle: rawGraphTitleFromUrl || prevConfig.discoverEeRawGraphTitle || '',
+      discoverEeRawCurveTitle: rawCurveTitleFromUrl || prevConfig.discoverEeRawCurveTitle || '',
       xLabel: xTitleFromUrl || prevConfig.xLabel,
       yLabel: yTitleFromUrl || prevConfig.yLabel,
+      discoverEeRawXTitle: xTitleFromUrlRaw || prevConfig.discoverEeRawXTitle || '',
+      discoverEeRawYTitle: yTitleFromUrlRaw || prevConfig.discoverEeRawYTitle || '',
       partNumber: partno || prevConfig.partNumber,
       temperature: tctjValue && tctjValue !== '0' ? tctjValue : prevConfig.temperature,
     }));
@@ -6876,7 +6944,7 @@ const GraphCapture = () => {
         if (fetchedTitle) {
           setGraphConfig((prev) => ({
             ...prev,
-            graphTitle: fetchedTitle,
+            graphTitle: parseDiscoverEeTextField(fetchedTitle),
           }));
         }
       }
@@ -7036,7 +7104,9 @@ const GraphCapture = () => {
                 ...graphLevelSymbolValues,
                 ...detailSymbolValues,
               };
-              const resolvedCurveTitle = detail.curve_title || discovereeGraph.curve_title || '';
+              const resolvedCurveTitle = parseDiscoverEeTextField(
+                detail.curve_title || discovereeGraph.curve_title || ''
+              );
               const resolvedPartNumber = String(
                 discovereeGraph.partno || urlParams.partno || graphConfig.partNumber || ''
               ).trim();
@@ -7045,6 +7115,7 @@ const GraphCapture = () => {
                 id: `${discovereeGraph.graph_id}_${detail.id || i}`,
                 detailId: detail.id ? String(detail.id) : '',
                 graphId: String(discovereeGraph.graph_id || ''),
+                discoverEeRawIdentifier: normalizeSessionIdentifier(discovereeGraph.identifier),
                 identifier: ensureStableGraphIdentifier(
                   String(discovereeGraph.graph_id || ''),
                   discovereeGraph.identifier || ''
@@ -7068,8 +7139,12 @@ const GraphCapture = () => {
                 y_max: resolvedYMax,
                 symbolValues: mergedSymbolValues,
                 config: {
-                  graphTitle: resolvedGraphTitle,
+                  graphTitle: parseDiscoverEeTextField(resolvedGraphTitle),
+                  discoverEeRawGraphTitle: String(resolvedGraphTitle || '').trim(),
                   curveName: resolvedCurveTitle,
+                  discoverEeRawCurveTitle: String(
+                    detail.curve_title || discovereeGraph.curve_title || ''
+                  ).trim(),
                   partNumber: resolvedPartNumber,
                   xScale: resolvedXScale,
                   yScale: resolvedYScale,
@@ -7079,8 +7154,10 @@ const GraphCapture = () => {
                   xMax: resolvedXMax,
                   yMin: resolvedYMin,
                   yMax: resolvedYMax,
-                  xLabel: axisFields.xLabel || '',
-                  yLabel: axisFields.yLabel || '',
+                  xLabel: parseDiscoverEeTextField(axisFields.xLabel || ''),
+                  yLabel: parseDiscoverEeTextField(axisFields.yLabel || ''),
+                  discoverEeRawXTitle: String(axisFields.xLabel || '').trim(),
+                  discoverEeRawYTitle: String(axisFields.yLabel || '').trim(),
                   logDataModeX: resolvedXScale === 'Logarithmic' ? 'actual' : 'linear',
                   logDataModeY: resolvedYScale === 'Logarithmic' ? 'actual' : 'linear',
                   temperature: detail.tctj || '',
@@ -7190,7 +7267,8 @@ const GraphCapture = () => {
             if (resolvedGraphTitle && !urlParams.graph_title) {
               setGraphConfig((prev) => ({
                 ...prev,
-                graphTitle: resolvedGraphTitle,
+                graphTitle: parseDiscoverEeTextField(resolvedGraphTitle),
+                discoverEeRawGraphTitle: String(resolvedGraphTitle || '').trim(),
               }));
             }
             return;
@@ -8069,11 +8147,21 @@ const GraphCapture = () => {
           String(sessionCreatedNewGraphIdRef.current || '').trim() === String(existingGraphId).trim();
         const isSyntheticIdentifier = (value) =>
           String(value || '').startsWith(GRAPH_STABLE_IDENTIFIER_PREFIX);
+        // Append to a pre-existing DiscoverEE graph:
+        // - Prefer DiscoverEE's original identifier if non-empty/non-zero
+        // - Never send a synthetic usergraph_gid_* (that creates a NEW graph)
+        // - Never send "" either — omit the field later (empty string also remaps by title)
+        const rawDiscoverEeIdentifier = normalizeSessionIdentifier(
+          anchorCurve?.discoverEeRawIdentifier || ''
+        );
         resolvedOutgoingIdentifier = !isAppendingToExistingGraph
           ? uniqueIdentifier
-          : createdThisSession && !isSyntheticIdentifier(resolvedAppendIdentifier)
-            ? resolvedAppendIdentifier
-            : '';
+          : createdThisSession
+            ? (resolvedAppendIdentifier || uniqueIdentifier)
+            : (
+                rawDiscoverEeIdentifier ||
+                (!isSyntheticIdentifier(resolvedAppendIdentifier) ? resolvedAppendIdentifier : '')
+              );
       }
 
       console.log('=== GRAPH SESSION STATE BEFORE SAVE ===', {
@@ -8089,16 +8177,17 @@ const GraphCapture = () => {
         effectiveIdentifierForAppend: resolvedOutgoingIdentifier || '(none)',
       });
 
-      // Build the JSON payload for company's API
-      const appendDiscovereeCatId = isAppendingToExistingGraph
-        ? String(
-            anchorCurve?.discoveree_cat_id ||
-            anchorCurve?.graphId ||
-            urlParams.discoveree_cat_id ||
-            existingGraphId ||
-            ''
-          )
-        : (urlParams.discoveree_cat_id ? String(urlParams.discoveree_cat_id) : '');
+      // Category id only — never fall back to graph_id (that remaps saves onto wrong graphs).
+      const rawCatId = isAppendingToExistingGraph
+        ? String(anchorCurve?.discoveree_cat_id || urlParams.discoveree_cat_id || '').trim()
+        : String(urlParams.discoveree_cat_id || '').trim();
+      const appendDiscovereeCatId =
+        rawCatId &&
+        rawCatId !== '0' &&
+        !discoverEeGraphIdsEqual(rawCatId, existingGraphId)
+          ? rawCatId
+          : (isAppendingToExistingGraph ? '' : rawCatId);
+
       const effectiveGraphImageUrl =
         normalizeImageCandidate(graphImageUrl) || resolveGraphImageForCompanyPayload();
       if (effectiveGraphImageUrl && !normalizeImageCandidate(graphImageUrl)) {
@@ -8111,19 +8200,54 @@ const GraphCapture = () => {
           graphId: existingGraphId,
         });
       }
+
+      // On append, Prefer DiscoverEE's original raw titles so we do not rewrite "1?F"→"1μF"
+      // on the wire (that causes DiscoverEE to attach the curve to a different graph_id).
+      const wireGraphTitle = prepareDiscoverEeTextField(
+        isAppendingToExistingGraph
+          ? (
+              anchorCurve?.config?.discoverEeRawGraphTitle ||
+              graphConfig.discoverEeRawGraphTitle ||
+              graphConfig.graphTitle ||
+              urlParams.graph_title ||
+              ''
+            )
+          : (graphConfig.graphTitle || urlParams.graph_title || '')
+      );
+      const wireXTitle = prepareDiscoverEeTextField(
+        isAppendingToExistingGraph
+          ? (
+              anchorCurve?.config?.discoverEeRawXTitle ||
+              graphConfig.discoverEeRawXTitle ||
+              graphConfig.xLabel ||
+              urlParams.x_label ||
+              ''
+            )
+          : (graphConfig.xLabel || urlParams.x_label || '')
+      );
+      const wireYTitle = prepareDiscoverEeTextField(
+        isAppendingToExistingGraph
+          ? (
+              anchorCurve?.config?.discoverEeRawYTitle ||
+              graphConfig.discoverEeRawYTitle ||
+              graphConfig.yLabel ||
+              urlParams.y_label ||
+              ''
+            )
+          : (graphConfig.yLabel || urlParams.y_label || '')
+      );
+
       const companyApiPayload = {
         graph: {
           // Include graph_id explicitly during append to reduce graph split risk.
           graph_id: isAppendingToExistingGraph ? String(existingGraphId) : '',
           discoveree_cat_id: appendDiscovereeCatId,
-          identifier: resolvedOutgoingIdentifier,
           partno: urlParams.partno || '',
           manf: urlParams.manf || urlParams.manufacturer || graphConfig.manufacturer || '',
           manufacturer: urlParams.manufacturer || graphConfig.manufacturer || '',
-          graph_title: prepareDiscoverEeTextField(graphConfig.graphTitle || urlParams.graph_title || ''),
-          curve_title: prepareDiscoverEeTextField(urlParams.curve_title || graphConfig.curveName || ''),
-          x_title: prepareDiscoverEeTextField(graphConfig.xLabel || urlParams.x_label || ''),
-          y_title: prepareDiscoverEeTextField(graphConfig.yLabel || urlParams.y_label || ''),
+          graph_title: wireGraphTitle,
+          x_title: wireXTitle,
+          y_title: wireYTitle,
           ...(effectiveGraphImageUrl ? { graph_img: effectiveGraphImageUrl } : {}),
           mark_review: '1',
           testuser_id: urlParams.testuser_id || '',
@@ -8132,6 +8256,16 @@ const GraphCapture = () => {
         },
         details: [detailPayload],
       };
+      // Graph-level curve_title on append remaps multi-curve graphs; keep it on create-new only.
+      if (!isAppendingToExistingGraph) {
+        companyApiPayload.graph.curve_title = prepareDiscoverEeTextField(
+          urlParams.curve_title || graphConfig.curveName || ''
+        );
+      }
+      // Only include identifier when we have a real value. Empty string remaps by metadata.
+      if (resolvedOutgoingIdentifier) {
+        companyApiPayload.graph.identifier = resolvedOutgoingIdentifier;
+      }
       Object.entries(getGraphDynamicFieldValues(dynamicSymbolPayload)).forEach(([key, value]) => {
         companyApiPayload.graph[key] =
           typeof value === 'string' ? prepareDiscoverEeTextField(value) : value;
@@ -8209,8 +8343,8 @@ const GraphCapture = () => {
       const jsonMatch = rawText.match(/[{\[][\s\S]*[}\]]/);
       const result = JSON.parse(jsonMatch ? jsonMatch[0] : rawText);
       console.log('Company API Response received:', result);
-      console.log('Company Graph ID from API:', result?.graph_id);
-      const returnedGraphId = normalizeDiscoverEeGraphId(result?.graph_id);
+      console.log('Company Graph ID from API:', extractDiscoverEeGraphIdFromResponse(result));
+      const returnedGraphId = extractDiscoverEeGraphIdFromResponse(result);
       const requestedGraphId = isAppendingToExistingGraph
         ? normalizeDiscoverEeGraphId(existingGraphId)
         : '';
@@ -8266,12 +8400,20 @@ const GraphCapture = () => {
       });
 
       if (appendGraphMismatch) {
-        console.warn('Graph ID mismatch during append. Keeping session on requested graph_id; re-fetching detail from returned id.', {
+        console.error('Graph ID mismatch during append — DiscoverEE wrote to a different graph.', {
           requestedGraphId,
           returnedGraphId,
           sessionGraphId,
           detailRefetchGraphId,
+          sentGraphTitle: companyApiPayload?.graph?.graph_title,
+          sentIdentifier: companyApiPayload?.graph?.identifier || '(omitted)',
+          sentDiscovereeCatId: companyApiPayload?.graph?.discoveree_cat_id || '(none)',
         });
+        alert(
+          `DiscoverEE saved this curve to graph ${returnedGraphId} instead of ${requestedGraphId}. ` +
+          `The curve is NOT on the graph you were editing. Check DiscoverEE graph ${returnedGraphId}, then refresh and try again.`
+        );
+        return false;
       }
 
       // Store the identifier used for this create-new save so subsequent appends use the same one.
@@ -8703,7 +8845,7 @@ const GraphCapture = () => {
                 isXTitleReadOnly={isXTitleUrlLocked}
                 isYTitleReadOnly={isYTitleUrlLocked}
                 initialCurveName={urlParams.curve_title} 
-                initialGraphTitle={urlParams.graph_title}
+                initialGraphTitle={parseDiscoverEeTextField(urlParams.graph_title)}
                 initialXTitle={urlParams.x_label}
                 initialYTitle={urlParams.y_label}
                 companyGraphId={String(
