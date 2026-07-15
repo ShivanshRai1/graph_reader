@@ -40,6 +40,9 @@ import {
   resolveRcLadderUrl,
   rewriteRcLadderUrl,
 } from '../utils/rcLadderBase';
+import {
+  prepareDiscoverEeTextField,
+} from '../utils/discovereeText';
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 
 const MiniGraphCanvas = ({ points }) => {
@@ -1989,7 +1992,7 @@ const buildCompanyAppendDetailPayload = ({
   axisConfig,
 }) => {
   const detailPayload = {
-    curve_title: curveTitle || '',
+    curve_title: prepareDiscoverEeTextField(curveTitle || ''),
     xscale: xScale || '1',
     yscale: yScale || '1',
     xunit: xUnitPrefix || '1',
@@ -2071,7 +2074,8 @@ const postCompanyAppendSave = async (graphId, payload) => {
   const response = await fetch(companyUrl, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json',
+      'Content-Type': 'application/json; charset=utf-8',
+      Accept: 'application/json, text/plain, */*',
     },
     body: JSON.stringify(payload),
   });
@@ -5968,9 +5972,15 @@ const GraphCapture = () => {
       partno: nextPartNumber,
       manf: urlParams.manf || urlParams.manufacturer || graphConfig.manufacturer || '',
       manufacturer: urlParams.manufacturer || graphConfig.manufacturer || '',
-      graph_title: graphConfig.graphTitle || urlParams.graph_title || curve.config?.graphTitle || '',
-      x_title: graphConfig.xLabel || urlParams.x_label || curve.config?.xLabel || '',
-      y_title: graphConfig.yLabel || urlParams.y_label || curve.config?.yLabel || '',
+      graph_title: prepareDiscoverEeTextField(
+        graphConfig.graphTitle || urlParams.graph_title || curve.config?.graphTitle || ''
+      ),
+      x_title: prepareDiscoverEeTextField(
+        graphConfig.xLabel || urlParams.x_label || curve.config?.xLabel || ''
+      ),
+      y_title: prepareDiscoverEeTextField(
+        graphConfig.yLabel || urlParams.y_label || curve.config?.yLabel || ''
+      ),
       ...(resolvedGraphImageForEdit ? { graph_img: resolvedGraphImageForEdit } : {}),
       mark_review: '1',
       testuser_id: String(curve?.testuser_id || urlParams.testuser_id || ''),
@@ -5980,7 +5990,7 @@ const GraphCapture = () => {
     // Per-curve renames belong in details[0].curve_title only. On multi-curve graphs,
     // omit graph-level curve_title so DiscoverEE does not treat the edit as a new graph.
     if (!isMultiCurveGraph) {
-      editGraphPayload.curve_title = resolvedNewCurveName;
+      editGraphPayload.curve_title = prepareDiscoverEeTextField(resolvedNewCurveName);
     }
 
     const appendPayload = {
@@ -5988,7 +5998,8 @@ const GraphCapture = () => {
       details: [detailPayload],
     };
     Object.entries(getGraphDynamicFieldValues(nextSymbolPayload)).forEach(([key, value]) => {
-      appendPayload.graph[key] = value;
+      appendPayload.graph[key] =
+        typeof value === 'string' ? prepareDiscoverEeTextField(value) : value;
     });
 
     const detailIdsToRemove = new Set([resolvedDetailId]);
@@ -7950,7 +7961,7 @@ const GraphCapture = () => {
       console.log('TCTJ Value (plain string):', tctjValue);
 
       const detailPayload = {
-        curve_title: urlParams.curve_title || graphConfig.curveName || '',
+        curve_title: prepareDiscoverEeTextField(urlParams.curve_title || graphConfig.curveName || ''),
         xy: xyPoints.map((point) => `{x:${point.x},y:${point.y}}`).join(','),
         xscale: graphConfig.xScale || '1',
         yscale: graphConfig.yScale || '1',
@@ -8095,10 +8106,10 @@ const GraphCapture = () => {
           partno: urlParams.partno || '',
           manf: urlParams.manf || urlParams.manufacturer || graphConfig.manufacturer || '',
           manufacturer: urlParams.manufacturer || graphConfig.manufacturer || '',
-          graph_title: graphConfig.graphTitle || urlParams.graph_title || '',
-          curve_title: urlParams.curve_title || graphConfig.curveName || '',
-          x_title: graphConfig.xLabel || urlParams.x_label || '',
-          y_title: graphConfig.yLabel || urlParams.y_label || '',
+          graph_title: prepareDiscoverEeTextField(graphConfig.graphTitle || urlParams.graph_title || ''),
+          curve_title: prepareDiscoverEeTextField(urlParams.curve_title || graphConfig.curveName || ''),
+          x_title: prepareDiscoverEeTextField(graphConfig.xLabel || urlParams.x_label || ''),
+          y_title: prepareDiscoverEeTextField(graphConfig.yLabel || urlParams.y_label || ''),
           ...(effectiveGraphImageUrl ? { graph_img: effectiveGraphImageUrl } : {}),
           mark_review: '1',
           testuser_id: urlParams.testuser_id || '',
@@ -8108,7 +8119,8 @@ const GraphCapture = () => {
         details: [detailPayload],
       };
       Object.entries(getGraphDynamicFieldValues(dynamicSymbolPayload)).forEach(([key, value]) => {
-        companyApiPayload.graph[key] = value;
+        companyApiPayload.graph[key] =
+          typeof value === 'string' ? prepareDiscoverEeTextField(value) : value;
       });
 
       console.log('Complete Company API Payload - Graph object:', {
@@ -8163,7 +8175,8 @@ const GraphCapture = () => {
       const response = await fetch(COMPANY_API_SAVE_URL, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/json; charset=utf-8',
+          Accept: 'application/json, text/plain, */*',
         },
         body: JSON.stringify(companyApiPayload),
       });
