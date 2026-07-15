@@ -6020,41 +6020,29 @@ const GraphCapture = () => {
       (savedCurve) => String(getGraphIdForCurve(savedCurve) || '').trim() === String(companyGraphId).trim()
     );
     const isMultiCurveGraph = curvesOnSameGraph.length > 1;
+    // Always pin edit re-save by graph_id only — metadata rematch lands on twin graphs (17707 vs 17721).
     const editGraphPayload = {
       graph_id: String(companyGraphId),
-      discoveree_cat_id: String(curve?.discoveree_cat_id || urlParams.discoveree_cat_id || ''),
-      identifier: resolvedEditIdentifier,
-      partno: nextPartNumber,
-      manf: urlParams.manf || urlParams.manufacturer || graphConfig.manufacturer || '',
-      manufacturer: urlParams.manufacturer || graphConfig.manufacturer || '',
-      graph_title: prepareDiscoverEeTextField(
-        graphConfig.graphTitle || urlParams.graph_title || curve.config?.graphTitle || ''
-      ),
-      x_title: prepareDiscoverEeTextField(
-        graphConfig.xLabel || urlParams.x_label || curve.config?.xLabel || ''
-      ),
-      y_title: prepareDiscoverEeTextField(
-        graphConfig.yLabel || urlParams.y_label || curve.config?.yLabel || ''
-      ),
-      ...(resolvedGraphImageForEdit ? { graph_img: resolvedGraphImageForEdit } : {}),
-      mark_review: '1',
-      testuser_id: String(curve?.testuser_id || urlParams.testuser_id || ''),
-      uname: urlParams.username || graphConfig.username || '',
-      username: urlParams.username || graphConfig.username || '',
     };
-    // Per-curve renames belong in details[0].curve_title only. On multi-curve graphs,
-    // omit graph-level curve_title so DiscoverEE does not treat the edit as a new graph.
-    if (!isMultiCurveGraph) {
-      editGraphPayload.curve_title = prepareDiscoverEeTextField(resolvedNewCurveName);
+    const editCatId = String(curve?.discoveree_cat_id || urlParams.discoveree_cat_id || '').trim();
+    if (editCatId && editCatId !== '0' && !discoverEeGraphIdsEqual(editCatId, companyGraphId)) {
+      editGraphPayload.discoveree_cat_id = editCatId;
+    }
+    if (resolvedEditIdentifier && !String(resolvedEditIdentifier).startsWith(GRAPH_STABLE_IDENTIFIER_PREFIX)) {
+      editGraphPayload.identifier = resolvedEditIdentifier;
+    }
+    if (urlParams.testuser_id || curve?.testuser_id) {
+      editGraphPayload.testuser_id = String(curve?.testuser_id || urlParams.testuser_id || '');
     }
 
     const appendPayload = {
       graph: editGraphPayload,
       details: [detailPayload],
     };
-    Object.entries(getGraphDynamicFieldValues(nextSymbolPayload)).forEach(([key, value]) => {
-      appendPayload.graph[key] =
-        typeof value === 'string' ? prepareDiscoverEeTextField(value) : value;
+    console.log('[EDIT APPEND] Minimal DiscoverEE payload (graph_id pin only)', {
+      graph_id: String(companyGraphId),
+      isMultiCurveGraph,
+      graphLevelCurveTitleOmitted: true,
     });
 
     const detailIdsToRemove = new Set([resolvedDetailId]);
@@ -8237,39 +8225,63 @@ const GraphCapture = () => {
           : (graphConfig.yLabel || urlParams.y_label || '')
       );
 
-      const companyApiPayload = {
-        graph: {
-          // Include graph_id explicitly during append to reduce graph split risk.
-          graph_id: isAppendingToExistingGraph ? String(existingGraphId) : '',
-          discoveree_cat_id: appendDiscovereeCatId,
-          partno: urlParams.partno || '',
-          manf: urlParams.manf || urlParams.manufacturer || graphConfig.manufacturer || '',
-          manufacturer: urlParams.manufacturer || graphConfig.manufacturer || '',
-          graph_title: wireGraphTitle,
-          x_title: wireXTitle,
-          y_title: wireYTitle,
-          ...(effectiveGraphImageUrl ? { graph_img: effectiveGraphImageUrl } : {}),
-          mark_review: '1',
-          testuser_id: urlParams.testuser_id || '',
-          uname: urlParams.username || graphConfig.username || '',
-          username: urlParams.username || graphConfig.username || '',
-        },
-        details: [detailPayload],
-      };
-      // Graph-level curve_title on append remaps multi-curve graphs; keep it on create-new only.
-      if (!isAppendingToExistingGraph) {
-        companyApiPayload.graph.curve_title = prepareDiscoverEeTextField(
-          urlParams.curve_title || graphConfig.curveName || ''
-        );
+      // Twin-graph trap: DiscoverEE often has multiple graphs with identical
+      // partno/manf/graph_title/identifier=0 (e.g. 17721 and 17707). Sending those
+      // fields on append makes PHP rematch to the older graph and IGNORE graph_id.
+      // Append payload is therefore minimal — pin by graph_id only.
+      let companyApiPayload;
+      if (isAppendingToExistingGraph) {
+        companyApiPayload = {
+          graph: {
+            graph_id: String(existingGraphId),
+          },
+          details: [detailPayload],
+        };
+        if (appendDiscovereeCatId) {
+          companyApiPayload.graph.discoveree_cat_id = appendDiscovereeCatId;
+        }
+        if (resolvedOutgoingIdentifier) {
+          companyApiPayload.graph.identifier = resolvedOutgoingIdentifier;
+        }
+        if (urlParams.testuser_id) {
+          companyApiPayload.graph.testuser_id = urlParams.testuser_id;
+        }
+        console.log('[APPEND] Minimal DiscoverEE payload (graph_id pin only — avoids twin-graph rematch)', {
+          graph_id: String(existingGraphId),
+          discoveree_cat_id: appendDiscovereeCatId || '(omitted)',
+          identifier: resolvedOutgoingIdentifier || '(omitted)',
+          omittedMetadata: ['partno', 'manf', 'graph_title', 'x_title', 'y_title', 'curve_title', 'graph_img'],
+        });
+      } else {
+        companyApiPayload = {
+          graph: {
+            graph_id: '',
+            discoveree_cat_id: appendDiscovereeCatId,
+            partno: urlParams.partno || '',
+            manf: urlParams.manf || urlParams.manufacturer || graphConfig.manufacturer || '',
+            manufacturer: urlParams.manufacturer || graphConfig.manufacturer || '',
+            graph_title: wireGraphTitle,
+            curve_title: prepareDiscoverEeTextField(
+              urlParams.curve_title || graphConfig.curveName || ''
+            ),
+            x_title: wireXTitle,
+            y_title: wireYTitle,
+            ...(effectiveGraphImageUrl ? { graph_img: effectiveGraphImageUrl } : {}),
+            mark_review: '1',
+            testuser_id: urlParams.testuser_id || '',
+            uname: urlParams.username || graphConfig.username || '',
+            username: urlParams.username || graphConfig.username || '',
+          },
+          details: [detailPayload],
+        };
+        if (resolvedOutgoingIdentifier) {
+          companyApiPayload.graph.identifier = resolvedOutgoingIdentifier;
+        }
+        Object.entries(getGraphDynamicFieldValues(dynamicSymbolPayload)).forEach(([key, value]) => {
+          companyApiPayload.graph[key] =
+            typeof value === 'string' ? prepareDiscoverEeTextField(value) : value;
+        });
       }
-      // Only include identifier when we have a real value. Empty string remaps by metadata.
-      if (resolvedOutgoingIdentifier) {
-        companyApiPayload.graph.identifier = resolvedOutgoingIdentifier;
-      }
-      Object.entries(getGraphDynamicFieldValues(dynamicSymbolPayload)).forEach(([key, value]) => {
-        companyApiPayload.graph[key] =
-          typeof value === 'string' ? prepareDiscoverEeTextField(value) : value;
-      });
 
       console.log('Complete Company API Payload - Graph object:', {
         ...companyApiPayload.graph,
@@ -8354,12 +8366,14 @@ const GraphCapture = () => {
           returnedGraphId &&
           !discoverEeGraphIdsEqual(returnedGraphId, requestedGraphId)
       );
+      // On rematch, follow where DiscoverEE actually wrote the curve so local session isn't orphaned.
       const sessionGraphId = isAppendingToExistingGraph
-        ? (requestedGraphId || returnedGraphId)
+        ? (appendGraphMismatch && returnedGraphId
+            ? returnedGraphId
+            : (requestedGraphId || returnedGraphId))
         : (returnedGraphId || requestedGraphId);
       const companyGraphId = sessionGraphId || null;
-      const detailRefetchGraphId =
-        appendGraphMismatch && returnedGraphId ? returnedGraphId : sessionGraphId;
+      const detailRefetchGraphId = sessionGraphId;
 
       if (result?.status && result.status !== 'success') {
         throw new Error(result?.msg || 'Company API returned non-success status');
@@ -8400,20 +8414,18 @@ const GraphCapture = () => {
       });
 
       if (appendGraphMismatch) {
-        console.error('Graph ID mismatch during append — DiscoverEE wrote to a different graph.', {
+        // Still rematch after minimal payload: keep previous soft behavior (do not block save UI),
+        // but pin session + detail refetch to the graph DiscoverEE actually wrote.
+        console.warn('Graph ID mismatch during append. Following returned graph_id where the curve was written.', {
           requestedGraphId,
           returnedGraphId,
-          sessionGraphId,
-          detailRefetchGraphId,
-          sentGraphTitle: companyApiPayload?.graph?.graph_title,
+          sessionGraphId: returnedGraphId,
+          detailRefetchGraphId: returnedGraphId,
+          sentGraphTitle: companyApiPayload?.graph?.graph_title || '(omitted — minimal append)',
           sentIdentifier: companyApiPayload?.graph?.identifier || '(omitted)',
           sentDiscovereeCatId: companyApiPayload?.graph?.discoveree_cat_id || '(none)',
+          note: 'DiscoverEE has twin graphs with identical partno/title/identifier=0; curve landed on returned id.',
         });
-        alert(
-          `DiscoverEE saved this curve to graph ${returnedGraphId} instead of ${requestedGraphId}. ` +
-          `The curve is NOT on the graph you were editing. Check DiscoverEE graph ${returnedGraphId}, then refresh and try again.`
-        );
-        return false;
       }
 
       // Store the identifier used for this create-new save so subsequent appends use the same one.
