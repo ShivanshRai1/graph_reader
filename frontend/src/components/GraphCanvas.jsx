@@ -24,6 +24,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   const [dragDistance, setDragDistance] = useState(0);
   const [previewMousePos, setPreviewMousePos] = useState({ x: null, y: null });
   const imageRef = useRef(null);
+  const imageLoadTokenRef = useRef(null);
   const coordinateUpdateTimeoutRef = useRef(null);
   const [resizeMode, setResizeMode] = useState(null);
   const [initialArea, setInitialArea] = useState(null);
@@ -254,8 +255,13 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       const canvas = canvasRef.current;
       const ctx = canvas.getContext('2d');
       const img = new Image();
-      
+      // Ignore stale onerror/onload from a previous URL (DiscoverEE 404 after local/DO success).
+      let cancelled = false;
+      const loadToken = Symbol('graph-image-load');
+      imageLoadTokenRef.current = loadToken;
+
       img.onload = () => {
+        if (cancelled || imageLoadTokenRef.current !== loadToken) return;
         setImageLoadFailed(false);
         canvas.width = img.width;
         canvas.height = img.height;
@@ -271,6 +277,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
 
         // Defer one frame so persisted graphArea from parent can sync into graphAreaRef first.
         requestAnimationFrame(() => {
+          if (cancelled || imageLoadTokenRef.current !== loadToken) return;
           const currentArea = normalizeArea(graphAreaRef.current);
           if (currentArea.width === 0 || currentArea.height === 0) {
             if (!isAxisMappingConfirmed) {
@@ -290,11 +297,18 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
       };
 
       img.onerror = () => {
+        if (cancelled || imageLoadTokenRef.current !== loadToken) return;
         console.warn('[GraphCanvas] Failed to load graph image:', uploadedImage);
         setImageLoadFailed(true);
       };
       
       img.src = uploadedImage;
+
+      return () => {
+        cancelled = true;
+        img.onload = null;
+        img.onerror = null;
+      };
     } else {
       setImageLoadFailed(false);
     }

@@ -278,10 +278,23 @@ const probeImageUrl = (url, timeoutMs = 12000) =>
     img.src = normalizedUrl;
   });
 
-/** Pick the first usable graph image without network probing (for immediate display). */
+/**
+ * Immediate display only — embedded sources (DO / localStorage / pending).
+ * Never return an unprobed DiscoverEE filename URL here (that causes a false
+ * "could not load" banner while a later fallback still succeeds).
+ */
 const resolveQuickGraphImage = (graph = {}, graphId = '', extras = {}) => {
+  const backendMirroredImage = normalizeImageCandidate(extras.backendMirroredImage || '');
+  if (isEmbeddedGraphImage(backendMirroredImage)) return backendMirroredImage;
+
   const persisted = extras.persistedGraphImage ?? getValidatedPersistedGraphImage(graphId);
   if (persisted) return persisted;
+
+  const localGraphImage = normalizeImageCandidate(extras.localGraphImage || '');
+  if (isEmbeddedGraphImage(localGraphImage)) return localGraphImage;
+
+  const restoredPending = normalizeImageCandidate(extras.restoredPending || '');
+  if (isEmbeddedGraphImage(restoredPending)) return restoredPending;
 
   const candidates = collectGraphImageCandidates({
     graph,
@@ -296,12 +309,6 @@ const resolveQuickGraphImage = (graph = {}, graphId = '', extras = {}) => {
     if (isEmbeddedGraphImage(candidate)) {
       return candidate;
     }
-  }
-
-  for (const candidate of candidates) {
-    if (isRejectedGraphImageToken(candidate)) continue;
-    const urls = buildDiscovereeGraphImageUrlCandidates(candidate, graph);
-    if (urls[0]) return urls[0];
   }
 
   return '';
@@ -347,8 +354,11 @@ const collectGraphImageCandidates = ({
     }
   };
 
+  // Prefer durable/local copies first. DiscoverEE graph_img filenames often 404.
   push(restoredPending);
   push(backendMirroredImage);
+  push(persistedGraphImage);
+  push(localGraphImage);
 
   const graphFields = [
     graph?.graph_image,
@@ -372,8 +382,6 @@ const collectGraphImageCandidates = ({
   ]);
 
   [...graphFields, ...detailFields].forEach(push);
-  push(persistedGraphImage);
-  push(localGraphImage);
 
   return ordered;
 };
@@ -1388,21 +1396,34 @@ const fetchAllLocalCurvesByGraphId = async (apiUrl, graphId) => {
   }
 };
 
+/** Short timeout so a slow/down DO/Render API never blocks DiscoverEE/local fallbacks. */
+const GRAPH_IMAGE_MIRROR_FETCH_TIMEOUT_MS = 3000;
+
 const fetchMirroredGraphImageFromBackend = async (apiUrl, graphId) => {
   const normalizedGraphId = String(graphId || '').trim();
   if (!normalizedGraphId || !apiUrl) return '';
 
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer = controller
+    ? window.setTimeout(() => controller.abort(), GRAPH_IMAGE_MIRROR_FETCH_TIMEOUT_MS)
+    : null;
+
   try {
     const response = await fetch(
-      `${apiUrl}/api/graphs/${encodeURIComponent(normalizedGraphId)}/graph-image`
+      `${apiUrl}/api/graphs/${encodeURIComponent(normalizedGraphId)}/graph-image`,
+      controller ? { signal: controller.signal } : undefined
     );
     if (!response.ok) return '';
     const data = await response.json().catch(() => ({}));
     const normalized = normalizeImageCandidate(data?.graph_image || '');
     return isEmbeddedGraphImage(normalized) ? normalized : '';
   } catch (error) {
-    console.warn('[GRAPH_IMG_MIRROR] Failed to fetch mirrored graph image:', error);
+    if (error?.name !== 'AbortError') {
+      console.warn('[GRAPH_IMG_MIRROR] Failed to fetch mirrored graph image:', error);
+    }
     return '';
+  } finally {
+    if (timer) window.clearTimeout(timer);
   }
 };
 
@@ -6945,7 +6966,11 @@ const GraphCapture = () => {
             console.log('[DEBUG] Successfully parsed DiscoverEE data, details count:', discovereeDetails.length);
             console.log('[DEBUG] discovereeGraph all fields:', JSON.stringify(discovereeGraph, null, 2));
             const resolvedGraphId = String(discovereeGraph.graph_id || graphId).trim();
-            const quickImage = resolveQuickGraphImage(discovereeGraph, resolvedGraphId);
+            // DO mirror first (short timeout) so we never flash a broken DiscoverEE URL.
+            const backendMirroredImage = await fetchMirroredGraphImageFromBackend(apiUrl, resolvedGraphId);
+            const quickImage = resolveQuickGraphImage(discovereeGraph, resolvedGraphId, {
+              backendMirroredImage,
+            });
             if (quickImage) {
               setUploadedImageFromExistingGraph(quickImage);
               if (isEmbeddedGraphImage(quickImage)) {
@@ -6957,7 +6982,7 @@ const GraphCapture = () => {
               discovereeGraph,
               discovereeDetails,
               resolvedGraphId,
-              { restoredPending: '', apiUrl }
+              { restoredPending: '', apiUrl, backendMirroredImage }
             );
             if (graphImageUrl && graphImageUrl !== quickImage) {
               setUploadedImageFromExistingGraph(graphImageUrl);
@@ -7143,11 +7168,15 @@ const GraphCapture = () => {
             setIsAxisMappingConfirmed(false);
             setFrozenGraphConfig(null);
 
+            const emptyDetailsBackendImage = await fetchMirroredGraphImageFromBackend(
+              apiUrl,
+              String(resolvedGraphId)
+            );
             const emptyDetailsImageUrl = await resolveReachableGraphImageUrl(
               discovereeGraph,
               [],
               String(resolvedGraphId),
-              { restoredPending: '', apiUrl }
+              { restoredPending: '', apiUrl, backendMirroredImage: emptyDetailsBackendImage }
             );
             activateAppendSession(resolvedGraphId, emptyDetailsImageUrl, 'fetchGraphById-emptyDetails');
             if (emptyDetailsImageUrl) {
