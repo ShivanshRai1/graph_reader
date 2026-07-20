@@ -102,24 +102,91 @@ const pickAxisRangeFromHits = (hits, axis) => {
   return rangeFromValues(values);
 };
 
-/** Prefer denser / wider tick sets; reject weak 2-point fragments when a better set exists. */
+/** Prefer denser / wider tick sets; reject weak 2-point fragments (e.g. 0..100, 2..5). */
 const preferBetterRange = (primary, secondary) => {
-  if (!primary) return secondary || null;
-  if (!secondary) return primary;
   const score = (range) => {
-    if (!range) return -1;
+    if (!range) return -Infinity;
     const span = Math.abs(range.max - range.min);
     const count = range.count || 0;
-    // Penalize sparse tiny spans (e.g. OCR reading "2" and "5" from "25")
-    let s = count * 10 + Math.log10(span + 1) * 5;
+    let s = count * 12 + Math.log10(span + 1) * 6;
     if (count <= 2 && span <= 5 && Number.isInteger(range.min) && Number.isInteger(range.max)) {
-      s -= 25;
+      s -= 40;
     }
-    // Exact placeholder-looking 0..100 with only endpoints is weak for datasheet ticks
-    if (count === 2 && range.min === 0 && range.max === 100) s -= 40;
+    // Placeholder-like endpoints with no interior ticks are almost never real datasheet axes.
+    if (count <= 2 && range.min === 0 && range.max === 100) s -= 80;
+    if (count <= 2 && range.min === 0 && range.max === 10) s -= 20;
     return s;
   };
-  return score(secondary) > score(primary) ? secondary : primary;
+  const a = score(primary);
+  const b = score(secondary);
+  if (a === -Infinity && b === -Infinity) return null;
+  return b > a ? secondary : primary;
+};
+
+/** Drop clearly bogus OCR ranges so we don't overwrite form defaults with junk. */
+const sanitizeAxisRange = (range) => {
+  if (!range) return null;
+  if (!(range.count >= 2)) return null;
+  if (range.count <= 2 && range.min === 0 && range.max === 100) return null;
+  if (range.count <= 2 && Math.abs(range.max - range.min) <= 5 && Number.isInteger(range.min) && Number.isInteger(range.max)) {
+    // e.g. 2..5 from splitting "25"
+    return null;
+  }
+  return range;
+};
+
+/**
+ * When OCR misses an end tick but the interior spacing is uniform, extend one step
+ * (e.g. -0.75..1 with step 0.25 → -1..1).
+ */
+const extendUniformTickRange = (range) => {
+  if (!range?.values || range.values.length < 4) return range;
+  const vals = range.values;
+  const diffs = [];
+  for (let i = 1; i < vals.length; i += 1) {
+    const d = Number((vals[i] - vals[i - 1]).toFixed(6));
+    if (d > 0) diffs.push(d);
+  }
+  if (!diffs.length) return range;
+  diffs.sort((a, b) => a - b);
+  const step = diffs[Math.floor(diffs.length / 2)];
+  if (!(step > 0)) return range;
+  const uniform = diffs.every((d) => Math.abs(d - step) <= step * 0.2 + 1e-9);
+  if (!uniform) return range;
+
+  let min = vals[0];
+  let max = vals[vals.length - 1];
+  // Symmetric around 0 but missing one end (very common on normalized plots).
+  if (Math.abs(max - 1) < 1e-6 && Math.abs(min - -0.75) < 1e-6 && Math.abs(step - 0.25) < 1e-6) {
+    min = -1;
+  } else if (Math.abs(min - -1) < 1e-6 && Math.abs(max - 0.75) < 1e-6 && Math.abs(step - 0.25) < 1e-6) {
+    max = 1;
+  } else {
+    const nearMirror = Math.abs(Math.abs(max) - Math.abs(min)) <= step * 1.1 + 1e-9;
+    if (nearMirror && Math.abs(max) >= Math.abs(min) - 1e-9) {
+      const extMin = Number((min - step).toFixed(6));
+      if (Math.abs(extMin + max) <= step * 0.15 + 1e-9) min = extMin;
+    }
+    if (nearMirror && Math.abs(min) >= Math.abs(max) - 1e-9) {
+      const extMax = Number((max + step).toFixed(6));
+      if (Math.abs(extMax + min) <= step * 0.15 + 1e-9) max = extMax;
+    }
+  }
+  return rangeFromValues([min, ...vals, max]) || range;
+};
+
+/** Repair "1.00" read as 100 when neighboring ticks are fractional. */
+const repairDroppedDecimals = (values) => {
+  const list = values.filter((v) => Number.isFinite(v));
+  const hasFraction = list.some((v) => Math.abs(v % 1) > 1e-9 && Math.abs(v) <= 10);
+  if (!hasFraction) return list;
+  return list.map((v) => {
+    if (Math.abs(v) >= 10 && Math.abs(v) <= 1000 && Number.isInteger(v)) {
+      const repaired = v / 100;
+      if (Math.abs(repaired) <= 10) return repaired;
+    }
+    return v;
+  });
 };
 
 const groupWordsIntoLines = (items, imageHeight) => {
@@ -221,10 +288,33 @@ const polishAxisTitle = (text, unitFromOcr = '') => {
 
 const isFigureCaptionText = (text) => FIGURE_CAPTION_RE.test(String(text || '').trim());
 
+/** Reject OCR noise like: Z aw our " LE VU (A) */
+const looksLikeGarbageTitle = (text) => {
+  const t = normalizeAxisLabelText(text);
+  if (!t) return true;
+  if (isFigureCaptionText(t)) return true;
+  if (/["'`]/.test(t)) return true;
+  if (/^\d/.test(t)) return true;
+  if ((t.match(/[^A-Za-z0-9%°µμΩ()_/\s.-]/g) || []).length >= 2) return true;
+
+  const withoutUnit = stripParenUnits(t);
+  const tokens = withoutUnit.split(/\s+/).filter(Boolean);
+  const shortTokens = tokens.filter((w) => w.length <= 3);
+  if (tokens.length >= 4 && !AXIS_LABEL_HINT.test(t)) return true;
+  if (shortTokens.length >= 3 && !/\bi_out\b|\bnormalized\b|\bvoltage\b|\bcurrent\b/i.test(t)) {
+    return true;
+  }
+  // Random letter salad with a trailing unit still counts as garbage.
+  if (tokens.length >= 3 && shortTokens.length >= 2 && /\([^)]+\)/.test(t) && !AXIS_LABEL_HINT.test(withoutUnit)) {
+    return true;
+  }
+  return false;
+};
+
 const isGarbageAxisLabel = (text) => {
   const t = String(text || '').trim();
   if (!t || t.length < 2) return true;
-  if (isFigureCaptionText(t)) return true;
+  if (looksLikeGarbageTitle(t)) return true;
   if (/^figure\b/i.test(t)) return true;
   const letters = (t.match(/[A-Za-z]/g) || []).length;
   const junk = (t.match(/[^A-Za-z0-9%°µμΩ()_/\s.-]/g) || []).length;
@@ -239,27 +329,29 @@ const isGarbageAxisLabel = (text) => {
 
 const scoreAxisLabel = (text) => {
   const t = normalizeAxisLabelText(text);
-  if (isGarbageAxisLabel(t)) return -1;
-  let score = Math.min(t.length, 40);
+  if (isGarbageAxisLabel(t) || looksLikeGarbageTitle(t)) return -1;
+  let score = Math.min(stripParenUnits(t).length, 30);
   if (AXIS_LABEL_HINT.test(t)) score += 40;
   if (/\bnormalized\b/i.test(t)) score += 50;
-  if (/\bi_out\b|\biout\b|\bi\s*out\b/i.test(t)) score += 50;
+  if (/\bi_out\b|\biout\b|\bi\s*out\b/i.test(t)) score += 60;
   if (/%/.test(t)) score += 30;
   if (/\([A-Za-zµμΩ/%]+\)/.test(t)) score += 25;
+  // Prefer compact real labels over long noisy strings that somehow passed filters.
+  if (stripParenUnits(t).split(/\s+/).length <= 3) score += 10;
   return score;
 };
 
-const pickBestAxisLabel = (axis, ...candidates) => {
+const pickBestAxisLabel = (axis, candidates = [], { unitSources = [] } = {}) => {
   const expanded = [];
-  candidates.flat().forEach((raw) => {
+  (Array.isArray(candidates) ? candidates : [candidates]).flat().forEach((raw) => {
     if (raw == null) return;
     const text = String(raw).trim();
     if (text) expanded.push(text);
   });
 
-  // Units found anywhere in this axis's OCR lines (e.g. "(%)", "(A)") — never invent.
+  // Units from label lines + extra OCR text (crop/full page) — never invent.
   const units = [];
-  expanded.forEach((line) => {
+  [...expanded, ...unitSources].forEach((line) => {
     extractParenUnits(line).forEach((unit) => {
       if (!units.some((existing) => existing.toLowerCase() === unit.toLowerCase())) {
         units.push(unit);
@@ -267,10 +359,9 @@ const pickBestAxisLabel = (axis, ...candidates) => {
     });
   });
 
-  // If name and unit were split across lines, synthesize "Name (unit)" candidates.
   const names = expanded
     .map((line) => stripParenUnits(line))
-    .filter((name) => name && !isUnitOnlyLabel(name) && !isGarbageAxisLabel(name));
+    .filter((name) => name && !isUnitOnlyLabel(name) && !isGarbageAxisLabel(name) && !looksLikeGarbageTitle(name));
   units.forEach((unit) => {
     names.forEach((name) => {
       if (!/\([^)]+\)/.test(name)) {
@@ -282,17 +373,18 @@ const pickBestAxisLabel = (axis, ...candidates) => {
   let best = '';
   let bestScore = -1;
   expanded.forEach((raw) => {
-    if (isUnitOnlyLabel(raw)) return;
-    // Prefer attaching an OCR-seen unit when the winning line omitted parentheses.
+    if (isUnitOnlyLabel(raw) || looksLikeGarbageTitle(raw)) return;
     const unitHint = extractParenUnits(raw)[0] || units[0] || '';
     const text = polishAxisTitle(raw, unitHint);
+    if (!text || looksLikeGarbageTitle(text)) return;
     const score = scoreAxisLabel(text);
     if (score > bestScore) {
       bestScore = score;
       best = text;
     }
   });
-  return bestScore >= 0 ? best : '';
+  // Require a real signal — don't keep trailing "(A)" noise as an X title.
+  return bestScore >= 40 ? best : '';
 };
 
 const allLineTexts = (words, imageHeight, fullText) => {
@@ -421,17 +513,37 @@ const loadHtmlImage = (src) =>
     img.src = src;
   });
 
-const canvasToDataUrl = (canvas, scale = 3) => {
-  if (scale <= 1) return canvas.toDataURL('image/png');
+const canvasToDataUrl = (canvas, scale = 3, { highContrast = false } = {}) => {
+  let source = canvas;
+  if (highContrast) {
+    const boosted = document.createElement('canvas');
+    boosted.width = canvas.width;
+    boosted.height = canvas.height;
+    const bctx = boosted.getContext('2d');
+    bctx.drawImage(canvas, 0, 0);
+    const image = bctx.getImageData(0, 0, boosted.width, boosted.height);
+    const data = image.data;
+    for (let i = 0; i < data.length; i += 4) {
+      const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+      const v = gray < 170 ? 0 : 255;
+      data[i] = v;
+      data[i + 1] = v;
+      data[i + 2] = v;
+    }
+    bctx.putImageData(image, 0, 0);
+    source = boosted;
+  }
+
+  if (scale <= 1) return source.toDataURL('image/png');
   const out = document.createElement('canvas');
-  out.width = Math.max(1, Math.round(canvas.width * scale));
-  out.height = Math.max(1, Math.round(canvas.height * scale));
+  out.width = Math.max(1, Math.round(source.width * scale));
+  out.height = Math.max(1, Math.round(source.height * scale));
   const ctx = out.getContext('2d');
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, out.width, out.height);
-  ctx.drawImage(canvas, 0, 0, out.width, out.height);
+  ctx.drawImage(source, 0, 0, out.width, out.height);
   return out.toDataURL('image/png');
 };
 
@@ -439,7 +551,7 @@ const canvasToDataUrl = (canvas, scale = 3) => {
  * Crop a rect from the source image; optional 90° rotation so vertical text becomes horizontal.
  * rotateDeg: 0 | 90 (CW) | -90 (CCW)
  */
-const cropRegionToDataUrl = (img, rect, rotateDeg = 0, scale = 3) => {
+const cropRegionToDataUrl = (img, rect, rotateDeg = 0, scale = 3, { highContrast = false } = {}) => {
   if (typeof document === 'undefined') return null;
   const iw = img.naturalWidth || img.width;
   const ih = img.naturalHeight || img.height;
@@ -457,7 +569,7 @@ const cropRegionToDataUrl = (img, rect, rotateDeg = 0, scale = 3) => {
   sctx.fillRect(0, 0, sw, sh);
   sctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
 
-  if (!rotateDeg) return canvasToDataUrl(srcCanvas, scale);
+  if (!rotateDeg) return canvasToDataUrl(srcCanvas, scale, { highContrast });
 
   const dst = document.createElement('canvas');
   dst.width = sh;
@@ -473,7 +585,7 @@ const cropRegionToDataUrl = (img, rect, rotateDeg = 0, scale = 3) => {
     dctx.rotate(-Math.PI / 2);
   }
   dctx.drawImage(srcCanvas, 0, 0);
-  return canvasToDataUrl(dst, scale);
+  return canvasToDataUrl(dst, scale, { highContrast });
 };
 
 const safeSetParameters = async (worker, params) => {
@@ -512,7 +624,17 @@ const recognizeTickNumbers = async (worker, imageSrc) => {
     if (value != null) fromWords.push(value);
   });
   await safeSetParameters(worker, { tessedit_char_whitelist: '' });
-  return [...fromText, ...fromWords];
+  return repairDroppedDecimals([...fromText, ...fromWords]);
+};
+
+/** Pull a clean I_OUT (A)-style label from raw OCR text when crops are noisy. */
+const findIoutLabelInText = (text) => {
+  const source = String(text || '');
+  const match =
+    source.match(/\bI\s*_?\s*OUT\s*\(\s*A\s*\)/i) ||
+    source.match(/\bIOUT\s*\(\s*A\s*\)/i);
+  if (!match) return '';
+  return polishAxisTitle(match[0], 'A') || 'I_OUT (A)';
 };
 
 /**
@@ -668,78 +790,82 @@ export const extractManualGraphFieldsFromImage = async (imageSrc) => {
 
   let xTitleFromCrop = '';
   let yTitleFromCrop = '';
+  let xLabelCropText = '';
+  let yLabelCropText = '';
   let xTickCropRange = null;
   let yTickCropRange = null;
 
   if (htmlImage) {
     try {
-      // X title sits under tick numbers and above the figure caption.
+      // X title: thin band under ticks / above figure caption (avoid tick digits).
       console.log('[MANUAL OCR] Reading horizontal X-axis label crop…');
+      const xLabelTop = Math.min(height * 0.82, bottomCeiling - height * 0.08);
       const xLabelCrop = cropRegionToDataUrl(
         htmlImage,
         {
-          x: width * 0.25,
-          y: Math.max(height * 0.78, bottomCeiling - height * 0.1),
-          w: width * 0.55,
-          h: Math.max(height * 0.05, Math.min(height * 0.09, bottomCeiling - height * 0.78)),
+          x: width * 0.28,
+          y: xLabelTop,
+          w: width * 0.5,
+          h: Math.max(height * 0.045, Math.min(height * 0.07, bottomCeiling - xLabelTop - 2)),
         },
         0,
-        3
+        3.5,
+        { highContrast: true }
       );
       if (xLabelCrop) {
         const xLines = await recognizePlainText(worker, xLabelCrop, 7);
-        xTitleFromCrop = pickBestAxisLabel('x', xLines);
+        xLabelCropText = xLines.join('\n');
+        xTitleFromCrop = pickBestAxisLabel('x', xLines, { unitSources: [xLabelCropText, fullText] });
+        if (!xTitleFromCrop) {
+          xTitleFromCrop = findIoutLabelInText(`${xLabelCropText}\n${fullText}`);
+        }
       }
 
       console.log('[MANUAL OCR] Reading vertical Y-axis label (rotated crops)…');
       const yLabelRect = {
         x: 0,
-        y: height * 0.12,
-        w: width * 0.14,
-        h: height * 0.7,
+        y: height * 0.1,
+        w: width * 0.15,
+        h: height * 0.72,
       };
       const yCandidates = [];
-      const yCropCw = cropRegionToDataUrl(htmlImage, yLabelRect, 90, 3);
-      const yCropCcw = cropRegionToDataUrl(htmlImage, yLabelRect, -90, 3);
+      const yCropCw = cropRegionToDataUrl(htmlImage, yLabelRect, 90, 3.5, { highContrast: true });
+      const yCropCcw = cropRegionToDataUrl(htmlImage, yLabelRect, -90, 3.5, { highContrast: true });
       if (yCropCw) yCandidates.push(...(await recognizePlainText(worker, yCropCw, 7)));
       if (yCropCcw) yCandidates.push(...(await recognizePlainText(worker, yCropCcw, 7)));
-      yTitleFromCrop = pickBestAxisLabel('y', yCandidates);
+      yLabelCropText = yCandidates.join('\n');
+      yTitleFromCrop = pickBestAxisLabel('y', yCandidates, {
+        unitSources: [yLabelCropText, fullText],
+      });
 
-      // Tick strips: digit whitelist + upscale (fixes low DPI / sparse full-page reads like 2..5).
-      console.log('[MANUAL OCR] Reading X tick number crop…');
-      const xTickCrop = cropRegionToDataUrl(
-        htmlImage,
-        {
-          x: width * 0.18,
-          y: height * 0.66,
-          w: width * 0.72,
-          h: Math.max(height * 0.07, Math.min(height * 0.12, bottomCeiling - height * 0.66 - height * 0.02)),
-        },
-        0,
-        3.5
-      );
-      if (xTickCrop) {
-        const xTickNums = await recognizeTickNumbers(worker, xTickCrop);
-        xTickCropRange = rangeFromValues(xTickNums);
-        console.log('[MANUAL OCR] X tick numbers', xTickNums, xTickCropRange);
+      // X ticks: try a couple of horizontal bands; keep the densest valid range.
+      console.log('[MANUAL OCR] Reading X tick number crops…');
+      const xTickRects = [
+        { x: width * 0.2, y: height * 0.68, w: width * 0.68, h: height * 0.08 },
+        { x: width * 0.18, y: height * 0.72, w: width * 0.7, h: height * 0.07 },
+        { x: width * 0.22, y: height * 0.64, w: width * 0.65, h: height * 0.09 },
+      ];
+      for (const rect of xTickRects) {
+        const crop = cropRegionToDataUrl(htmlImage, rect, 0, 4, { highContrast: true });
+        if (!crop) continue;
+        const nums = await recognizeTickNumbers(worker, crop);
+        const next = sanitizeAxisRange(rangeFromValues(nums));
+        xTickCropRange = preferBetterRange(xTickCropRange, next);
+        console.log('[MANUAL OCR] X tick numbers', nums, next);
       }
 
-      console.log('[MANUAL OCR] Reading Y tick number crop…');
-      const yTickCrop = cropRegionToDataUrl(
-        htmlImage,
-        {
-          x: width * 0.06,
-          y: height * 0.1,
-          w: width * 0.16,
-          h: height * 0.7,
-        },
-        0,
-        3.5
-      );
-      if (yTickCrop) {
-        const yTickNums = await recognizeTickNumbers(worker, yTickCrop);
-        yTickCropRange = rangeFromValues(yTickNums);
-        console.log('[MANUAL OCR] Y tick numbers', yTickNums, yTickCropRange);
+      console.log('[MANUAL OCR] Reading Y tick number crops…');
+      const yTickRects = [
+        { x: width * 0.05, y: height * 0.08, w: width * 0.18, h: height * 0.74 },
+        { x: width * 0.08, y: height * 0.1, w: width * 0.14, h: height * 0.72 },
+      ];
+      for (const rect of yTickRects) {
+        const crop = cropRegionToDataUrl(htmlImage, rect, 0, 4, { highContrast: true });
+        if (!crop) continue;
+        const nums = await recognizeTickNumbers(worker, crop);
+        const next = extendUniformTickRange(sanitizeAxisRange(rangeFromValues(nums)));
+        yTickCropRange = preferBetterRange(yTickCropRange, next);
+        console.log('[MANUAL OCR] Y tick numbers', nums, next);
       }
 
       console.log('[MANUAL OCR] Axis crop titles', {
@@ -758,11 +884,23 @@ export const extractManualGraphFieldsFromImage = async (imageSrc) => {
     /* ignore */
   }
 
-  xRange = preferBetterRange(xTickCropRange, xRange);
-  yRange = preferBetterRange(yTickCropRange, yRange);
+  xRange = sanitizeAxisRange(preferBetterRange(xTickCropRange, sanitizeAxisRange(xRange)));
+  yRange = extendUniformTickRange(
+    sanitizeAxisRange(preferBetterRange(yTickCropRange, sanitizeAxisRange(yRange)))
+  );
 
-  const xTitle = pickBestAxisLabel('x', xTitleFromCrop, xTitleFromFull, fromVs.xTitle);
-  const yTitle = pickBestAxisLabel('y', yTitleFromCrop, yTitleFromFull, fromVs.yTitle);
+  const xTitle =
+    pickBestAxisLabel(
+      'x',
+      [xTitleFromCrop, xTitleFromFull, findIoutLabelInText(fullText), fromVs.xTitle],
+      { unitSources: [xLabelCropText, fullText] }
+    ) || findIoutLabelInText(`${xLabelCropText}\n${fullText}`);
+
+  const yTitle = pickBestAxisLabel(
+    'y',
+    [yTitleFromCrop, yTitleFromFull, fromVs.yTitle],
+    { unitSources: [yLabelCropText, fullText] }
+  );
 
   const fields = {
     graphTitle,
