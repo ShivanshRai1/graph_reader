@@ -208,6 +208,28 @@ const refineTickValues = (values, axis) => {
   return list;
 };
 
+/**
+ * Recover common datasheet X axes like 0,5,10,15,20,25 even when OCR misses some ticks.
+ */
+const inferLinearTickRange = (values, axis) => {
+  const nums = [...new Set(refineTickValues(values, axis))].sort((a, b) => a - b);
+  if (nums.length < 2) return null;
+
+  if (axis === 'x') {
+    const grid = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50];
+    const hits = grid.filter((g) => nums.some((n) => Math.abs(n - g) < 1e-6));
+    if (hits.length >= 3 && hits[0] === 0) {
+      let max = hits[hits.length - 1];
+      // Often miss the last label (20 present, 25 missing).
+      if (max === 20 && hits.length >= 4) max = 25;
+      if (max === 15 && hits.length >= 3) max = 25;
+      return rangeFromValues([0, max]);
+    }
+  }
+
+  return sanitizeAxisRange(rangeFromValues(nums));
+};
+
 const groupWordsIntoLines = (items, imageHeight) => {
   const sorted = [...items].sort((a, b) => a.y0 - b.y0 || a.x0 - b.x0);
   const lines = [];
@@ -243,8 +265,12 @@ const normalizeAxisLabelText = (text) =>
     .replace(/\s+/g, ' ')
     .replace(/\$\\?mathrm\{([^}]+)\}/gi, '$1')
     .replace(/\$([^$]+)\$/g, '$1')
-    .replace(/\bI\s*[_ ]?\s*OUT\b/gi, 'I_OUT')
+    // Common OCR mangling of I_OUT: tout / lout / 1OUT / I OUT
+    .replace(/\b[Il1T]\s*_?\s*OUT\b/gi, 'I_OUT')
     .replace(/\bIOUT\b/gi, 'I_OUT')
+    .replace(/\bTOUT\b/gi, 'I_OUT')
+    .replace(/\btout\b/gi, 'I_OUT')
+    .replace(/\blout\b/gi, 'I_OUT')
     .replace(/\bIout\b/g, 'I_OUT')
     .replace(/\s*\(\s*/g, ' (')
     .replace(/\s*\)\s*/g, ')')
@@ -635,30 +661,54 @@ const recognizePlainText = async (worker, imageSrc, pagesegMode) => {
 
 /** Digit-focused OCR for axis tick strips. */
 const recognizeTickNumbers = async (worker, imageSrc) => {
-  await safeSetParameters(worker, {
-    tessedit_pageseg_mode: '6',
-    tessedit_char_whitelist: '0123456789.-',
-    user_defined_dpi: '300',
-  });
-  const recognized = await worker.recognize(imageSrc);
-  const fromText = extractNumbersFromText(recognized?.data?.text || '');
-  const fromWords = [];
-  (recognized?.data?.words || []).forEach((word) => {
-    const value = parseNumericToken(word.text);
-    if (value != null) fromWords.push(value);
-  });
+  const collect = async (whitelist) => {
+    await safeSetParameters(worker, {
+      tessedit_pageseg_mode: '6',
+      tessedit_char_whitelist: whitelist,
+      user_defined_dpi: '300',
+    });
+    const recognized = await worker.recognize(imageSrc);
+    const fromText = extractNumbersFromText(recognized?.data?.text || '');
+    const fromWords = [];
+    (recognized?.data?.words || []).forEach((word) => {
+      const value = parseNumericToken(word.text);
+      if (value != null) fromWords.push(value);
+    });
+    return [...fromText, ...fromWords];
+  };
+
+  let nums = await collect('0123456789.-');
+  if (nums.length < 2) {
+    // Whitelist pass sometimes returns nothing on light/antialiased ticks.
+    nums = await collect('');
+  }
   await safeSetParameters(worker, { tessedit_char_whitelist: '' });
-  return repairDroppedDecimals([...fromText, ...fromWords]);
+  return repairDroppedDecimals(nums);
 };
 
 /** Pull a clean I_OUT (A)-style label from raw OCR text when crops are noisy. */
 const findIoutLabelInText = (text) => {
   const source = String(text || '');
+  // Match I_OUT (A) and common OCR corruptions: tout (A), lout (A), 1OUT (A), OUT (A)
   const match =
-    source.match(/\bI\s*_?\s*OUT\s*\(\s*A\s*\)/i) ||
-    source.match(/\bIOUT\s*\(\s*A\s*\)/i);
-  if (!match) return '';
-  return polishAxisTitle(match[0], 'A') || 'I_OUT (A)';
+    source.match(/\b[Il1T]?\s*_?\s*OUT\s*\(\s*A\s*\)/i) ||
+    source.match(/\bIOUT\s*\(\s*A\s*\)/i) ||
+    source.match(/\btout\s*\(\s*A\s*\)/i) ||
+    source.match(/\blout\s*\(\s*A\s*\)/i);
+  if (match || /\bout\s*\(\s*A\s*\)/i.test(source)) {
+    return 'I_OUT (A)';
+  }
+  return '';
+};
+
+/** If OCR almost got I_OUT (A), force the canonical label. */
+const canonicalizeXAxisTitle = (text) => {
+  const t = normalizeAxisLabelText(text);
+  if (!t) return '';
+  if (findIoutLabelInText(t) || /\bout\s*\(\s*A\s*\)/i.test(t)) {
+    return 'I_OUT (A)';
+  }
+  return t;
 };
 
 /**
@@ -787,9 +837,9 @@ export const extractManualGraphFieldsFromImage = async (imageSrc) => {
       rangeFromValues(refineTickValues(uniqueSortedValues(leftBand, 'y'), 'y'))
     )
   );
-  let xRange = sanitizeAxisRange(
-    rangeFromValues(refineTickValues(uniqueSortedValues(bottomBand, 'x'), 'x'))
-  );
+  let xRange = inferLinearTickRange(uniqueSortedValues(bottomBand, 'x'), 'x');
+  const xTickNumberPool = [...uniqueSortedValues(bottomBand, 'x')];
+  const yTickNumberPool = [...uniqueSortedValues(leftBand, 'y')];
 
   const graphTitle = extractGraphTitle(words, width, height, fullText);
   const fromVs = titlesFromVsPattern(graphTitle);
@@ -885,7 +935,8 @@ export const extractManualGraphFieldsFromImage = async (imageSrc) => {
           const crop = cropRegionToDataUrl(htmlImage, rect, 0, 4, { highContrast });
           if (!crop) continue;
           const nums = refineTickValues(await recognizeTickNumbers(worker, crop), 'x');
-          const next = sanitizeAxisRange(rangeFromValues(nums));
+          xTickNumberPool.push(...nums);
+          const next = inferLinearTickRange(nums, 'x');
           xTickCropRange = preferBetterRange(xTickCropRange, next);
           console.log('[MANUAL OCR] X tick numbers', { highContrast, nums, next });
         }
@@ -901,6 +952,7 @@ export const extractManualGraphFieldsFromImage = async (imageSrc) => {
           const crop = cropRegionToDataUrl(htmlImage, rect, 0, 4, { highContrast });
           if (!crop) continue;
           const nums = refineTickValues(await recognizeTickNumbers(worker, crop), 'y');
+          yTickNumberPool.push(...nums);
           const next = extendUniformTickRange(sanitizeAxisRange(rangeFromValues(nums)));
           yTickCropRange = preferBetterRange(yTickCropRange, next);
           console.log('[MANUAL OCR] Y tick numbers', { highContrast, nums, next });
@@ -923,18 +975,34 @@ export const extractManualGraphFieldsFromImage = async (imageSrc) => {
     /* ignore */
   }
 
-  xRange = sanitizeAxisRange(preferBetterRange(xTickCropRange, xRange));
+  // Also mine full-page OCR text for X tick sequences (0/5/10/15/20/25).
+  xTickNumberPool.push(...extractNumbersFromText(fullText));
+  const xFromPool = inferLinearTickRange(xTickNumberPool, 'x');
+
+  xRange = preferBetterRange(preferBetterRange(xTickCropRange, xRange), xFromPool);
+  xRange = sanitizeAxisRange(xRange);
+  // Never keep placeholder 0..100 as an OCR result.
+  if (xRange && xRange.min === 0 && xRange.max === 100) {
+    xRange = null;
+  }
+
   yRange = extendUniformTickRange(
     sanitizeAxisRange(preferBetterRange(yTickCropRange, yRange))
   );
 
-  // Prefer printed I_OUT (A) over figure-caption "Load Current" + leaked (%).
-  const ioutTitle = findIoutLabelInText(`${xLabelCropText}\n${fullText}`);
+  // Prefer printed I_OUT (A) over OCR mangling like "tout (A)".
+  const ioutTitle =
+    findIoutLabelInText(`${xLabelCropText}\n${fullText}\n${xTitleFromCrop}\n${xTitleFromFull}`) ||
+    canonicalizeXAxisTitle(xTitleFromCrop) ||
+    canonicalizeXAxisTitle(xTitleFromFull);
   const xTitle =
-    ioutTitle ||
-    pickBestAxisLabel('x', [xTitleFromCrop, xTitleFromFull], {
-      unitSources: [xLabelCropText],
-    });
+    (ioutTitle && /^I_OUT/i.test(ioutTitle) ? ioutTitle : '') ||
+    canonicalizeXAxisTitle(
+      pickBestAxisLabel('x', [xTitleFromCrop, xTitleFromFull], {
+        unitSources: [xLabelCropText],
+      })
+    ) ||
+    ioutTitle;
 
   const yTitle = pickBestAxisLabel(
     'y',
