@@ -103,7 +103,7 @@ const rangeFromValues = (values) => {
   };
 };
 
-/** Prefer denser tick series over sparse wide spans (e.g. 98..102 over 0..98.4). */
+/** Prefer coherent tick series: many ticks, capped density, mild span (not 0.4..0.5 or 0..98.4). */
 const preferBetterRange = (primary, secondary) => {
   const score = (range) => {
     if (!range) return -Infinity;
@@ -111,11 +111,11 @@ const preferBetterRange = (primary, secondary) => {
     const count = range.count || 0;
     if (!(span > 0) || count < 2) return -Infinity;
     const density = count / Math.max(span, 0.1);
-    // Tick count + density beat raw span — otherwise 0..98 (2 pts) beats 98..102 (5 pts).
-    let s = count * 12 + density * 40;
-    if (count <= 2) s -= 55;
+    // Cap density so 2 pts in a 0.1 span cannot beat a real 0..5.5 / 98..102 series.
+    let s = count * 15 + Math.min(density, 2.5) * 20 + Math.log10(span + 1) * 15;
+    if (count <= 2) s -= 80;
+    if (count <= 3 && span < 1) s -= 55;
     if (count <= 3 && span > 20) s -= 45;
-    if (density >= 0.5) s += 25;
     if (density < 0.05 && span > 10) s -= 70;
     if (count <= 2 && span <= 5 && Number.isInteger(range.min) && Number.isInteger(range.max)) {
       s -= 40;
@@ -145,6 +145,10 @@ const sanitizeAxisRange = (range) => {
   if (range.count <= 2 && range.min === 0 && range.max === 100) return null;
   if (range.count <= 2 && Math.abs(range.max - range.min) <= 5 && Number.isInteger(range.min) && Number.isInteger(range.max)) {
     // e.g. 2..5 from splitting a two-digit tick
+    return null;
+  }
+  // Microscopic fragments (0.4..0.5) from annotation/Y-leak — not an axis range.
+  if (range.count <= 3 && Math.abs(range.max - range.min) <= 0.75 && Math.abs(range.max) < 10) {
     return null;
   }
   // Weak partial reads like 1..10 with almost no interior ticks.
@@ -203,9 +207,10 @@ const scoreTickCluster = (cluster, { favorHighMagnitude = false } = {}) => {
   const density = cluster.length / Math.max(span, 0.1);
   const median = cluster[Math.floor(cluster.length / 2)];
   const fracCount = cluster.filter((v) => Math.abs(v % 1) > 1e-9).length;
-  let s = cluster.length * 5 + density * 25;
+  // Cap density — tiny 0.4..0.5 clusters must not outrank a full axis series.
+  let s = cluster.length * 8 + Math.min(density, 3) * 15 + Math.log10(span + 1) * 10;
   if (favorHighMagnitude) {
-    // Y crops often also see X origin/fractions; prefer the high integer tick run.
+    // Y crops often also see X origin/fractions; prefer the high tick run.
     if (Math.abs(median) >= 10) s += 35;
     if (fracCount >= cluster.length * 0.5 && Math.abs(median) < 10) s -= 45;
   }
@@ -410,16 +415,39 @@ const inferLinearTickRange = (values, axis) => {
   let nums = [...new Set(refineTickValues(values, axis))].sort((a, b) => a - b);
   if (nums.length < 2) return null;
 
-  if (axis === 'x' && nums[0] === 1 && nums.length >= 3) {
-    const rest = nums.slice(1);
-    const step = rest[1] - rest[0];
-    // If remaining ticks look like step, 2*step, 3*step..., leftmost "1" was likely a misread "0".
+  if (axis === 'x' && nums.length >= 3) {
+    const diffs = [];
+    for (let i = 1; i < nums.length; i += 1) {
+      const d = nums[i] - nums[i - 1];
+      if (d > 0) diffs.push(d);
+    }
+    diffs.sort((a, b) => a - b);
+    const step = diffs.length ? diffs[Math.floor(diffs.length / 2)] : 0;
+
+    if (nums[0] === 1 && nums.length >= 3) {
+      const rest = nums.slice(1);
+      const restStep = rest.length >= 2 ? rest[1] - rest[0] : step;
+      // If remaining ticks look like step, 2*step, 3*step..., leftmost "1" was likely a misread "0".
+      if (
+        restStep > 0 &&
+        Math.abs(rest[0] - restStep) <= restStep * 0.05 + 1e-9 &&
+        rest.every((v, i) => Math.abs(v - restStep * (i + 1)) <= restStep * 0.05 + 1e-9)
+      ) {
+        nums = [0, ...rest];
+      }
+    }
+
+    // Series starts at one step (0.5, 1.0, …) — OCR often drops the printed "0".
     if (
       step > 0 &&
-      Math.abs(rest[0] - step) <= step * 0.05 + 1e-9 &&
-      rest.every((v, i) => Math.abs(v - step * (i + 1)) <= step * 0.05 + 1e-9)
+      nums[0] > 0 &&
+      Math.abs(nums[0] - step) <= step * 0.2 + 1e-9 &&
+      diffs.every((d) => Math.abs(d - step) <= step * 0.3 + 1e-9)
     ) {
-      nums = [0, ...rest];
+      const prepended = Number((nums[0] - step).toFixed(6));
+      if (prepended >= 0 && Math.abs(prepended) <= step * 0.2 + 1e-9) {
+        nums = [0, ...nums];
+      }
     }
   }
 
