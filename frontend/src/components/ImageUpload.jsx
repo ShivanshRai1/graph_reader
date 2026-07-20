@@ -69,11 +69,17 @@ const ImageUpload = ({ onImageLoaded, onAiExtensionCapture, isAiExtractionLoadin
     const urlCurveTitle = getUrlParam('curve_title');
     const urlXTitle = getUrlParam('x_title', 'x_label', 'xlabel');
     const urlYTitle = getUrlParam('y_title', 'y_label', 'ylabel');
-    const filled = [];
-    const skipped = [];
+    // Consume axis overwrite permission once outside setState so React Strict Mode
+    // double-invokes cannot clear the ref mid-updater and drop min/max fills.
+    const allowAxisOverwrite = allowOcrAxisOverwriteRef.current;
+    allowOcrAxisOverwriteRef.current = false;
+
+    const applyResultRef = { filled: [], skipped: [] };
 
     setGraphConfig((prev) => {
       const next = { ...prev };
+      const filled = [];
+      const skipped = [];
       let changed = false;
 
       const graphTitle = String(fields.graphTitle || '').trim();
@@ -112,36 +118,49 @@ const ImageUpload = ({ onImageLoaded, onAiExtensionCapture, isAiExtractionLoadin
         skipped.push('Y title (from URL)');
       }
 
-      const hasAxis =
-        Number.isFinite(fields.xMin) &&
-        Number.isFinite(fields.xMax) &&
-        Number.isFinite(fields.yMin) &&
-        Number.isFinite(fields.yMax);
+      if (allowAxisOverwrite) {
+        const canX =
+          Number.isFinite(fields.xMin) &&
+          Number.isFinite(fields.xMax) &&
+          fields.xMin !== fields.xMax;
+        const canY =
+          Number.isFinite(fields.yMin) &&
+          Number.isFinite(fields.yMax) &&
+          fields.yMin !== fields.yMax;
 
-      if (hasAxis && allowOcrAxisOverwriteRef.current) {
-        next.xMin = fields.xMin;
-        next.xMax = fields.xMax;
-        next.yMin = fields.yMin;
-        next.yMax = fields.yMax;
-        filled.push('X/Y min-max');
-        changed = true;
-        allowOcrAxisOverwriteRef.current = false;
-      } else if (!hasAxis) {
-        skipped.push('X/Y min-max (OCR could not read ticks)');
+        if (canX) {
+          next.xMin = fields.xMin;
+          next.xMax = fields.xMax;
+          filled.push('X min-max');
+          changed = true;
+        } else {
+          skipped.push('X min-max (OCR could not read ticks)');
+        }
+
+        if (canY) {
+          next.yMin = fields.yMin;
+          next.yMax = fields.yMax;
+          filled.push('Y min-max');
+          changed = true;
+        } else {
+          skipped.push('Y min-max (OCR could not read ticks)');
+        }
       } else {
         skipped.push('X/Y min-max (already edited / not allowed)');
       }
 
+      applyResultRef.filled = filled;
+      applyResultRef.skipped = skipped;
       return changed ? next : prev;
     });
 
-    return { filled, skipped };
+    return { filled: applyResultRef.filled, skipped: applyResultRef.skipped };
   };
 
   const runManualOcrFill = (imageBase64) => {
     const requestId = ++manualOcrRequestIdRef.current;
     allowOcrAxisOverwriteRef.current = true;
-    setManualOcrStatus('OCR reading image… (first run may take a bit)');
+    setManualOcrStatus('OCR reading image + axis labels… (may take a few seconds)');
     console.log('[MANUAL OCR] Queued for manual capture image');
 
     void (async () => {
