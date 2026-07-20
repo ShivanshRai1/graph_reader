@@ -103,18 +103,33 @@ const rangeFromValues = (values) => {
   };
 };
 
-/** Prefer denser / wider tick sets; reject weak 2-point fragments (e.g. 0..100, 2..5). */
+/** Prefer denser tick series over sparse wide spans (e.g. 98..102 over 0..98.4). */
 const preferBetterRange = (primary, secondary) => {
   const score = (range) => {
     if (!range) return -Infinity;
     const span = Math.abs(range.max - range.min);
     const count = range.count || 0;
-    // Prefer more ticks and wider span when OCR returns competing partial reads.
-    let s = count * 8 + span * 1.2;
+    if (!(span > 0) || count < 2) return -Infinity;
+    const density = count / Math.max(span, 0.1);
+    // Tick count + density beat raw span — otherwise 0..98 (2 pts) beats 98..102 (5 pts).
+    let s = count * 12 + density * 40;
+    if (count <= 2) s -= 55;
+    if (count <= 3 && span > 20) s -= 45;
+    if (density >= 0.5) s += 25;
+    if (density < 0.05 && span > 10) s -= 70;
     if (count <= 2 && span <= 5 && Number.isInteger(range.min) && Number.isInteger(range.max)) {
       s -= 40;
     }
     if (count <= 2 && range.min === 0 && range.max === 100) s -= 80;
+    // Sparse 0 → large fractional max is almost always OCR junk (origin + misread).
+    if (
+      range.min === 0 &&
+      count <= 3 &&
+      span > 20 &&
+      Math.abs(range.max % 1) > 0.01
+    ) {
+      s -= 90;
+    }
     return s;
   };
   const a = score(primary);
@@ -135,14 +150,73 @@ const sanitizeAxisRange = (range) => {
   // Weak partial reads like 1..10 with almost no interior ticks.
   if (range.max <= 10 && range.min >= 1 && range.count <= 4) return null;
   if (range.min === 1 && range.max === 10) return null;
+  // Origin + one noisy high value (e.g. 0..98.4) is not a real tick series.
+  if (
+    range.min === 0 &&
+    range.count <= 3 &&
+    Math.abs(range.max - range.min) > 20 &&
+    Math.abs(range.max % 1) > 0.01
+  ) {
+    return null;
+  }
   return range;
+};
+
+/** Split sorted tick values into contiguous clusters by median-gap limit. */
+const splitTickClusters = (values) => {
+  const sorted = [];
+  [...values]
+    .filter((v) => Number.isFinite(v))
+    .sort((a, b) => a - b)
+    .forEach((v) => {
+      if (!sorted.length || Math.abs(sorted[sorted.length - 1] - v) > 1e-9) sorted.push(v);
+    });
+  if (sorted.length < 2) return sorted.length ? [sorted] : [];
+
+  const gaps = [];
+  for (let i = 1; i < sorted.length; i += 1) {
+    gaps.push(sorted[i] - sorted[i - 1]);
+  }
+  const sortedGaps = [...gaps].sort((a, b) => a - b);
+  const medianGap = sortedGaps[Math.floor(sortedGaps.length / 2)];
+  if (!(medianGap > 0)) return [sorted];
+
+  const limit = medianGap * 2.75 + 1e-9;
+  const clusters = [];
+  let current = [sorted[0]];
+  for (let i = 1; i < sorted.length; i += 1) {
+    if (sorted[i] - sorted[i - 1] <= limit) {
+      current.push(sorted[i]);
+    } else {
+      clusters.push(current);
+      current = [sorted[i]];
+    }
+  }
+  clusters.push(current);
+  return clusters;
+};
+
+const scoreTickCluster = (cluster, { favorHighMagnitude = false } = {}) => {
+  if (!cluster || cluster.length < 2) return -Infinity;
+  const span = cluster[cluster.length - 1] - cluster[0];
+  if (!(span > 0)) return -Infinity;
+  const density = cluster.length / Math.max(span, 0.1);
+  const median = cluster[Math.floor(cluster.length / 2)];
+  const fracCount = cluster.filter((v) => Math.abs(v % 1) > 1e-9).length;
+  let s = cluster.length * 5 + density * 25;
+  if (favorHighMagnitude) {
+    // Y crops often also see X origin/fractions; prefer the high integer tick run.
+    if (Math.abs(median) >= 10) s += 35;
+    if (fracCount >= cluster.length * 0.5 && Math.abs(median) < 10) s -= 45;
+  }
+  return s;
 };
 
 /**
  * Keep the densest run of tick values (drop stray figure numbers / opposite-axis leaks).
  * Purely statistical — no fixed endpoints.
  */
-const densestTickCluster = (values) => {
+const densestTickCluster = (values, { favorHighMagnitude = false } = {}) => {
   const sorted = [];
   [...values]
     .filter((v) => Number.isFinite(v))
@@ -152,40 +226,25 @@ const densestTickCluster = (values) => {
     });
   if (sorted.length < 4) return sorted;
 
-  const gaps = [];
-  for (let i = 1; i < sorted.length; i += 1) {
-    gaps.push(sorted[i] - sorted[i - 1]);
-  }
-  const sortedGaps = [...gaps].sort((a, b) => a - b);
-  const medianGap = sortedGaps[Math.floor(sortedGaps.length / 2)];
-  if (!(medianGap > 0)) return sorted;
+  const clusters = splitTickClusters(sorted);
+  const candidates = clusters.filter((c) => c.length >= 3);
+  if (!candidates.length) return sorted;
 
-  const limit = medianGap * 2.75 + 1e-9;
-  let best = [];
-  let current = [sorted[0]];
-  for (let i = 1; i < sorted.length; i += 1) {
-    if (sorted[i] - sorted[i - 1] <= limit) {
-      current.push(sorted[i]);
-    } else {
-      if (
-        current.length > best.length ||
-        (current.length === best.length &&
-          Math.abs(current[current.length - 1] - current[0]) < Math.abs(best[best.length - 1] - best[0]))
-      ) {
-        best = current;
-      }
-      current = [sorted[i]];
+  let best = candidates[0];
+  let bestScore = scoreTickCluster(best, { favorHighMagnitude });
+  for (let i = 1; i < candidates.length; i += 1) {
+    const c = candidates[i];
+    const s = scoreTickCluster(c, { favorHighMagnitude });
+    if (
+      s > bestScore ||
+      (s === bestScore &&
+        Math.abs(c[c.length - 1] - c[0]) < Math.abs(best[best.length - 1] - best[0]))
+    ) {
+      best = c;
+      bestScore = s;
     }
   }
-  if (
-    current.length > best.length ||
-    (current.length === best.length &&
-      best.length &&
-      Math.abs(current[current.length - 1] - current[0]) < Math.abs(best[best.length - 1] - best[0]))
-  ) {
-    best = current;
-  }
-  return best.length >= 3 ? best : sorted;
+  return best;
 };
 
 /**
@@ -299,7 +358,8 @@ const refineTickValues = (values, axis) => {
 
   if (axis === 'y') {
     // Do not clamp to |v|<=20 — many datasheet Y axes are 50–150, 70–100, etc.
-    list = densestTickCluster(list);
+    // Prefer high-magnitude integer runs over X-origin / fractional leaks in the left crop.
+    list = densestTickCluster(list, { favorHighMagnitude: true });
   }
 
   return list;
