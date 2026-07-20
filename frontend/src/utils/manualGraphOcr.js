@@ -4,7 +4,7 @@
  * Results are written into existing form fields; user can edit anytime.
  *
  * Axis titles: full-image pass + cropped passes.
- * Vertical Y labels are rotated to horizontal before OCR (CW and CCW; best wins).
+ * Y labels support (1) stacked upright glyphs in a column, (2) true 90°-rotated text.
  * Axis ticks: dedicated digit-only crops (more reliable than full-page sparse hits).
  */
 
@@ -417,7 +417,7 @@ const isUnitOnlyLabel = (text) => {
 
 /** Keep printed name; attach a parenthetical unit only when OCR actually saw one. */
 const polishAxisTitle = (text, unitFromOcr = '') => {
-  let t = normalizeAxisLabelText(text);
+  let t = repairAxisLabelUnitOrder(normalizeAxisLabelText(text));
   if (!t || isUnitOnlyLabel(t)) return '';
   const existingUnits = extractParenUnits(t);
   if (existingUnits.length) return t.slice(0, 80);
@@ -429,16 +429,48 @@ const polishAxisTitle = (text, unitFromOcr = '') => {
   return t.slice(0, 80);
 };
 
+/**
+ * OCR on rotated vertical labels often emits "(%)NAME" instead of "NAME (%)".
+ * Reorder only — does not invent words or units.
+ */
+const repairAxisLabelUnitOrder = (text) => {
+  const t = normalizeAxisLabelText(text);
+  const match = t.match(/^\(\s*([^)]+?)\s*\)\s+(.+)$/);
+  if (!match) return t;
+  const unit = match[1].trim();
+  const name = match[2].trim();
+  if (!unit || !name || isUnitOnlyLabel(name)) return t;
+  return `${name} (${unit})`;
+};
+
+/** Reject rotated-OCR letter salad (e.g. Q3ZINVIWHON) even when a unit was detected. */
+const looksLikeOcrGibberish = (text) => {
+  const ordered = repairAxisLabelUnitOrder(normalizeAxisLabelText(text));
+  const bare = stripParenUnits(ordered).replace(/[^A-Za-z0-9]/g, '');
+  if (bare.length < 4) return false;
+  // Digit glued inside a letter run is almost never a real axis word.
+  if (/[A-Za-z]\d+[A-Za-z]/.test(bare)) return true;
+  const letters = bare.replace(/[^A-Za-z]/g, '');
+  if (letters.length < 4) return true;
+  const vowels = (letters.match(/[aeiouAEIOU]/g) || []).length;
+  const vowelRatio = vowels / letters.length;
+  if (vowelRatio < 0.22) return true;
+  // Long consonant clumps with weak vowels — typical of mirrored/garbled OCR.
+  if (vowelRatio < 0.34 && /[B-DF-HJ-NP-TV-XZ]{4,}/i.test(letters)) return true;
+  return false;
+};
+
 const isFigureCaptionText = (text) => FIGURE_CAPTION_RE.test(String(text || '').trim());
 
 /** Reject OCR noise like: Z aw our " LE VU (A) */
 const looksLikeGarbageTitle = (text) => {
-  const t = normalizeAxisLabelText(text);
+  const t = repairAxisLabelUnitOrder(normalizeAxisLabelText(text));
   if (!t) return true;
   if (isFigureCaptionText(t)) return true;
   if (/["'`]/.test(t)) return true;
   if (/^\d/.test(t)) return true;
   if ((t.match(/[^A-Za-z0-9%°µμΩ()_/\s.-]/g) || []).length >= 2) return true;
+  if (looksLikeOcrGibberish(t)) return true;
 
   const withoutUnit = stripParenUnits(t);
   const tokens = withoutUnit.split(/\s+/).filter(Boolean);
@@ -489,21 +521,25 @@ const isGraphTitleFragment = (label, graphTitle) => {
 };
 
 const scoreAxisLabel = (text, axis = '', { graphTitle = '' } = {}) => {
-  const t = normalizeAxisLabelText(text);
-  if (isGarbageAxisLabel(t) || looksLikeGarbageTitle(t)) return -1;
+  const t = repairAxisLabelUnitOrder(normalizeAxisLabelText(text));
+  if (isGarbageAxisLabel(t) || looksLikeGarbageTitle(t) || looksLikeOcrGibberish(t)) return -1;
   let score = Math.min(stripParenUnits(t).length, 30);
   if (AXIS_LABEL_HINT.test(t)) score += 40;
   if (/\([A-Za-zµμΩ/%]+\)/.test(t)) score += 30;
   if (stripParenUnits(t).split(/\s+/).length <= 3) score += 10;
   // Printed axis labels are often uppercase; caption phrases are mixed/title case.
   const bare = stripParenUnits(t);
-  if (/^[A-Z0-9][A-Z0-9\s/%()._-]*$/.test(bare) && bare.length >= 4) {
+  if (/^[A-Z][A-Z\s/%()._-]*$/.test(bare) && bare.length >= 4 && !/\d/.test(bare)) {
     score += 15;
   }
 
   // Prefer short symbol-style axis labels over long figure-caption prose.
   if (bare.split(/\s+/).length >= 4) score -= 20;
   if (isGraphTitleFragment(t, graphTitle)) score -= 120;
+  // Unit must trail the name: "NAME (%)" not "(%)NAME".
+  if (/^\(\s*[^)]+\s*\)/.test(normalizeAxisLabelText(text)) && !/^\(\s*[^)]+\s*\)\s*$/.test(normalizeAxisLabelText(text))) {
+    score -= 25;
+  }
   if (axis === 'x' && /\(%\)/.test(t)) score -= 45;
   if (axis === 'y' && /\(%\)/.test(t)) score += 20;
   if (axis === 'x' && /\(\s*[A-Za-zµμΩ]+\s*\)/.test(t)) score += 20;
@@ -542,10 +578,10 @@ const pickBestAxisLabel = (axis, candidates = [], { unitSources = [], graphTitle
   let best = '';
   let bestScore = -1;
   expanded.forEach((raw) => {
-    if (isUnitOnlyLabel(raw) || looksLikeGarbageTitle(raw)) return;
+    if (isUnitOnlyLabel(raw) || looksLikeGarbageTitle(raw) || looksLikeOcrGibberish(raw)) return;
     const unitHint = extractParenUnits(raw)[0] || units[0] || '';
     const text = polishAxisTitle(raw, unitHint);
-    if (!text || looksLikeGarbageTitle(text)) return;
+    if (!text || looksLikeGarbageTitle(text) || looksLikeOcrGibberish(text)) return;
     const score = scoreAxisLabel(text, axis, { graphTitle });
     if (score > bestScore) {
       bestScore = score;
@@ -625,20 +661,100 @@ const extractAxisTitleFromBand = (words, band, imageHeight, { allowVerticalJoin 
   if (hinted) return hinted.slice(0, 80);
 
   if (allowVerticalJoin) {
-    const stacked = [...items]
-      .sort((a, b) => a.cy - b.cy)
-      .map((p) => p.text)
-      .join(' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-    if (!isGarbageAxisLabel(stacked) && AXIS_LABEL_HINT.test(stacked)) {
-      return stacked.slice(0, 80);
-    }
+    const stacked = extractStackedUprightLabels(items, band);
+    const stackedBest = stacked.find((s) => !isGarbageAxisLabel(s) && !looksLikeOcrGibberish(s));
+    if (stackedBest) return stackedBest.slice(0, 80);
   }
 
   const longest = [...lines].sort((a, b) => b.length - a.length)[0] || '';
   if (!longest || isGarbageAxisLabel(longest)) return '';
   return longest.slice(0, 80);
+};
+
+/**
+ * Glue upright glyphs stacked in a vertical column (datasheet Y labels often use this,
+ * not true 90°-rotated text). Tries top→bottom and bottom→top. No invented characters.
+ */
+const glueStackedTokens = (sortedItems) => {
+  const chars = [];
+  (Array.isArray(sortedItems) ? sortedItems : []).forEach((item) => {
+    const t = String(item?.text || '').trim();
+    if (!t) return;
+    // Skip pure numeric tick labels; keep letters, %, parentheses, unit fragments.
+    if (/^[-+]?\d+(?:\.\d+)?$/.test(t) && !/[A-Za-z%°]/.test(t)) return;
+    chars.push(t);
+  });
+  if (chars.length < 3) return '';
+
+  const singleCount = chars.filter((c) => c.length === 1).length;
+  const mostlySingles = singleCount >= Math.ceil(chars.length * 0.55);
+  let raw = mostlySingles ? chars.join('') : chars.join(' ');
+  raw = raw
+    .replace(/([A-Za-z])\(/g, '$1 (')
+    .replace(/\(\s+/g, '(')
+    .replace(/\s+\)/g, ')')
+    .replace(/\(\s*%\s*\)/g, '(%)')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return normalizeAxisLabelText(raw);
+};
+
+/**
+ * From word/glyph boxes in a band, rebuild stacked-upright labels.
+ * @param {Array} wordsOrCenters tesseract words or {text,cx,cy,x0,y0,x1,y1}
+ */
+const extractStackedUprightLabels = (wordsOrCenters, band) => {
+  const items = [];
+  (Array.isArray(wordsOrCenters) ? wordsOrCenters : []).forEach((word) => {
+    const center =
+      word && Number.isFinite(word.cx) && word.text != null ? word : wordCenter(word);
+    if (!center?.text) return;
+    if (
+      Number.isFinite(band?.x0) &&
+      (center.cx < band.x0 ||
+        center.cx > band.x1 ||
+        center.cy < band.y0 ||
+        center.cy > band.y1)
+    ) {
+      return;
+    }
+    const raw = String(center.text || '').trim();
+    if (!raw) return;
+    if (/^[-+]?\d+(?:\.\d+)?$/.test(raw) && !/[A-Za-z%°]/.test(raw)) return;
+    items.push({
+      ...center,
+      text: raw,
+    });
+  });
+  if (items.length < 3) return [];
+
+  // Prefer a narrow vertical column (similar cx).
+  const byX = [...items].sort((a, b) => a.cx - b.cx);
+  const medianCx = byX[Math.floor(byX.length / 2)].cx;
+  const xTol = Math.max(
+    14,
+    Number.isFinite(band?.x1) && Number.isFinite(band?.x0) ? (band.x1 - band.x0) * 0.4 : 24
+  );
+  let column = items.filter((item) => Math.abs(item.cx - medianCx) <= xTol);
+  if (column.length < 3) column = items;
+
+  const topDown = glueStackedTokens([...column].sort((a, b) => a.cy - b.cy || a.cx - b.cx));
+  const bottomUp = glueStackedTokens([...column].sort((a, b) => b.cy - a.cy || a.cx - b.cx));
+  return [...new Set([topDown, bottomUp].filter((s) => s && s.length >= 3))];
+};
+
+const recognizeTextWithWords = async (worker, imageSrc, pagesegMode) => {
+  await safeSetParameters(worker, {
+    tessedit_char_whitelist: '',
+    user_defined_dpi: '300',
+    ...(pagesegMode != null ? { tessedit_pageseg_mode: String(pagesegMode) } : {}),
+  });
+  const recognized = await worker.recognize(imageSrc);
+  const lines = String(recognized?.data?.text || '')
+    .split(/\n+/)
+    .map((line) => line.replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+  return { lines, words: recognized?.data?.words || [] };
 };
 
 const resolveImageSize = (words, imageWidth, imageHeight) => {
@@ -718,8 +834,15 @@ const canvasToDataUrl = (canvas, scale = 3, { highContrast = false } = {}) => {
 /**
  * Crop a rect from the source image; optional 90° rotation so vertical text becomes horizontal.
  * rotateDeg: 0 | 90 (CW) | -90 (CCW)
+ * mirrorX: flip horizontally after rotate (helps when vertical text was read mirrored).
  */
-const cropRegionToDataUrl = (img, rect, rotateDeg = 0, scale = 3, { highContrast = false } = {}) => {
+const cropRegionToDataUrl = (
+  img,
+  rect,
+  rotateDeg = 0,
+  scale = 3,
+  { highContrast = false, mirrorX = false } = {}
+) => {
   if (typeof document === 'undefined') return null;
   const iw = img.naturalWidth || img.width;
   const ih = img.naturalHeight || img.height;
@@ -737,23 +860,39 @@ const cropRegionToDataUrl = (img, rect, rotateDeg = 0, scale = 3, { highContrast
   sctx.fillRect(0, 0, sw, sh);
   sctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
 
-  if (!rotateDeg) return canvasToDataUrl(srcCanvas, scale, { highContrast });
-
-  const dst = document.createElement('canvas');
-  dst.width = sh;
-  dst.height = sw;
-  const dctx = dst.getContext('2d');
-  dctx.fillStyle = '#ffffff';
-  dctx.fillRect(0, 0, dst.width, dst.height);
-  if (rotateDeg === 90) {
-    dctx.translate(dst.width, 0);
-    dctx.rotate(Math.PI / 2);
-  } else {
-    dctx.translate(0, dst.height);
-    dctx.rotate(-Math.PI / 2);
+  let working = srcCanvas;
+  if (rotateDeg) {
+    const dst = document.createElement('canvas');
+    dst.width = sh;
+    dst.height = sw;
+    const dctx = dst.getContext('2d');
+    dctx.fillStyle = '#ffffff';
+    dctx.fillRect(0, 0, dst.width, dst.height);
+    if (rotateDeg === 90) {
+      dctx.translate(dst.width, 0);
+      dctx.rotate(Math.PI / 2);
+    } else {
+      dctx.translate(0, dst.height);
+      dctx.rotate(-Math.PI / 2);
+    }
+    dctx.drawImage(srcCanvas, 0, 0);
+    working = dst;
   }
-  dctx.drawImage(srcCanvas, 0, 0);
-  return canvasToDataUrl(dst, scale, { highContrast });
+
+  if (mirrorX) {
+    const flipped = document.createElement('canvas');
+    flipped.width = working.width;
+    flipped.height = working.height;
+    const fctx = flipped.getContext('2d');
+    fctx.fillStyle = '#ffffff';
+    fctx.fillRect(0, 0, flipped.width, flipped.height);
+    fctx.translate(flipped.width, 0);
+    fctx.scale(-1, 1);
+    fctx.drawImage(working, 0, 0);
+    working = flipped;
+  }
+
+  return canvasToDataUrl(working, scale, { highContrast });
 };
 
 const safeSetParameters = async (worker, params) => {
@@ -1047,43 +1186,91 @@ export const extractManualGraphFieldsFromImage = async (imageSrc) => {
         xTitleFromCrop = findIoutLabelInText(fullText);
       }
 
-      console.log('[MANUAL OCR] Reading vertical Y-axis label (rotated crops)…');
+      console.log('[MANUAL OCR] Reading Y-axis label (stacked upright + rotated)…');
       const yLabelRects = [
-        { x: 0, y: height * 0.1, w: width * 0.15, h: height * 0.72 },
+        { x: 0, y: height * 0.08, w: width * 0.14, h: height * 0.75 },
         { x: 0, y: height * 0.12, w: width * 0.11, h: height * 0.7 },
       ];
       const yCandidates = [];
+      const yBand = {
+        x0: 0,
+        y0: height * 0.08,
+        x1: width * 0.16,
+        y1: height * 0.85,
+      };
+
+      // 1) Stacked upright glyphs (letters stay horizontal, stacked vertically) — do NOT rotate.
       for (const yLabelRect of yLabelRects) {
-        for (const rotateDeg of [90, -90]) {
-          const yCrop = cropRegionToDataUrl(htmlImage, yLabelRect, rotateDeg, 3.5, {
-            highContrast: true,
-          });
-          if (!yCrop) continue;
-          yCandidates.push(...(await recognizePlainText(worker, yCrop, 7)));
-        }
-      }
-      // If rotated crops were weak, retry once without thresholding.
-      if (!pickBestAxisLabel('y', yCandidates, { unitSources: [yCandidates.join('\n')], graphTitle })) {
-        for (const yLabelRect of yLabelRects) {
-          for (const rotateDeg of [90, -90]) {
-            const yCrop = cropRegionToDataUrl(htmlImage, yLabelRect, rotateDeg, 3.5, {
-              highContrast: false,
-            });
-            if (!yCrop) continue;
-            yCandidates.push(...(await recognizePlainText(worker, yCrop, 6)));
+        for (const highContrast of [true, false]) {
+          const uprightCrop = cropRegionToDataUrl(htmlImage, yLabelRect, 0, 4, { highContrast });
+          if (!uprightCrop) continue;
+          for (const psm of [6, 5]) {
+            const { lines, words: cropWords } = await recognizeTextWithWords(worker, uprightCrop, psm);
+            yCandidates.push(...lines);
+            yCandidates.push(
+              ...extractStackedUprightLabels(cropWords, {
+                x0: -Infinity,
+                y0: -Infinity,
+                x1: Infinity,
+                y1: Infinity,
+              })
+            );
           }
         }
       }
-      // Also accept "NAME (unit)" phrases from full OCR that are not caption fragments.
+      yCandidates.push(...extractStackedUprightLabels(words, yBand));
+
+      // 2) True sideways text: rotate into a horizontal line.
+      const pushRotatedY = async (rect, rotateDeg, highContrast, mirrorX) => {
+        const yCrop = cropRegionToDataUrl(htmlImage, rect, rotateDeg, 3.5, {
+          highContrast,
+          mirrorX,
+        });
+        if (!yCrop) return;
+        yCandidates.push(...(await recognizePlainText(worker, yCrop, 7)));
+      };
+      for (const yLabelRect of yLabelRects) {
+        for (const rotateDeg of [90, -90]) {
+          await pushRotatedY(yLabelRect, rotateDeg, true, false);
+        }
+      }
+      if (!pickBestAxisLabel('y', yCandidates, { unitSources: [yCandidates.join('\n')], graphTitle })) {
+        for (const yLabelRect of yLabelRects) {
+          for (const rotateDeg of [90, -90]) {
+            await pushRotatedY(yLabelRect, rotateDeg, false, false);
+            await pushRotatedY(yLabelRect, rotateDeg, true, true);
+          }
+        }
+      }
+
+      const reversedExtras = [];
+      yCandidates.forEach((line) => {
+        const ordered = repairAxisLabelUnitOrder(line);
+        const bare = stripParenUnits(ordered);
+        const unit = extractParenUnits(ordered)[0] || '';
+        if (bare.length < 4) return;
+        const reversed = bare.split('').reverse().join('');
+        if (reversed === bare) return;
+        reversedExtras.push(unit ? `${reversed} (${unit})` : reversed);
+      });
+      yCandidates.push(...reversedExtras);
+
       const parenLabels =
         String(fullText || '').match(/\b[A-Za-z][A-Za-z0-9_/.-]{1,40}\s*\(\s*[^)]{1,12}\s*\)/g) || [];
       parenLabels.forEach((label) => {
-        if (!isGraphTitleFragment(label, graphTitle)) yCandidates.push(label);
+        if (!isGraphTitleFragment(label, graphTitle) && !looksLikeOcrGibberish(label)) {
+          yCandidates.push(label);
+        }
       });
       yLabelCropText = yCandidates.join('\n');
       yTitleFromCrop = pickBestAxisLabel('y', yCandidates, {
         unitSources: [yLabelCropText],
         graphTitle,
+      });
+      console.log('[MANUAL OCR] Y label candidates', {
+        count: yCandidates.length,
+        sample: yCandidates.slice(0, 12),
+        yTitleFromCrop,
       });
 
       // X ticks: prefer bands just under the plot (labels sit lower than 0.66 on many datasheets).
