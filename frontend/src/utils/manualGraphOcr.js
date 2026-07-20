@@ -97,11 +97,6 @@ const rangeFromValues = (values) => {
   };
 };
 
-const pickAxisRangeFromHits = (hits, axis) => {
-  const values = uniqueSortedValues(hits, axis);
-  return rangeFromValues(values);
-};
-
 /** Prefer denser / wider tick sets; reject weak 2-point fragments (e.g. 0..100, 2..5). */
 const preferBetterRange = (primary, secondary) => {
   const score = (range) => {
@@ -136,43 +131,50 @@ const sanitizeAxisRange = (range) => {
 };
 
 /**
- * When OCR misses an end tick but the interior spacing is uniform, extend one step
- * (e.g. -0.75..1 with step 0.25 → -1..1).
+ * When OCR misses an end tick, extend one step when spacing is uniform
+ * (e.g. -0.75..1 → -1..1, or -1..0.75 → -1..1).
  */
 const extendUniformTickRange = (range) => {
-  if (!range?.values || range.values.length < 4) return range;
-  const vals = range.values;
-  const diffs = [];
-  for (let i = 1; i < vals.length; i += 1) {
-    const d = Number((vals[i] - vals[i - 1]).toFixed(6));
-    if (d > 0) diffs.push(d);
-  }
-  if (!diffs.length) return range;
-  diffs.sort((a, b) => a - b);
-  const step = diffs[Math.floor(diffs.length / 2)];
-  if (!(step > 0)) return range;
-  const uniform = diffs.every((d) => Math.abs(d - step) <= step * 0.2 + 1e-9);
-  if (!uniform) return range;
+  if (!range) return range;
+  let min = range.min;
+  let max = range.max;
+  const vals = Array.isArray(range.values) ? range.values : [min, max];
 
-  let min = vals[0];
-  let max = vals[vals.length - 1];
-  // Symmetric around 0 but missing one end (very common on normalized plots).
-  if (Math.abs(max - 1) < 1e-6 && Math.abs(min - -0.75) < 1e-6 && Math.abs(step - 0.25) < 1e-6) {
-    min = -1;
-  } else if (Math.abs(min - -1) < 1e-6 && Math.abs(max - 0.75) < 1e-6 && Math.abs(step - 0.25) < 1e-6) {
+  // Common normalized-axis miss: one end tick dropped (±0.75 vs ±1).
+  if (Math.abs(min + 1) < 1e-6 && Math.abs(max - 0.75) < 1e-6) {
     max = 1;
-  } else {
-    const nearMirror = Math.abs(Math.abs(max) - Math.abs(min)) <= step * 1.1 + 1e-9;
-    if (nearMirror && Math.abs(max) >= Math.abs(min) - 1e-9) {
-      const extMin = Number((min - step).toFixed(6));
-      if (Math.abs(extMin + max) <= step * 0.15 + 1e-9) min = extMin;
+  } else if (Math.abs(max - 1) < 1e-6 && Math.abs(min + 0.75) < 1e-6) {
+    min = -1;
+  }
+
+  if (vals.length >= 3) {
+    const diffs = [];
+    for (let i = 1; i < vals.length; i += 1) {
+      const d = Number((vals[i] - vals[i - 1]).toFixed(6));
+      if (d > 0) diffs.push(d);
     }
-    if (nearMirror && Math.abs(min) >= Math.abs(max) - 1e-9) {
-      const extMax = Number((max + step).toFixed(6));
-      if (Math.abs(extMax + min) <= step * 0.15 + 1e-9) max = extMax;
+    if (diffs.length) {
+      diffs.sort((a, b) => a - b);
+      const step = diffs[Math.floor(diffs.length / 2)];
+      if (step > 0) {
+        const uniform = diffs.every((d) => Math.abs(d - step) <= step * 0.25 + 1e-9);
+        if (uniform) {
+          const nearMirror = Math.abs(Math.abs(max) - Math.abs(min)) <= step * 1.15 + 1e-9;
+          if (nearMirror && Math.abs(max) > Math.abs(min) + 1e-9) {
+            const extMin = Number((min - step).toFixed(6));
+            if (Math.abs(extMin + max) <= step * 0.2 + 1e-9) min = extMin;
+          }
+          if (nearMirror && Math.abs(min) > Math.abs(max) + 1e-9) {
+            const extMax = Number((max + step).toFixed(6));
+            if (Math.abs(extMax + min) <= step * 0.2 + 1e-9) max = extMax;
+          }
+        }
+      }
     }
   }
-  return rangeFromValues([min, ...vals, max]) || range;
+
+  if (min === range.min && max === range.max) return range;
+  return rangeFromValues([min, ...vals, max]) || { ...range, min, max, count: range.count };
 };
 
 /** Repair "1.00" read as 100 when neighboring ticks are fractional. */
@@ -187,6 +189,23 @@ const repairDroppedDecimals = (values) => {
     }
     return v;
   });
+};
+
+/** Prefer tick values that form a dense low-span sequence (drop stray 100 when 0..25 exists). */
+const refineTickValues = (values, axis) => {
+  let list = repairDroppedDecimals(values.filter((v) => Number.isFinite(v)));
+  if (axis === 'x') {
+    const modest = list.filter((v) => v >= -1 && v <= 50);
+    if (modest.length >= 3) list = modest;
+    if (list.includes(100) && list.some((v) => v > 0 && v <= 50)) {
+      list = list.filter((v) => v !== 100);
+    }
+  }
+  if (axis === 'y') {
+    const modest = list.filter((v) => Math.abs(v) <= 20);
+    if (modest.length >= 3) list = modest;
+  }
+  return list;
 };
 
 const groupWordsIntoLines = (items, imageHeight) => {
@@ -327,17 +346,23 @@ const isGarbageAxisLabel = (text) => {
   return false;
 };
 
-const scoreAxisLabel = (text) => {
+const scoreAxisLabel = (text, axis = '') => {
   const t = normalizeAxisLabelText(text);
   if (isGarbageAxisLabel(t) || looksLikeGarbageTitle(t)) return -1;
   let score = Math.min(stripParenUnits(t).length, 30);
   if (AXIS_LABEL_HINT.test(t)) score += 40;
   if (/\bnormalized\b/i.test(t)) score += 50;
-  if (/\bi_out\b|\biout\b|\bi\s*out\b/i.test(t)) score += 60;
-  if (/%/.test(t)) score += 30;
+  if (/\bi_out\b|\biout\b|\bi\s*out\b/i.test(t)) score += 80;
   if (/\([A-Za-zµμΩ/%]+\)/.test(t)) score += 25;
-  // Prefer compact real labels over long noisy strings that somehow passed filters.
   if (stripParenUnits(t).split(/\s+/).length <= 3) score += 10;
+
+  // Printed axis symbols beat figure-caption "A vs. B" prose.
+  if (axis === 'x' && /\bload\s+current\b/i.test(t) && !/\bi_out\b/i.test(t)) score -= 55;
+  if (axis === 'y' && /\bload\s+regulation\b/i.test(t) && !/\bnormalized\b/i.test(t)) score -= 40;
+  // Don't let Y's (%) leak onto X caption prose.
+  if (axis === 'x' && /\(%\)/.test(t) && !/\bi_out\b|\bnormalized\b/i.test(t)) score -= 45;
+  if (axis === 'y' && /\(%\)/.test(t)) score += 30;
+  if (axis === 'x' && /\(\s*A\s*\)/i.test(t)) score += 35;
   return score;
 };
 
@@ -349,7 +374,7 @@ const pickBestAxisLabel = (axis, candidates = [], { unitSources = [] } = {}) => 
     if (text) expanded.push(text);
   });
 
-  // Units from label lines + extra OCR text (crop/full page) — never invent.
+  // Units only from this axis's sources — never invent, never cross-wire X↔Y units.
   const units = [];
   [...expanded, ...unitSources].forEach((line) => {
     extractParenUnits(line).forEach((unit) => {
@@ -377,13 +402,12 @@ const pickBestAxisLabel = (axis, candidates = [], { unitSources = [] } = {}) => 
     const unitHint = extractParenUnits(raw)[0] || units[0] || '';
     const text = polishAxisTitle(raw, unitHint);
     if (!text || looksLikeGarbageTitle(text)) return;
-    const score = scoreAxisLabel(text);
+    const score = scoreAxisLabel(text, axis);
     if (score > bestScore) {
       bestScore = score;
       best = text;
     }
   });
-  // Require a real signal — don't keep trailing "(A)" noise as an X title.
   return bestScore >= 40 ? best : '';
 };
 
@@ -758,8 +782,14 @@ export const extractManualGraphFieldsFromImage = async (imageSrc) => {
     y1: Math.min(height * 0.8, bottomCeiling),
   });
 
-  let yRange = pickAxisRangeFromHits(leftBand, 'y');
-  let xRange = pickAxisRangeFromHits(bottomBand, 'x');
+  let yRange = extendUniformTickRange(
+    sanitizeAxisRange(
+      rangeFromValues(refineTickValues(uniqueSortedValues(leftBand, 'y'), 'y'))
+    )
+  );
+  let xRange = sanitizeAxisRange(
+    rangeFromValues(refineTickValues(uniqueSortedValues(bottomBand, 'x'), 'x'))
+  );
 
   const graphTitle = extractGraphTitle(words, width, height, fullText);
   const fromVs = titlesFromVsPattern(graphTitle);
@@ -815,10 +845,14 @@ export const extractManualGraphFieldsFromImage = async (imageSrc) => {
       if (xLabelCrop) {
         const xLines = await recognizePlainText(worker, xLabelCrop, 7);
         xLabelCropText = xLines.join('\n');
-        xTitleFromCrop = pickBestAxisLabel('x', xLines, { unitSources: [xLabelCropText, fullText] });
+        // Units only from X crop — never fullText (that leaks Y's "%").
+        xTitleFromCrop = pickBestAxisLabel('x', xLines, { unitSources: [xLabelCropText] });
         if (!xTitleFromCrop) {
-          xTitleFromCrop = findIoutLabelInText(`${xLabelCropText}\n${fullText}`);
+          xTitleFromCrop = findIoutLabelInText(xLabelCropText);
         }
+      }
+      if (!xTitleFromCrop) {
+        xTitleFromCrop = findIoutLabelInText(fullText);
       }
 
       console.log('[MANUAL OCR] Reading vertical Y-axis label (rotated crops)…');
@@ -838,20 +872,23 @@ export const extractManualGraphFieldsFromImage = async (imageSrc) => {
         unitSources: [yLabelCropText, fullText],
       });
 
-      // X ticks: try a couple of horizontal bands; keep the densest valid range.
+      // X ticks: try bands with and without thresholding (threshold can wipe light ticks).
       console.log('[MANUAL OCR] Reading X tick number crops…');
       const xTickRects = [
         { x: width * 0.2, y: height * 0.68, w: width * 0.68, h: height * 0.08 },
         { x: width * 0.18, y: height * 0.72, w: width * 0.7, h: height * 0.07 },
         { x: width * 0.22, y: height * 0.64, w: width * 0.65, h: height * 0.09 },
+        { x: width * 0.15, y: height * 0.7, w: width * 0.75, h: height * 0.1 },
       ];
       for (const rect of xTickRects) {
-        const crop = cropRegionToDataUrl(htmlImage, rect, 0, 4, { highContrast: true });
-        if (!crop) continue;
-        const nums = await recognizeTickNumbers(worker, crop);
-        const next = sanitizeAxisRange(rangeFromValues(nums));
-        xTickCropRange = preferBetterRange(xTickCropRange, next);
-        console.log('[MANUAL OCR] X tick numbers', nums, next);
+        for (const highContrast of [false, true]) {
+          const crop = cropRegionToDataUrl(htmlImage, rect, 0, 4, { highContrast });
+          if (!crop) continue;
+          const nums = refineTickValues(await recognizeTickNumbers(worker, crop), 'x');
+          const next = sanitizeAxisRange(rangeFromValues(nums));
+          xTickCropRange = preferBetterRange(xTickCropRange, next);
+          console.log('[MANUAL OCR] X tick numbers', { highContrast, nums, next });
+        }
       }
 
       console.log('[MANUAL OCR] Reading Y tick number crops…');
@@ -860,12 +897,14 @@ export const extractManualGraphFieldsFromImage = async (imageSrc) => {
         { x: width * 0.08, y: height * 0.1, w: width * 0.14, h: height * 0.72 },
       ];
       for (const rect of yTickRects) {
-        const crop = cropRegionToDataUrl(htmlImage, rect, 0, 4, { highContrast: true });
-        if (!crop) continue;
-        const nums = await recognizeTickNumbers(worker, crop);
-        const next = extendUniformTickRange(sanitizeAxisRange(rangeFromValues(nums)));
-        yTickCropRange = preferBetterRange(yTickCropRange, next);
-        console.log('[MANUAL OCR] Y tick numbers', nums, next);
+        for (const highContrast of [false, true]) {
+          const crop = cropRegionToDataUrl(htmlImage, rect, 0, 4, { highContrast });
+          if (!crop) continue;
+          const nums = refineTickValues(await recognizeTickNumbers(worker, crop), 'y');
+          const next = extendUniformTickRange(sanitizeAxisRange(rangeFromValues(nums)));
+          yTickCropRange = preferBetterRange(yTickCropRange, next);
+          console.log('[MANUAL OCR] Y tick numbers', { highContrast, nums, next });
+        }
       }
 
       console.log('[MANUAL OCR] Axis crop titles', {
@@ -884,17 +923,18 @@ export const extractManualGraphFieldsFromImage = async (imageSrc) => {
     /* ignore */
   }
 
-  xRange = sanitizeAxisRange(preferBetterRange(xTickCropRange, sanitizeAxisRange(xRange)));
+  xRange = sanitizeAxisRange(preferBetterRange(xTickCropRange, xRange));
   yRange = extendUniformTickRange(
-    sanitizeAxisRange(preferBetterRange(yTickCropRange, sanitizeAxisRange(yRange)))
+    sanitizeAxisRange(preferBetterRange(yTickCropRange, yRange))
   );
 
+  // Prefer printed I_OUT (A) over figure-caption "Load Current" + leaked (%).
+  const ioutTitle = findIoutLabelInText(`${xLabelCropText}\n${fullText}`);
   const xTitle =
-    pickBestAxisLabel(
-      'x',
-      [xTitleFromCrop, xTitleFromFull, findIoutLabelInText(fullText), fromVs.xTitle],
-      { unitSources: [xLabelCropText, fullText] }
-    ) || findIoutLabelInText(`${xLabelCropText}\n${fullText}`);
+    ioutTitle ||
+    pickBestAxisLabel('x', [xTitleFromCrop, xTitleFromFull], {
+      unitSources: [xLabelCropText],
+    });
 
   const yTitle = pickBestAxisLabel(
     'y',
@@ -918,7 +958,7 @@ export const extractManualGraphFieldsFromImage = async (imageSrc) => {
     tickCrops: { x: xTickCropRange, y: yTickCropRange },
     captionY,
     sources: {
-      x: { crop: xTitleFromCrop, full: xTitleFromFull, vs: fromVs.xTitle },
+      x: { crop: xTitleFromCrop, full: xTitleFromFull, iout: ioutTitle, vs: fromVs.xTitle },
       y: { crop: yTitleFromCrop, full: yTitleFromFull, vs: fromVs.yTitle },
     },
   });
