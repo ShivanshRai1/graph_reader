@@ -1,10 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { useGraph } from '../context/GraphContext';
+import {
+  extractManualGraphFieldsFromImage,
+  isManualOcrDefaultAxisConfig,
+} from '../utils/manualGraphOcr';
 
 const ImageUpload = ({ onImageLoaded, onAiExtensionCapture, isAiExtractionLoading = false, skipCaptureChoice = false, initialPendingCapture = null, onPendingCaptureChange = () => {} }) => {
   const { setUploadedImage, clearDataPoints, setGraphConfig, setGraphArea } = useGraph();
   const fileInputRef = useRef(null);
   const [pendingCapture, setPendingCapture] = useState(null);
+  const manualOcrRequestIdRef = useRef(0);
 
   useEffect(() => {
     if (!initialPendingCapture?.imageBase64) return;
@@ -17,6 +22,11 @@ const ImageUpload = ({ onImageLoaded, onAiExtensionCapture, isAiExtractionLoadin
       };
     });
   }, [initialPendingCapture, onPendingCaptureChange]);
+
+  useEffect(() => () => {
+    // Invalidate in-flight OCR if the upload panel unmounts.
+    manualOcrRequestIdRef.current += 1;
+  }, []);
 
   const resetGraphForManualCapture = (clearImageFirst = false) => {
     if (clearImageFirst) {
@@ -35,11 +45,59 @@ const ImageUpload = ({ onImageLoaded, onAiExtensionCapture, isAiExtractionLoadin
     }));
   };
 
+  const applyManualOcrFields = (fields) => {
+    if (!fields) return;
+    setGraphConfig((prev) => {
+      const next = { ...prev };
+      let changed = false;
+
+      const ocrTitle = String(fields.curveTitle || '').trim();
+      if (ocrTitle && !String(prev.curveName || '').trim()) {
+        next.curveName = ocrTitle;
+        changed = true;
+      }
+
+      const canFillAxis = isManualOcrDefaultAxisConfig(prev);
+      if (
+        canFillAxis &&
+        Number.isFinite(fields.xMin) &&
+        Number.isFinite(fields.xMax) &&
+        Number.isFinite(fields.yMin) &&
+        Number.isFinite(fields.yMax)
+      ) {
+        next.xMin = fields.xMin;
+        next.xMax = fields.xMax;
+        next.yMin = fields.yMin;
+        next.yMax = fields.yMax;
+        changed = true;
+      }
+
+      return changed ? next : prev;
+    });
+  };
+
+  const runManualOcrFill = (imageBase64) => {
+    const requestId = ++manualOcrRequestIdRef.current;
+    void (async () => {
+      try {
+        const fields = await extractManualGraphFieldsFromImage(imageBase64);
+        if (requestId !== manualOcrRequestIdRef.current) return;
+        applyManualOcrFields(fields);
+      } catch (error) {
+        if (requestId === manualOcrRequestIdRef.current) {
+          console.warn('[MANUAL OCR] Auto-fill skipped:', error);
+        }
+      }
+    })();
+  };
+
   const triggerManualCapture = (imageBase64, source, preserveGraphContext = false) => {
     if (!imageBase64) return;
     resetGraphForManualCapture(source === 'paste');
     setUploadedImage(imageBase64);
     onImageLoaded?.({ source, preserveGraphContext });
+    // Manual path only — AI capture never calls this.
+    runManualOcrFill(imageBase64);
   };
 
   const processImage = async (blob, source) => {
@@ -69,6 +127,8 @@ const ImageUpload = ({ onImageLoaded, onAiExtensionCapture, isAiExtractionLoadin
 
   const handleCaptureWithAiExtension = async () => {
     if (!pendingCapture?.imageBase64 || isAiExtractionLoading) return;
+    // Cancel any stale manual OCR if user switched to AI after a prior manual attempt.
+    manualOcrRequestIdRef.current += 1;
     const succeeded = await onAiExtensionCapture?.(pendingCapture.imageBase64, pendingCapture.source);
     if (succeeded) {
       setPendingCapture(null);
