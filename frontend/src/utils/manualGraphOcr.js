@@ -18,9 +18,14 @@ const AXIS_LABEL_HINT =
 
 const parseNumericToken = (raw) => {
   let text = String(raw || '').trim().replace(/,/g, '');
-  text = text.replace(/[Oo]/g, '0');
-  if (/^[-+]?[\d.lI]+([eE][-+]?\d+)?$/.test(text)) {
-    text = text.replace(/[lI]/g, '1');
+  // Tick glyphs are often confused: O→0, l/I→1, S→5, Z→2.
+  if (/^[-+]?[0-9OoIlSsZz.]+([eE][-+]?\d+)?$/.test(text)) {
+    text = text.replace(/[Oo]/g, '0').replace(/[Il]/g, '1').replace(/[Ss]/g, '5').replace(/[Zz]/g, '2');
+  } else {
+    text = text.replace(/[Oo]/g, '0');
+    if (/^[-+]?[\d.lI]+([eE][-+]?\d+)?$/.test(text)) {
+      text = text.replace(/[lI]/g, '1');
+    }
   }
   text = text.replace(/[^\d.eE+-]/g, '');
   if (!text || text === '.' || text === '-' || text === '+') return null;
@@ -103,13 +108,12 @@ const preferBetterRange = (primary, secondary) => {
     if (!range) return -Infinity;
     const span = Math.abs(range.max - range.min);
     const count = range.count || 0;
-    let s = count * 12 + Math.log10(span + 1) * 6;
+    // Prefer more ticks and wider span when OCR returns competing partial reads.
+    let s = count * 8 + span * 1.2;
     if (count <= 2 && span <= 5 && Number.isInteger(range.min) && Number.isInteger(range.max)) {
       s -= 40;
     }
-    // Placeholder-like endpoints with no interior ticks are almost never real datasheet axes.
     if (count <= 2 && range.min === 0 && range.max === 100) s -= 80;
-    if (count <= 2 && range.min === 0 && range.max === 10) s -= 20;
     return s;
   };
   const a = score(primary);
@@ -124,10 +128,10 @@ const sanitizeAxisRange = (range) => {
   if (!(range.count >= 2)) return null;
   if (range.count <= 2 && range.min === 0 && range.max === 100) return null;
   if (range.count <= 2 && Math.abs(range.max - range.min) <= 5 && Number.isInteger(range.min) && Number.isInteger(range.max)) {
-    // e.g. 2..5 from splitting "25"
+    // e.g. 2..5 from splitting a two-digit tick
     return null;
   }
-  // Common bad partial read of 0..25 current axes (OCR sees "1" and "10").
+  // Weak partial reads like 1..10 with almost no interior ticks.
   if (range.max <= 10 && range.min >= 1 && range.count <= 4) return null;
   if (range.min === 1 && range.max === 10) return null;
   return range;
@@ -135,7 +139,7 @@ const sanitizeAxisRange = (range) => {
 
 /**
  * When OCR misses an end tick, extend one step only if interior spacing is uniform
- * (from values OCR actually read — not a fixed datasheet guess).
+ * (step comes from values OCR actually read).
  */
 const extendUniformTickRange = (range) => {
   if (!range) return range;
@@ -156,6 +160,7 @@ const extendUniformTickRange = (range) => {
   const uniform = diffs.every((d) => Math.abs(d - step) <= step * 0.25 + 1e-9);
   if (!uniform) return range;
 
+  // Bipolar axes: if one side is short by exactly one step, add that step.
   const nearMirror = Math.abs(Math.abs(max) - Math.abs(min)) <= step * 1.15 + 1e-9;
   if (nearMirror && Math.abs(max) > Math.abs(min) + 1e-9) {
     const extMin = Number((min - step).toFixed(6));
@@ -184,12 +189,16 @@ const repairDroppedDecimals = (values) => {
   });
 };
 
-/** Prefer tick values that form a dense low-span sequence (drop stray 100 when 0..25 exists). */
+/** Prefer tick values that form a dense low-span sequence (drop stray 100 when a tighter set exists). */
 const refineTickValues = (values, axis) => {
   let list = repairDroppedDecimals(values.filter((v) => Number.isFinite(v)));
   if (axis === 'x') {
-    const modest = list.filter((v) => v >= -1 && v <= 50);
-    if (modest.length >= 3) list = modest;
+    // Keep X ticks as non-negative; drop Y-axis fractions leaked from full-page OCR.
+    list = list.filter((v) => v >= 0 && v <= 100);
+    const ints = list.filter((v) => Number.isInteger(v) || Math.abs(v - Math.round(v)) < 1e-9);
+    if (ints.length >= 2) {
+      list = ints.map((v) => Math.round(v));
+    }
     if (list.includes(100) && list.some((v) => v > 0 && v <= 50)) {
       list = list.filter((v) => v !== 100);
     }
@@ -202,18 +211,60 @@ const refineTickValues = (values, axis) => {
 };
 
 /**
+ * Merge neighboring single/double-digit OCR fragments (e.g. "2"+"5" → 25)
+ * using word bounding boxes — only when both tokens are digits and sit close together.
+ */
+const mergeAdjacentDigitWords = (words, band) => {
+  const items = [];
+  (Array.isArray(words) ? words : []).forEach((word) => {
+    const center = wordCenter(word);
+    if (!center) return;
+    if (center.cx < band.x0 || center.cx > band.x1 || center.cy < band.y0 || center.cy > band.y1) {
+      return;
+    }
+    const raw = String(center.text || '').trim();
+    if (!/^\d{1,3}$/.test(raw)) return;
+    items.push({
+      ...center,
+      digits: raw,
+      value: Number(raw),
+    });
+  });
+  items.sort((a, b) => a.cx - b.cx || a.cy - b.cy);
+
+  const merged = items.map((item) => item.value);
+  for (let i = 0; i < items.length - 1; i += 1) {
+    const a = items[i];
+    const b = items[i + 1];
+    const gap = b.x0 - a.x1;
+    const sameRow = Math.abs(a.cy - b.cy) <= Math.max(8, (a.y1 - a.y0) * 0.8);
+    const close = gap >= -2 && gap <= Math.max(14, (a.x1 - a.x0) * 0.85);
+    if (!sameRow || !close) continue;
+    if (a.digits.length + b.digits.length > 3) continue;
+    const combined = Number(`${a.digits}${b.digits}`);
+    if (Number.isFinite(combined)) merged.push(combined);
+  }
+  return merged;
+};
+
+/**
  * Build an X/Y range only from numbers OCR actually returned.
- * May correct an obvious leftmost "1"→"0" when other tick values were also read.
- * Does not invent endpoints like 25.
+ * May correct an obvious leftmost "1"→"0" when the remaining ticks form a series from 0.
  */
 const inferLinearTickRange = (values, axis) => {
   let nums = [...new Set(refineTickValues(values, axis))].sort((a, b) => a - b);
   if (nums.length < 2) return null;
 
-  if (axis === 'x') {
-    // Leftmost "0" is often misread as "1" when neighbors are real tick values.
-    if (nums[0] === 1 && nums.some((n) => [5, 10, 15, 20, 25].includes(n))) {
-      nums = [0, ...nums.filter((n) => n !== 1)];
+  if (axis === 'x' && nums[0] === 1 && nums.length >= 3) {
+    const rest = nums.slice(1);
+    const step = rest[1] - rest[0];
+    // If remaining ticks look like step, 2*step, 3*step..., leftmost "1" was likely a misread "0".
+    if (
+      step > 0 &&
+      Math.abs(rest[0] - step) <= step * 0.05 + 1e-9 &&
+      rest.every((v, i) => Math.abs(v - step * (i + 1)) <= step * 0.05 + 1e-9)
+    ) {
+      nums = [0, ...rest];
     }
   }
 
@@ -371,18 +422,14 @@ const scoreAxisLabel = (text, axis = '') => {
   if (isGarbageAxisLabel(t) || looksLikeGarbageTitle(t)) return -1;
   let score = Math.min(stripParenUnits(t).length, 30);
   if (AXIS_LABEL_HINT.test(t)) score += 40;
-  if (/\bnormalized\b/i.test(t)) score += 50;
-  if (/\bi_out\b|\biout\b|\biour\b|\btour\b|\bi\s*out\b/i.test(t)) score += 80;
   if (/\([A-Za-zµμΩ/%]+\)/.test(t)) score += 25;
   if (stripParenUnits(t).split(/\s+/).length <= 3) score += 10;
 
-  // Printed axis symbols beat figure-caption "A vs. B" prose.
-  if (axis === 'x' && /\bload\s+current\b/i.test(t) && !/\bi_out\b/i.test(t)) score -= 55;
-  if (axis === 'y' && /\bload\s+regulation\b/i.test(t) && !/\bnormalized\b/i.test(t)) score -= 40;
-  // Don't let Y's (%) leak onto X caption prose.
-  if (axis === 'x' && /\(%\)/.test(t) && !/\bi_out\b|\bnormalized\b/i.test(t)) score -= 45;
-  if (axis === 'y' && /\(%\)/.test(t)) score += 30;
-  if (axis === 'x' && /\(\s*A\s*\)/i.test(t)) score += 35;
+  // Prefer short symbol-style axis labels over long figure-caption prose.
+  if (stripParenUnits(t).split(/\s+/).length >= 4) score -= 20;
+  if (axis === 'x' && /\(%\)/.test(t)) score -= 45;
+  if (axis === 'y' && /\(%\)/.test(t)) score += 20;
+  if (axis === 'x' && /\(\s*[A-Za-zµμΩ]+\s*\)/.test(t)) score += 20;
   return score;
 };
 
@@ -655,9 +702,9 @@ const recognizePlainText = async (worker, imageSrc, pagesegMode) => {
 
 /** Digit-focused OCR for axis tick strips. */
 const recognizeTickNumbers = async (worker, imageSrc) => {
-  const collect = async (whitelist) => {
+  const collect = async (whitelist, pagesegMode) => {
     await safeSetParameters(worker, {
-      tessedit_pageseg_mode: '6',
+      tessedit_pageseg_mode: String(pagesegMode),
       tessedit_char_whitelist: whitelist,
       user_defined_dpi: '300',
     });
@@ -668,14 +715,22 @@ const recognizeTickNumbers = async (worker, imageSrc) => {
       const value = parseNumericToken(word.text);
       if (value != null) fromWords.push(value);
     });
-    return [...fromText, ...fromWords];
+    // Also merge split digit tokens from this crop's word boxes.
+    const merged = mergeAdjacentDigitWords(recognized?.data?.words || [], {
+      x0: -Infinity,
+      y0: -Infinity,
+      x1: Infinity,
+      y1: Infinity,
+    });
+    return [...fromText, ...fromWords, ...merged];
   };
 
-  let nums = await collect('0123456789.-');
-  if (nums.length < 2) {
-    // Whitelist pass sometimes returns nothing on light/antialiased ticks.
-    nums = await collect('');
-  }
+  // Run whitelist + open passes; sparse ticks often need both.
+  const nums = [
+    ...(await collect('0123456789.-', 6)),
+    ...(await collect('0123456789.-', 7)),
+    ...(await collect('', 6)),
+  ];
   await safeSetParameters(worker, { tessedit_char_whitelist: '' });
   return repairDroppedDecimals(nums);
 };
@@ -932,25 +987,27 @@ export const extractManualGraphFieldsFromImage = async (imageSrc) => {
         unitSources: [yLabelCropText, fullText],
       });
 
-      // X ticks: try bands with and without thresholding (threshold can wipe light ticks).
+      // X ticks: prefer bands just under the plot (labels sit lower than 0.66 on many datasheets).
       console.log('[MANUAL OCR] Reading X tick number crops…');
+      const xTickYTop = Math.min(height * 0.78, (bottomCeiling || height) - height * 0.14);
       const xTickRects = [
-        { x: width * 0.2, y: height * 0.68, w: width * 0.68, h: height * 0.08 },
-        { x: width * 0.18, y: height * 0.72, w: width * 0.7, h: height * 0.07 },
-        { x: width * 0.22, y: height * 0.64, w: width * 0.65, h: height * 0.09 },
-        { x: width * 0.15, y: height * 0.7, w: width * 0.75, h: height * 0.1 },
-        // Right side of X ticks (15/20/25) is often missed by wide crops.
-        { x: width * 0.55, y: height * 0.66, w: width * 0.38, h: height * 0.12 },
+        { x: width * 0.16, y: height * 0.68, w: width * 0.76, h: height * 0.1 },
+        { x: width * 0.16, y: height * 0.72, w: width * 0.76, h: height * 0.1 },
+        { x: width * 0.16, y: xTickYTop, w: width * 0.76, h: Math.max(height * 0.08, height * 0.12) },
+        { x: width * 0.16, y: height * 0.7, w: width * 0.28, h: height * 0.12 },
+        { x: width * 0.4, y: height * 0.7, w: width * 0.28, h: height * 0.12 },
+        { x: width * 0.62, y: height * 0.68, w: width * 0.34, h: height * 0.14 },
+        { x: width * 0.72, y: height * 0.7, w: width * 0.26, h: height * 0.14 },
       ];
       for (const rect of xTickRects) {
         for (const highContrast of [false, true]) {
-          const crop = cropRegionToDataUrl(htmlImage, rect, 0, 4, { highContrast });
+          const crop = cropRegionToDataUrl(htmlImage, rect, 0, 5, { highContrast });
           if (!crop) continue;
           const nums = refineTickValues(await recognizeTickNumbers(worker, crop), 'x');
           xTickNumberPool.push(...nums);
           const next = inferLinearTickRange(nums, 'x');
           xTickCropRange = preferBetterRange(xTickCropRange, next);
-          console.log('[MANUAL OCR] X tick numbers', { highContrast, nums, next });
+          console.log('[MANUAL OCR] X tick numbers', { highContrast, rect, nums, next });
         }
       }
 
@@ -987,8 +1044,22 @@ export const extractManualGraphFieldsFromImage = async (imageSrc) => {
     /* ignore */
   }
 
-  // Also mine full-page OCR text for X tick sequences (0/5/10/15/20/25).
-  xTickNumberPool.push(...extractNumbersFromText(fullText));
+  // Mine full-page OCR for X ticks: spatial bottom band + adjacent digit merges.
+  // Integers only — avoids Y-axis fractions leaking into the X pool.
+  const xWordBand = {
+    x0: width * 0.12,
+    y0: height * 0.62,
+    x1: width * 0.98,
+    y1: bottomCeiling || height * 0.88,
+  };
+  xTickNumberPool.push(
+    ...mergeAdjacentDigitWords(words, xWordBand),
+    ...refineTickValues(
+      collectAxisNumbers(words, xWordBand, { minConfidence: 0 }).map((hit) => hit.value),
+      'x'
+    ),
+    ...extractNumbersFromText(fullText).filter((v) => Number.isInteger(v) && v >= 0 && v <= 100)
+  );
   const xFromPool = inferLinearTickRange(xTickNumberPool, 'x');
 
   xRange = preferBetterRange(preferBetterRange(xTickCropRange, xRange), xFromPool);
