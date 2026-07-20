@@ -5,6 +5,7 @@
  *
  * Axis titles: full-image pass + cropped passes.
  * Vertical Y labels are rotated to horizontal before OCR (CW and CCW; best wins).
+ * Axis ticks: dedicated digit-only crops (more reliable than full-page sparse hits).
  */
 
 const FIGURE_CAPTION_RE =
@@ -13,7 +14,7 @@ const FIGURE_CAPTION_RE =
 const VS_SPLIT_RE = /\s+vs\.?\s+/i;
 
 const AXIS_LABEL_HINT =
-  /\b(vout|vin|iout|iin|isd|vsd|ids|vds|vgs|normalized|efficiency|temperature|freq|frequency|gain|phase|time|current|voltage|power|load|regulation|amp|ohm|watt)\b|[%°]|\$[A-Za-z]|_\{|(\([A-Za-zµμΩ/%]+\))/i;
+  /\b(vout|vin|iout|i_out|iin|isd|vsd|ids|vds|vgs|normalized|efficiency|temperature|freq|frequency|gain|phase|time|current|voltage|power|load|regulation|amp|ohm|watt)\b|[%°]|\$[A-Za-z]|_\{|(\([A-Za-zµμΩ/%]+\))/i;
 
 const parseNumericToken = (raw) => {
   let text = String(raw || '').trim().replace(/,/g, '');
@@ -27,6 +28,13 @@ const parseNumericToken = (raw) => {
   if (!Number.isFinite(value)) return null;
   if (Math.abs(value) > 1e9) return null;
   return value;
+};
+
+const extractNumbersFromText = (text) => {
+  const matches = String(text || '').match(/[-+]?(?:\d+\.\d+|\d+|\.\d+)(?:[eE][-+]?\d+)?/g) || [];
+  return matches
+    .map((token) => parseNumericToken(token))
+    .filter((value) => value != null);
 };
 
 const wordCenter = (word) => {
@@ -71,13 +79,47 @@ const uniqueSortedValues = (hits, axis) => {
   return values;
 };
 
+const rangeFromValues = (values) => {
+  const unique = [];
+  [...values]
+    .filter((value) => Number.isFinite(value))
+    .sort((a, b) => a - b)
+    .forEach((value) => {
+      const last = unique[unique.length - 1];
+      if (last == null || Math.abs(last - value) > 1e-9) unique.push(value);
+    });
+  if (unique.length < 2) return null;
+  return {
+    min: unique[0],
+    max: unique[unique.length - 1],
+    count: unique.length,
+    values: unique,
+  };
+};
+
 const pickAxisRangeFromHits = (hits, axis) => {
   const values = uniqueSortedValues(hits, axis);
-  if (values.length < 2) return null;
-  const first = values[0];
-  const last = values[values.length - 1];
-  if (!Number.isFinite(first) || !Number.isFinite(last) || first === last) return null;
-  return first < last ? { min: first, max: last } : { min: last, max: first };
+  return rangeFromValues(values);
+};
+
+/** Prefer denser / wider tick sets; reject weak 2-point fragments when a better set exists. */
+const preferBetterRange = (primary, secondary) => {
+  if (!primary) return secondary || null;
+  if (!secondary) return primary;
+  const score = (range) => {
+    if (!range) return -1;
+    const span = Math.abs(range.max - range.min);
+    const count = range.count || 0;
+    // Penalize sparse tiny spans (e.g. OCR reading "2" and "5" from "25")
+    let s = count * 10 + Math.log10(span + 1) * 5;
+    if (count <= 2 && span <= 5 && Number.isInteger(range.min) && Number.isInteger(range.max)) {
+      s -= 25;
+    }
+    // Exact placeholder-looking 0..100 with only endpoints is weak for datasheet ticks
+    if (count === 2 && range.min === 0 && range.max === 100) s -= 40;
+    return s;
+  };
+  return score(secondary) > score(primary) ? secondary : primary;
 };
 
 const groupWordsIntoLines = (items, imageHeight) => {
@@ -113,11 +155,69 @@ const cleanCaptionText = (text) =>
 const normalizeAxisLabelText = (text) =>
   String(text || '')
     .replace(/\s+/g, ' ')
-    .replace(/\bI\s*[_ ]?\s*OUT\b/gi, 'Iout')
-    .replace(/\bIOUT\b/gi, 'Iout')
+    .replace(/\$\\?mathrm\{([^}]+)\}/gi, '$1')
+    .replace(/\$([^$]+)\$/g, '$1')
+    .replace(/\bI\s*[_ ]?\s*OUT\b/gi, 'I_OUT')
+    .replace(/\bIOUT\b/gi, 'I_OUT')
+    .replace(/\bIout\b/g, 'I_OUT')
     .replace(/\s*\(\s*/g, ' (')
     .replace(/\s*\)\s*/g, ')')
     .trim();
+
+/** Pull whatever OCR put inside (...), e.g. %, A, V, mA — do not invent units. */
+const extractParenUnits = (text) => {
+  const units = [];
+  const pushUnit = (raw) => {
+    const unit = String(raw || '').trim();
+    if (!unit || unit.length > 16) return;
+    if (!/[A-Za-z%°µμΩ0-9/]/.test(unit)) return;
+    if (!units.some((existing) => existing.toLowerCase() === unit.toLowerCase())) {
+      units.push(unit);
+    }
+  };
+
+  const source = String(text || '');
+  const re = /\(\s*([^)]+?)\s*\)/g;
+  let match;
+  while ((match = re.exec(source)) !== null) {
+    pushUnit(match[1]);
+  }
+
+  const bare = source.trim();
+  // Standalone unit fragments OCR sometimes returns on their own line.
+  if (/^\(\s*[^)]+\s*\)$/.test(bare)) {
+    pushUnit(bare.replace(/^\(\s*|\s*\)$/g, ''));
+  } else if (/^[%°µμΩ]+$/.test(bare)) {
+    pushUnit(bare);
+  }
+
+  return units;
+};
+
+const stripParenUnits = (text) =>
+  normalizeAxisLabelText(text)
+    .replace(/\(\s*[^)]+\s*\)/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const isUnitOnlyLabel = (text) => {
+  const t = normalizeAxisLabelText(text);
+  return !t || /^\(\s*[^)]+\s*\)$/.test(t) || /^[%°µμΩ]+$/.test(t);
+};
+
+/** Keep printed name; attach a parenthetical unit only when OCR actually saw one. */
+const polishAxisTitle = (text, unitFromOcr = '') => {
+  let t = normalizeAxisLabelText(text);
+  if (!t || isUnitOnlyLabel(t)) return '';
+  const existingUnits = extractParenUnits(t);
+  if (existingUnits.length) return t.slice(0, 80);
+  const unit = String(unitFromOcr || '').trim();
+  if (unit) {
+    const base = stripParenUnits(t);
+    if (base) return `${base} (${unit})`.slice(0, 80);
+  }
+  return t.slice(0, 80);
+};
 
 const isFigureCaptionText = (text) => FIGURE_CAPTION_RE.test(String(text || '').trim());
 
@@ -143,21 +243,53 @@ const scoreAxisLabel = (text) => {
   let score = Math.min(t.length, 40);
   if (AXIS_LABEL_HINT.test(t)) score += 40;
   if (/\bnormalized\b/i.test(t)) score += 50;
-  if (/\biout\b|\bi\s*out\b/i.test(t)) score += 50;
-  if (/%/.test(t)) score += 20;
+  if (/\bi_out\b|\biout\b|\bi\s*out\b/i.test(t)) score += 50;
+  if (/%/.test(t)) score += 30;
   if (/\([A-Za-zµμΩ/%]+\)/.test(t)) score += 25;
   return score;
 };
 
-const pickBestAxisLabel = (...candidates) => {
+const pickBestAxisLabel = (axis, ...candidates) => {
+  const expanded = [];
+  candidates.flat().forEach((raw) => {
+    if (raw == null) return;
+    const text = String(raw).trim();
+    if (text) expanded.push(text);
+  });
+
+  // Units found anywhere in this axis's OCR lines (e.g. "(%)", "(A)") — never invent.
+  const units = [];
+  expanded.forEach((line) => {
+    extractParenUnits(line).forEach((unit) => {
+      if (!units.some((existing) => existing.toLowerCase() === unit.toLowerCase())) {
+        units.push(unit);
+      }
+    });
+  });
+
+  // If name and unit were split across lines, synthesize "Name (unit)" candidates.
+  const names = expanded
+    .map((line) => stripParenUnits(line))
+    .filter((name) => name && !isUnitOnlyLabel(name) && !isGarbageAxisLabel(name));
+  units.forEach((unit) => {
+    names.forEach((name) => {
+      if (!/\([^)]+\)/.test(name)) {
+        expanded.push(`${name} (${unit})`);
+      }
+    });
+  });
+
   let best = '';
   let bestScore = -1;
-  candidates.flat().forEach((raw) => {
-    const text = normalizeAxisLabelText(raw);
+  expanded.forEach((raw) => {
+    if (isUnitOnlyLabel(raw)) return;
+    // Prefer attaching an OCR-seen unit when the winning line omitted parentheses.
+    const unitHint = extractParenUnits(raw)[0] || units[0] || '';
+    const text = polishAxisTitle(raw, unitHint);
     const score = scoreAxisLabel(text);
     if (score > bestScore) {
       bestScore = score;
-      best = text.slice(0, 80);
+      best = text;
     }
   });
   return bestScore >= 0 ? best : '';
@@ -289,7 +421,7 @@ const loadHtmlImage = (src) =>
     img.src = src;
   });
 
-const canvasToDataUrl = (canvas, scale = 2) => {
+const canvasToDataUrl = (canvas, scale = 3) => {
   if (scale <= 1) return canvas.toDataURL('image/png');
   const out = document.createElement('canvas');
   out.width = Math.max(1, Math.round(canvas.width * scale));
@@ -307,7 +439,7 @@ const canvasToDataUrl = (canvas, scale = 2) => {
  * Crop a rect from the source image; optional 90° rotation so vertical text becomes horizontal.
  * rotateDeg: 0 | 90 (CW) | -90 (CCW)
  */
-const cropRegionToDataUrl = (img, rect, rotateDeg = 0) => {
+const cropRegionToDataUrl = (img, rect, rotateDeg = 0, scale = 3) => {
   if (typeof document === 'undefined') return null;
   const iw = img.naturalWidth || img.width;
   const ih = img.naturalHeight || img.height;
@@ -325,7 +457,7 @@ const cropRegionToDataUrl = (img, rect, rotateDeg = 0) => {
   sctx.fillRect(0, 0, sw, sh);
   sctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
 
-  if (!rotateDeg) return canvasToDataUrl(srcCanvas, 2.5);
+  if (!rotateDeg) return canvasToDataUrl(srcCanvas, scale);
 
   const dst = document.createElement('canvas');
   dst.width = sh;
@@ -341,22 +473,46 @@ const cropRegionToDataUrl = (img, rect, rotateDeg = 0) => {
     dctx.rotate(-Math.PI / 2);
   }
   dctx.drawImage(srcCanvas, 0, 0);
-  return canvasToDataUrl(dst, 2.5);
+  return canvasToDataUrl(dst, scale);
+};
+
+const safeSetParameters = async (worker, params) => {
+  try {
+    await worker.setParameters(params);
+  } catch {
+    /* ignore unsupported params */
+  }
 };
 
 const recognizePlainText = async (worker, imageSrc, pagesegMode) => {
-  try {
-    if (pagesegMode != null) {
-      await worker.setParameters({ tessedit_pageseg_mode: String(pagesegMode) });
-    }
-  } catch {
-    /* older builds may not accept PSM overrides */
-  }
+  await safeSetParameters(worker, {
+    tessedit_char_whitelist: '',
+    user_defined_dpi: '300',
+    ...(pagesegMode != null ? { tessedit_pageseg_mode: String(pagesegMode) } : {}),
+  });
   const recognized = await worker.recognize(imageSrc);
   return String(recognized?.data?.text || '')
     .split(/\n+/)
     .map((line) => line.replace(/\s+/g, ' ').trim())
     .filter(Boolean);
+};
+
+/** Digit-focused OCR for axis tick strips. */
+const recognizeTickNumbers = async (worker, imageSrc) => {
+  await safeSetParameters(worker, {
+    tessedit_pageseg_mode: '6',
+    tessedit_char_whitelist: '0123456789.-',
+    user_defined_dpi: '300',
+  });
+  const recognized = await worker.recognize(imageSrc);
+  const fromText = extractNumbersFromText(recognized?.data?.text || '');
+  const fromWords = [];
+  (recognized?.data?.words || []).forEach((word) => {
+    const value = parseNumericToken(word.text);
+    if (value != null) fromWords.push(value);
+  });
+  await safeSetParameters(worker, { tessedit_char_whitelist: '' });
+  return [...fromText, ...fromWords];
 };
 
 /**
@@ -404,11 +560,10 @@ export const extractManualGraphFieldsFromImage = async (imageSrc) => {
 
   let result;
   try {
-    try {
-      await worker.setParameters({ tessedit_pageseg_mode: '3' });
-    } catch {
-      /* ignore */
-    }
+    await safeSetParameters(worker, {
+      tessedit_pageseg_mode: '3',
+      user_defined_dpi: '300',
+    });
     result = await worker.recognize(src);
   } catch (error) {
     console.warn('[MANUAL OCR] Recognize failed:', error);
@@ -450,14 +605,14 @@ export const extractManualGraphFieldsFromImage = async (imageSrc) => {
       ...empty,
       graphTitle: title,
       curveTitle: title,
-      xTitle: fromVs.xTitle,
-      yTitle: fromVs.yTitle,
+      xTitle: polishAxisTitle(fromVs.xTitle),
+      yTitle: polishAxisTitle(fromVs.yTitle),
     };
   }
 
   const captionY = findFigureCaptionY(words, height, fullText);
   const bottomCeiling =
-    captionY != null ? Math.min(captionY - height * 0.01, height * 0.92) : height * 0.94;
+    captionY != null ? Math.min(captionY - height * 0.015, height * 0.92) : height * 0.94;
 
   const collectWithFallback = (band) => {
     let hits = collectAxisNumbers(words, band, { minConfidence: 35 });
@@ -467,21 +622,22 @@ export const extractManualGraphFieldsFromImage = async (imageSrc) => {
     return hits;
   };
 
+  // Full-image tick bands (fallback only — often sparse / wrong).
   const leftBand = collectWithFallback({
-    x0: 0,
+    x0: width * 0.02,
     y0: height * 0.08,
-    x1: width * 0.32,
-    y1: Math.min(height * 0.88, bottomCeiling),
+    x1: width * 0.28,
+    y1: Math.min(height * 0.82, bottomCeiling),
   });
   const bottomBand = collectWithFallback({
-    x0: width * 0.12,
-    y0: height * 0.68,
-    x1: width * 0.98,
-    y1: bottomCeiling,
+    x0: width * 0.15,
+    y0: height * 0.62,
+    x1: width * 0.95,
+    y1: Math.min(height * 0.8, bottomCeiling),
   });
 
-  const yRange = pickAxisRangeFromHits(leftBand, 'y');
-  const xRange = pickAxisRangeFromHits(bottomBand, 'x');
+  let yRange = pickAxisRangeFromHits(leftBand, 'y');
+  let xRange = pickAxisRangeFromHits(bottomBand, 'x');
 
   const graphTitle = extractGraphTitle(words, width, height, fullText);
   const fromVs = titlesFromVsPattern(graphTitle);
@@ -489,8 +645,8 @@ export const extractManualGraphFieldsFromImage = async (imageSrc) => {
   let xTitleFromFull = extractAxisTitleFromBand(
     words,
     {
-      x0: width * 0.18,
-      y0: height * 0.74,
+      x0: width * 0.2,
+      y0: Math.min(height * 0.78, bottomCeiling - height * 0.08),
       x1: width * 0.95,
       y1: bottomCeiling,
     },
@@ -501,7 +657,7 @@ export const extractManualGraphFieldsFromImage = async (imageSrc) => {
     {
       x0: 0,
       y0: height * 0.12,
-      x1: width * 0.22,
+      x1: width * 0.18,
       y1: height * 0.82,
     },
     height,
@@ -512,42 +668,84 @@ export const extractManualGraphFieldsFromImage = async (imageSrc) => {
 
   let xTitleFromCrop = '';
   let yTitleFromCrop = '';
+  let xTickCropRange = null;
+  let yTickCropRange = null;
 
   if (htmlImage) {
     try {
+      // X title sits under tick numbers and above the figure caption.
       console.log('[MANUAL OCR] Reading horizontal X-axis label crop…');
-      const xCrop = cropRegionToDataUrl(htmlImage, {
-        x: width * 0.2,
-        y: Math.max(height * 0.72, bottomCeiling - height * 0.12),
-        w: width * 0.7,
-        h: Math.max(height * 0.06, bottomCeiling - height * 0.72),
-      }, 0);
-      if (xCrop) {
-        const xLines = await recognizePlainText(worker, xCrop, 7);
-        xTitleFromCrop = pickBestAxisLabel(xLines);
+      const xLabelCrop = cropRegionToDataUrl(
+        htmlImage,
+        {
+          x: width * 0.25,
+          y: Math.max(height * 0.78, bottomCeiling - height * 0.1),
+          w: width * 0.55,
+          h: Math.max(height * 0.05, Math.min(height * 0.09, bottomCeiling - height * 0.78)),
+        },
+        0,
+        3
+      );
+      if (xLabelCrop) {
+        const xLines = await recognizePlainText(worker, xLabelCrop, 7);
+        xTitleFromCrop = pickBestAxisLabel('x', xLines);
       }
 
       console.log('[MANUAL OCR] Reading vertical Y-axis label (rotated crops)…');
-      const yRect = {
+      const yLabelRect = {
         x: 0,
-        y: height * 0.15,
-        w: width * 0.16,
-        h: height * 0.65,
+        y: height * 0.12,
+        w: width * 0.14,
+        h: height * 0.7,
       };
-      const yCropCw = cropRegionToDataUrl(htmlImage, yRect, 90);
-      const yCropCcw = cropRegionToDataUrl(htmlImage, yRect, -90);
       const yCandidates = [];
-      if (yCropCw) {
-        yCandidates.push(...(await recognizePlainText(worker, yCropCw, 7)));
+      const yCropCw = cropRegionToDataUrl(htmlImage, yLabelRect, 90, 3);
+      const yCropCcw = cropRegionToDataUrl(htmlImage, yLabelRect, -90, 3);
+      if (yCropCw) yCandidates.push(...(await recognizePlainText(worker, yCropCw, 7)));
+      if (yCropCcw) yCandidates.push(...(await recognizePlainText(worker, yCropCcw, 7)));
+      yTitleFromCrop = pickBestAxisLabel('y', yCandidates);
+
+      // Tick strips: digit whitelist + upscale (fixes low DPI / sparse full-page reads like 2..5).
+      console.log('[MANUAL OCR] Reading X tick number crop…');
+      const xTickCrop = cropRegionToDataUrl(
+        htmlImage,
+        {
+          x: width * 0.18,
+          y: height * 0.66,
+          w: width * 0.72,
+          h: Math.max(height * 0.07, Math.min(height * 0.12, bottomCeiling - height * 0.66 - height * 0.02)),
+        },
+        0,
+        3.5
+      );
+      if (xTickCrop) {
+        const xTickNums = await recognizeTickNumbers(worker, xTickCrop);
+        xTickCropRange = rangeFromValues(xTickNums);
+        console.log('[MANUAL OCR] X tick numbers', xTickNums, xTickCropRange);
       }
-      if (yCropCcw) {
-        yCandidates.push(...(await recognizePlainText(worker, yCropCcw, 7)));
+
+      console.log('[MANUAL OCR] Reading Y tick number crop…');
+      const yTickCrop = cropRegionToDataUrl(
+        htmlImage,
+        {
+          x: width * 0.06,
+          y: height * 0.1,
+          w: width * 0.16,
+          h: height * 0.7,
+        },
+        0,
+        3.5
+      );
+      if (yTickCrop) {
+        const yTickNums = await recognizeTickNumbers(worker, yTickCrop);
+        yTickCropRange = rangeFromValues(yTickNums);
+        console.log('[MANUAL OCR] Y tick numbers', yTickNums, yTickCropRange);
       }
-      yTitleFromCrop = pickBestAxisLabel(yCandidates);
-      console.log('[MANUAL OCR] Axis crop candidates', {
-        xLines: xTitleFromCrop,
+
+      console.log('[MANUAL OCR] Axis crop titles', {
+        xTitleFromCrop,
         yCandidates,
-        yPicked: yTitleFromCrop,
+        yTitleFromCrop,
       });
     } catch (error) {
       console.warn('[MANUAL OCR] Axis crop OCR failed:', error);
@@ -560,9 +758,11 @@ export const extractManualGraphFieldsFromImage = async (imageSrc) => {
     /* ignore */
   }
 
-  // Prefer real printed axis labels from crops; then full-image band; then "A vs. B" caption fallback.
-  const xTitle = pickBestAxisLabel(xTitleFromCrop, xTitleFromFull, fromVs.xTitle);
-  const yTitle = pickBestAxisLabel(yTitleFromCrop, yTitleFromFull, fromVs.yTitle);
+  xRange = preferBetterRange(xTickCropRange, xRange);
+  yRange = preferBetterRange(yTickCropRange, yRange);
+
+  const xTitle = pickBestAxisLabel('x', xTitleFromCrop, xTitleFromFull, fromVs.xTitle);
+  const yTitle = pickBestAxisLabel('y', yTitleFromCrop, yTitleFromFull, fromVs.yTitle);
 
   const fields = {
     graphTitle,
@@ -576,7 +776,8 @@ export const extractManualGraphFieldsFromImage = async (imageSrc) => {
   };
 
   console.log('[MANUAL OCR] Extracted fields:', fields, {
-    tickCounts: { x: bottomBand.length, y: leftBand.length },
+    tickCounts: { xFull: bottomBand.length, yFull: leftBand.length },
+    tickCrops: { x: xTickCropRange, y: yTickCropRange },
     captionY,
     sources: {
       x: { crop: xTitleFromCrop, full: xTitleFromFull, vs: fromVs.xTitle },
