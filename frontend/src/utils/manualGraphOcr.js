@@ -5,6 +5,7 @@
  *
  * Axis titles: full-image pass + cropped passes.
  * Y labels support (1) stacked upright glyphs in a column, (2) true 90°-rotated text.
+ * Curve name: first legend entry when present (temps / Vxx= / TYP…); else graph title.
  * Axis ticks: dedicated digit-only crops (more reliable than full-page sparse hits).
  */
 
@@ -227,39 +228,80 @@ const extendUniformTickRange = (range) => {
   return rangeFromValues([min, ...vals, max]) || { ...range, min, max, count: range.count };
 };
 
-/** Repair "1.00" read as 100 when neighboring ticks are fractional. */
+/**
+ * Repair OCR decimal loss using neighboring ticks only.
+ * - "5.5" → 55 (÷10) when it continues a fractional/small series
+ * - "1.00" → 100 (÷100) when that fits better
+ * Integer values ≥ 10 are treated as repair candidates, not series anchors.
+ */
 const repairDroppedDecimals = (values) => {
   const list = values.filter((v) => Number.isFinite(v));
-  const hasFraction = list.some((v) => Math.abs(v % 1) > 1e-9 && Math.abs(v) <= 10);
-  if (!hasFraction) return list;
+  // Core ticks: fractions and small magnitudes (exclude integer≥10 — often lost decimals).
+  const core = [
+    ...new Set(
+      list.filter((v) => Math.abs(v % 1) > 1e-9 || Math.abs(v) < 10)
+    ),
+  ].sort((a, b) => a - b);
+  if (core.length < 3) return list;
+
+  const diffs = [];
+  for (let i = 1; i < core.length; i += 1) {
+    const d = core[i] - core[i - 1];
+    if (d > 0) diffs.push(d);
+  }
+  if (!diffs.length) return list;
+  diffs.sort((a, b) => a - b);
+  const step = diffs[Math.floor(diffs.length / 2)];
+  if (!(step > 0) || step > 5) return list;
+
+  const lo = core[0];
+  const hi = core[core.length - 1];
+  const fitsSeries = (candidate) => {
+    if (!Number.isFinite(candidate)) return false;
+    if (candidate < lo - step * 1.25 || candidate > hi + step * 1.25) return false;
+    const k = Math.round(candidate / step);
+    return Math.abs(candidate - k * step) <= step * 0.25 + 1e-9;
+  };
+
   return list.map((v) => {
-    if (Math.abs(v) >= 10 && Math.abs(v) <= 1000 && Number.isInteger(v)) {
-      const repaired = v / 100;
-      if (Math.abs(repaired) <= 10) return repaired;
+    if (!Number.isInteger(v) || Math.abs(v) < 10) return v;
+    for (const div of [10, 100]) {
+      const repaired = v / div;
+      if (fitsSeries(repaired)) return Number(repaired.toFixed(6));
     }
     return v;
   });
 };
 
-/** Prefer tick values that form a dense low-span sequence (drop stray 100 when a tighter set exists). */
+/**
+ * Prefer tick values that form a coherent series.
+ * Does not invent endpoints; only filters/repairs OCR noise.
+ */
 const refineTickValues = (values, axis) => {
   let list = repairDroppedDecimals(values.filter((v) => Number.isFinite(v)));
+
   if (axis === 'x') {
-    // Keep X ticks as non-negative; drop Y-axis fractions leaked from full-page OCR.
-    list = list.filter((v) => v >= 0 && v <= 100);
-    const ints = list.filter((v) => Number.isInteger(v) || Math.abs(v - Math.round(v)) < 1e-9);
-    if (ints.length >= 2) {
-      list = ints.map((v) => Math.round(v));
+    list = list.filter((v) => v >= 0 && v <= 1000);
+    const fractions = list.filter((v) => Math.abs(v % 1) > 1e-9);
+    // Only collapse to integers when OCR saw no meaningful fractional ticks.
+    // Otherwise keep decimals (e.g. 0, 0.5, …, 5.5) instead of forcing 0, 5, 55.
+    if (fractions.length < 2) {
+      const ints = list.filter((v) => Number.isInteger(v) || Math.abs(v - Math.round(v)) < 1e-9);
+      if (ints.length >= 2) {
+        list = ints.map((v) => Math.round(v));
+      }
     }
-    if (list.includes(100) && list.some((v) => v > 0 && v <= 50)) {
+    list = densestTickCluster(list);
+    if (list.includes(100) && list.some((v) => v > 0 && v < 100)) {
       list = list.filter((v) => v !== 100);
     }
   }
+
   if (axis === 'y') {
-    const modest = list.filter((v) => Math.abs(v) <= 20);
-    if (modest.length >= 3) list = modest;
+    // Do not clamp to |v|<=20 — many datasheet Y axes are 50–150, 70–100, etc.
     list = densestTickCluster(list);
   }
+
   return list;
 };
 
@@ -640,6 +682,98 @@ const titlesFromVsPattern = (graphTitle) => {
     yTitle: parts[0].slice(0, 80),
     xTitle: parts[1].slice(0, 80),
   };
+};
+
+/**
+ * Normalize a legend curve label OCR already saw (temps, Vxx=/Ixx=, TYP/MIN/MAX).
+ * Returns '' when the token does not look like a curve name.
+ */
+const normalizeLegendCurveName = (raw) => {
+  let t = String(raw || '')
+    .trim()
+    .replace(/[−–—]/g, '-')
+    .replace(/\s+/g, ' ');
+  if (!t || t.length > 48) return '';
+  if (/^fig(?:ure)?\b/i.test(t)) return '';
+
+  // Temperature curves: -55°C, +25 C, -55C, 125°C
+  const temp = t.match(/^([+-]?\d+)\s*°?\s*([CF])\b/i);
+  if (temp) {
+    return `${temp[1]}${temp[2].toUpperCase()}`;
+  }
+  // Same pattern embedded in a short legend line.
+  const tempEmbedded = t.match(/(?:^|[\s|])([+-]?\d+)\s*°?\s*([CF])\b/i);
+  if (tempEmbedded && t.length <= 24) {
+    return `${tempEmbedded[1]}${tempEmbedded[2].toUpperCase()}`;
+  }
+
+  // Bias / condition curves often printed in legends: VGS=10V, VIN = 12 V
+  const cond = t.match(
+    /\b([VIvi][A-Za-z0-9]{0,10})\s*=\s*([-+]?\d+\.?\d*)\s*([A-Za-zµμΩ%]{0,4})\b/
+  );
+  if (cond) {
+    const unit = String(cond[3] || '').trim();
+    return `${cond[1].toUpperCase()}=${cond[2]}${unit}`;
+  }
+
+  if (/^(TYP|MIN|MAX|NOM|TYP\.)$/i.test(t)) {
+    return t.replace(/\./g, '').toUpperCase();
+  }
+
+  return '';
+};
+
+/**
+ * First-come curve name from legend OCR (top→bottom in a legend band, then line order).
+ * Does not invent labels — only normalizes tokens OCR returned.
+ */
+const pickFirstLegendCurveName = (lineTexts, words, band) => {
+  const seen = new Set();
+  const ordered = [];
+
+  const push = (raw) => {
+    const name = normalizeLegendCurveName(raw);
+    if (!name) return;
+    const key = name.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    ordered.push(name);
+  };
+
+  // Prefer spatially ordered tokens inside the legend band (top first).
+  if (band && Array.isArray(words)) {
+    const items = [];
+    words.forEach((word) => {
+      const center = wordCenter(word);
+      if (!center?.text) return;
+      if (
+        center.cx < band.x0 ||
+        center.cx > band.x1 ||
+        center.cy < band.y0 ||
+        center.cy > band.y1
+      ) {
+        return;
+      }
+      items.push(center);
+    });
+    const bandHeight = Math.max(1, band.y1 - band.y0);
+    groupWordsIntoLines(items, bandHeight * 4)
+      .sort((a, b) => a.y0 - b.y0)
+      .forEach((line) => push(line.text));
+  }
+
+  (Array.isArray(lineTexts) ? lineTexts : [lineTexts]).forEach((line) => {
+    const text = String(line || '').trim();
+    if (!text) return;
+    push(text);
+    // Also peel every temp token from a multi-entry legend line.
+    const tempIter = text.matchAll(/([+-]?\d+)\s*°?\s*([CF])\b/gi);
+    for (const match of tempIter) {
+      push(`${match[1]}${match[2]}`);
+    }
+  });
+
+  return ordered[0] || '';
 };
 
 const extractAxisTitleFromBand = (words, band, imageHeight, { allowVerticalJoin = false } = {}) => {
@@ -1155,6 +1289,7 @@ export const extractManualGraphFieldsFromImage = async (imageSrc) => {
   let yLabelCropText = '';
   let xTickCropRange = null;
   let yTickCropRange = null;
+  let legendCurveName = '';
 
   if (htmlImage) {
     try {
@@ -1322,6 +1457,29 @@ export const extractManualGraphFieldsFromImage = async (imageSrc) => {
         yCandidates,
         yTitleFromCrop,
       });
+
+      // Legend / curve names (temps, Vxx=, …) — first entry wins; not the figure caption.
+      console.log('[MANUAL OCR] Reading legend curve labels…');
+      const legendBand = {
+        x0: width * 0.5,
+        y0: height * 0.35,
+        x1: width * 0.98,
+        y1: Math.min(bottomCeiling || height * 0.9, height * 0.88),
+      };
+      const legendRects = [
+        { x: width * 0.55, y: height * 0.42, w: width * 0.4, h: height * 0.38 },
+        { x: width * 0.62, y: height * 0.55, w: width * 0.34, h: height * 0.28 },
+      ];
+      const legendLines = [];
+      for (const rect of legendRects) {
+        for (const highContrast of [true, false]) {
+          const crop = cropRegionToDataUrl(htmlImage, rect, 0, 3.2, { highContrast });
+          if (!crop) continue;
+          legendLines.push(...(await recognizePlainText(worker, crop, 6)));
+        }
+      }
+      legendCurveName = pickFirstLegendCurveName(legendLines, words, legendBand);
+      console.log('[MANUAL OCR] Legend curve', { legendCurveName, legendSample: legendLines.slice(0, 8) });
     } catch (error) {
       console.warn('[MANUAL OCR] Axis crop OCR failed:', error);
     }
@@ -1393,9 +1551,21 @@ export const extractManualGraphFieldsFromImage = async (imageSrc) => {
     }) ||
     '';
 
+  // Curve name: prefer first legend entry when present; otherwise fall back to graph title
+  // (some single-curve plots truly use the same string for both).
+  if (!legendCurveName) {
+    legendCurveName = pickFirstLegendCurveName([], words, {
+      x0: width * 0.5,
+      y0: height * 0.35,
+      x1: width * 0.98,
+      y1: Math.min(bottomCeiling || height * 0.9, height * 0.88),
+    });
+  }
+  const curveTitle = legendCurveName || graphTitle;
+
   const fields = {
     graphTitle,
-    curveTitle: graphTitle,
+    curveTitle,
     xTitle,
     yTitle,
     xMin: xRange?.min ?? null,
@@ -1407,6 +1577,7 @@ export const extractManualGraphFieldsFromImage = async (imageSrc) => {
   console.log('[MANUAL OCR] Extracted fields:', fields, {
     tickCounts: { xFull: bottomBand.length, yFull: leftBand.length },
     tickCrops: { x: xTickCropRange, y: yTickCropRange },
+    legendCurveName,
     captionY,
     sources: {
       x: { crop: xTitleFromCrop, full: xTitleFromFull, vs: fromVs.xTitle },
