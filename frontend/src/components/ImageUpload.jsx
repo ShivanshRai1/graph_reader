@@ -20,6 +20,7 @@ const ImageUpload = ({ onImageLoaded, onAiExtensionCapture, isAiExtractionLoadin
   const fileInputRef = useRef(null);
   const [pendingCapture, setPendingCapture] = useState(null);
   const [manualOcrStatus, setManualOcrStatus] = useState('');
+  const [isManualOcrLoading, setIsManualOcrLoading] = useState(false);
   const manualOcrRequestIdRef = useRef(0);
   const allowOcrAxisOverwriteRef = useRef(false);
 
@@ -160,6 +161,7 @@ const ImageUpload = ({ onImageLoaded, onAiExtensionCapture, isAiExtractionLoadin
   const runManualOcrFill = (imageBase64) => {
     const requestId = ++manualOcrRequestIdRef.current;
     allowOcrAxisOverwriteRef.current = true;
+    setIsManualOcrLoading(true);
     setManualOcrStatus('OCR reading image + axis labels… (may take a few seconds)');
     console.log('[MANUAL OCR] Queued for manual capture image');
 
@@ -183,6 +185,10 @@ const ImageUpload = ({ onImageLoaded, onAiExtensionCapture, isAiExtractionLoadin
         allowOcrAxisOverwriteRef.current = false;
         console.warn('[MANUAL OCR] Auto-fill failed:', error);
         setManualOcrStatus('OCR failed. Enter graph title / axis values manually.');
+      } finally {
+        if (requestId === manualOcrRequestIdRef.current) {
+          setIsManualOcrLoading(false);
+        }
       }
     })();
   };
@@ -224,6 +230,7 @@ const ImageUpload = ({ onImageLoaded, onAiExtensionCapture, isAiExtractionLoadin
     if (!pendingCapture?.imageBase64 || isAiExtractionLoading) return;
     manualOcrRequestIdRef.current += 1;
     allowOcrAxisOverwriteRef.current = false;
+    setIsManualOcrLoading(false);
     setManualOcrStatus('');
     const succeeded = await onAiExtensionCapture?.(pendingCapture.imageBase64, pendingCapture.source);
     if (succeeded) {
@@ -256,6 +263,21 @@ const ImageUpload = ({ onImageLoaded, onAiExtensionCapture, isAiExtractionLoadin
 
   return (
     <div className="w-full p-5 bg-gray-50 rounded-lg mt-5">
+      {isManualOcrLoading ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+        >
+          <div
+            className="rounded-md bg-white px-5 py-3 text-sm font-medium shadow-sm"
+            style={{ color: '#213547' }}
+          >
+            Reading graph labels and axis values…
+          </div>
+        </div>
+      ) : null}
       <textarea
         className="w-full resize-vertical text-sm px-3 py-2 border-2 border-gray-300 rounded bg-white text-gray-800 outline-none box-border"
         placeholder="Click here and paste screenshot image"
