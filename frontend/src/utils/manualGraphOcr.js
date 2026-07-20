@@ -138,6 +138,56 @@ const sanitizeAxisRange = (range) => {
 };
 
 /**
+ * Keep the densest run of tick values (drop stray figure numbers / opposite-axis leaks).
+ * Purely statistical — no fixed endpoints.
+ */
+const densestTickCluster = (values) => {
+  const sorted = [];
+  [...values]
+    .filter((v) => Number.isFinite(v))
+    .sort((a, b) => a - b)
+    .forEach((v) => {
+      if (!sorted.length || Math.abs(sorted[sorted.length - 1] - v) > 1e-9) sorted.push(v);
+    });
+  if (sorted.length < 4) return sorted;
+
+  const gaps = [];
+  for (let i = 1; i < sorted.length; i += 1) {
+    gaps.push(sorted[i] - sorted[i - 1]);
+  }
+  const sortedGaps = [...gaps].sort((a, b) => a - b);
+  const medianGap = sortedGaps[Math.floor(sortedGaps.length / 2)];
+  if (!(medianGap > 0)) return sorted;
+
+  const limit = medianGap * 2.75 + 1e-9;
+  let best = [];
+  let current = [sorted[0]];
+  for (let i = 1; i < sorted.length; i += 1) {
+    if (sorted[i] - sorted[i - 1] <= limit) {
+      current.push(sorted[i]);
+    } else {
+      if (
+        current.length > best.length ||
+        (current.length === best.length &&
+          Math.abs(current[current.length - 1] - current[0]) < Math.abs(best[best.length - 1] - best[0]))
+      ) {
+        best = current;
+      }
+      current = [sorted[i]];
+    }
+  }
+  if (
+    current.length > best.length ||
+    (current.length === best.length &&
+      best.length &&
+      Math.abs(current[current.length - 1] - current[0]) < Math.abs(best[best.length - 1] - best[0]))
+  ) {
+    best = current;
+  }
+  return best.length >= 3 ? best : sorted;
+};
+
+/**
  * When OCR misses an end tick, extend one step only if interior spacing is uniform
  * (step comes from values OCR actually read).
  */
@@ -145,7 +195,7 @@ const extendUniformTickRange = (range) => {
   if (!range) return range;
   let min = range.min;
   let max = range.max;
-  const vals = Array.isArray(range.values) ? range.values : [min, max];
+  const vals = densestTickCluster(Array.isArray(range.values) ? range.values : [min, max]);
   if (vals.length < 3) return range;
 
   const diffs = [];
@@ -160,6 +210,9 @@ const extendUniformTickRange = (range) => {
   const uniform = diffs.every((d) => Math.abs(d - step) <= step * 0.25 + 1e-9);
   if (!uniform) return range;
 
+  min = vals[0];
+  max = vals[vals.length - 1];
+
   // Bipolar axes: if one side is short by exactly one step, add that step.
   const nearMirror = Math.abs(Math.abs(max) - Math.abs(min)) <= step * 1.15 + 1e-9;
   if (nearMirror && Math.abs(max) > Math.abs(min) + 1e-9) {
@@ -171,7 +224,6 @@ const extendUniformTickRange = (range) => {
     if (Math.abs(extMax + min) <= step * 0.2 + 1e-9) max = extMax;
   }
 
-  if (min === range.min && max === range.max) return range;
   return rangeFromValues([min, ...vals, max]) || { ...range, min, max, count: range.count };
 };
 
@@ -206,6 +258,7 @@ const refineTickValues = (values, axis) => {
   if (axis === 'y') {
     const modest = list.filter((v) => Math.abs(v) <= 20);
     if (modest.length >= 3) list = modest;
+    list = densestTickCluster(list);
   }
   return list;
 };
@@ -417,23 +470,47 @@ const isGarbageAxisLabel = (text) => {
   return false;
 };
 
-const scoreAxisLabel = (text, axis = '') => {
+/** True when a label is just a chunk of the figure caption (e.g. halves of "A vs. B"). */
+const isGraphTitleFragment = (label, graphTitle) => {
+  const name = stripParenUnits(label)
+    .toLowerCase()
+    .replace(/[^\w\s%]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const title = stripParenUnits(graphTitle)
+    .toLowerCase()
+    .replace(FIGURE_CAPTION_RE, '$1')
+    .replace(/[^\w\s%]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!name || name.length < 4 || !title) return false;
+  if (name.split(/\s+/).filter(Boolean).length < 2) return false;
+  return title.includes(name);
+};
+
+const scoreAxisLabel = (text, axis = '', { graphTitle = '' } = {}) => {
   const t = normalizeAxisLabelText(text);
   if (isGarbageAxisLabel(t) || looksLikeGarbageTitle(t)) return -1;
   let score = Math.min(stripParenUnits(t).length, 30);
   if (AXIS_LABEL_HINT.test(t)) score += 40;
-  if (/\([A-Za-zµμΩ/%]+\)/.test(t)) score += 25;
+  if (/\([A-Za-zµμΩ/%]+\)/.test(t)) score += 30;
   if (stripParenUnits(t).split(/\s+/).length <= 3) score += 10;
+  // Printed axis labels are often uppercase; caption phrases are mixed/title case.
+  const bare = stripParenUnits(t);
+  if (/^[A-Z0-9][A-Z0-9\s/%()._-]*$/.test(bare) && bare.length >= 4) {
+    score += 15;
+  }
 
   // Prefer short symbol-style axis labels over long figure-caption prose.
-  if (stripParenUnits(t).split(/\s+/).length >= 4) score -= 20;
+  if (bare.split(/\s+/).length >= 4) score -= 20;
+  if (isGraphTitleFragment(t, graphTitle)) score -= 120;
   if (axis === 'x' && /\(%\)/.test(t)) score -= 45;
   if (axis === 'y' && /\(%\)/.test(t)) score += 20;
   if (axis === 'x' && /\(\s*[A-Za-zµμΩ]+\s*\)/.test(t)) score += 20;
   return score;
 };
 
-const pickBestAxisLabel = (axis, candidates = [], { unitSources = [] } = {}) => {
+const pickBestAxisLabel = (axis, candidates = [], { unitSources = [], graphTitle = '' } = {}) => {
   const expanded = [];
   (Array.isArray(candidates) ? candidates : [candidates]).flat().forEach((raw) => {
     if (raw == null) return;
@@ -469,7 +546,7 @@ const pickBestAxisLabel = (axis, candidates = [], { unitSources = [] } = {}) => 
     const unitHint = extractParenUnits(raw)[0] || units[0] || '';
     const text = polishAxisTitle(raw, unitHint);
     if (!text || looksLikeGarbageTitle(text)) return;
-    const score = scoreAxisLabel(text, axis);
+    const score = scoreAxisLabel(text, axis, { graphTitle });
     if (score > bestScore) {
       bestScore = score;
       best = text;
@@ -971,20 +1048,42 @@ export const extractManualGraphFieldsFromImage = async (imageSrc) => {
       }
 
       console.log('[MANUAL OCR] Reading vertical Y-axis label (rotated crops)…');
-      const yLabelRect = {
-        x: 0,
-        y: height * 0.1,
-        w: width * 0.15,
-        h: height * 0.72,
-      };
+      const yLabelRects = [
+        { x: 0, y: height * 0.1, w: width * 0.15, h: height * 0.72 },
+        { x: 0, y: height * 0.12, w: width * 0.11, h: height * 0.7 },
+      ];
       const yCandidates = [];
-      const yCropCw = cropRegionToDataUrl(htmlImage, yLabelRect, 90, 3.5, { highContrast: true });
-      const yCropCcw = cropRegionToDataUrl(htmlImage, yLabelRect, -90, 3.5, { highContrast: true });
-      if (yCropCw) yCandidates.push(...(await recognizePlainText(worker, yCropCw, 7)));
-      if (yCropCcw) yCandidates.push(...(await recognizePlainText(worker, yCropCcw, 7)));
+      for (const yLabelRect of yLabelRects) {
+        for (const rotateDeg of [90, -90]) {
+          const yCrop = cropRegionToDataUrl(htmlImage, yLabelRect, rotateDeg, 3.5, {
+            highContrast: true,
+          });
+          if (!yCrop) continue;
+          yCandidates.push(...(await recognizePlainText(worker, yCrop, 7)));
+        }
+      }
+      // If rotated crops were weak, retry once without thresholding.
+      if (!pickBestAxisLabel('y', yCandidates, { unitSources: [yCandidates.join('\n')], graphTitle })) {
+        for (const yLabelRect of yLabelRects) {
+          for (const rotateDeg of [90, -90]) {
+            const yCrop = cropRegionToDataUrl(htmlImage, yLabelRect, rotateDeg, 3.5, {
+              highContrast: false,
+            });
+            if (!yCrop) continue;
+            yCandidates.push(...(await recognizePlainText(worker, yCrop, 6)));
+          }
+        }
+      }
+      // Also accept "NAME (unit)" phrases from full OCR that are not caption fragments.
+      const parenLabels =
+        String(fullText || '').match(/\b[A-Za-z][A-Za-z0-9_/.-]{1,40}\s*\(\s*[^)]{1,12}\s*\)/g) || [];
+      parenLabels.forEach((label) => {
+        if (!isGraphTitleFragment(label, graphTitle)) yCandidates.push(label);
+      });
       yLabelCropText = yCandidates.join('\n');
       yTitleFromCrop = pickBestAxisLabel('y', yCandidates, {
-        unitSources: [yLabelCropText, fullText],
+        unitSources: [yLabelCropText],
+        graphTitle,
       });
 
       // X ticks: prefer bands just under the plot (labels sit lower than 0.66 on many datasheets).
@@ -1015,10 +1114,13 @@ export const extractManualGraphFieldsFromImage = async (imageSrc) => {
       const yTickRects = [
         { x: width * 0.05, y: height * 0.08, w: width * 0.18, h: height * 0.74 },
         { x: width * 0.08, y: height * 0.1, w: width * 0.14, h: height * 0.72 },
+        // Outer ends are often missed by the tall strip — crop top and bottom separately.
+        { x: width * 0.04, y: height * 0.06, w: width * 0.2, h: height * 0.22 },
+        { x: width * 0.04, y: height * 0.68, w: width * 0.2, h: height * 0.2 },
       ];
       for (const rect of yTickRects) {
         for (const highContrast of [false, true]) {
-          const crop = cropRegionToDataUrl(htmlImage, rect, 0, 4, { highContrast });
+          const crop = cropRegionToDataUrl(htmlImage, rect, 0, 4.5, { highContrast });
           if (!crop) continue;
           const nums = refineTickValues(await recognizeTickNumbers(worker, crop), 'y');
           yTickNumberPool.push(...nums);
@@ -1069,8 +1171,12 @@ export const extractManualGraphFieldsFromImage = async (imageSrc) => {
     xRange = null;
   }
 
+  // Rebuild Y from the full tick pool so sparse end-crops can still contribute.
+  const yFromPool = extendUniformTickRange(
+    sanitizeAxisRange(rangeFromValues(refineTickValues(yTickNumberPool, 'y')))
+  );
   yRange = extendUniformTickRange(
-    sanitizeAxisRange(preferBetterRange(yTickCropRange, yRange))
+    sanitizeAxisRange(preferBetterRange(preferBetterRange(yTickCropRange, yRange), yFromPool))
   );
 
   // Prefer printed IOUT (A) over OCR mangling like "tour (A)" / "Iour (A)".
@@ -1082,15 +1188,23 @@ export const extractManualGraphFieldsFromImage = async (imageSrc) => {
     canonicalizeXAxisTitle(
       pickBestAxisLabel('x', [xTitleFromCrop, xTitleFromFull], {
         unitSources: [xLabelCropText],
+        graphTitle,
       })
     ) ||
     '';
 
-  const yTitle = pickBestAxisLabel(
-    'y',
-    [yTitleFromCrop, yTitleFromFull, fromVs.yTitle],
-    { unitSources: [yLabelCropText, fullText] }
-  );
+  // Prefer rotated Y-crop / left-band labels over "A vs B" caption halves.
+  // Units only from the Y crop — fullText can attach the wrong unit onto caption prose.
+  const yTitle =
+    pickBestAxisLabel('y', [yTitleFromCrop, yTitleFromFull], {
+      unitSources: [yLabelCropText],
+      graphTitle,
+    }) ||
+    pickBestAxisLabel('y', [fromVs.yTitle], {
+      unitSources: [yLabelCropText],
+      graphTitle,
+    }) ||
+    '';
 
   const fields = {
     graphTitle,
