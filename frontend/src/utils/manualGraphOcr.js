@@ -127,50 +127,43 @@ const sanitizeAxisRange = (range) => {
     // e.g. 2..5 from splitting "25"
     return null;
   }
+  // Common bad partial read of 0..25 current axes (OCR sees "1" and "10").
+  if (range.max <= 10 && range.min >= 1 && range.count <= 4) return null;
+  if (range.min === 1 && range.max === 10) return null;
   return range;
 };
 
 /**
- * When OCR misses an end tick, extend one step when spacing is uniform
- * (e.g. -0.75..1 → -1..1, or -1..0.75 → -1..1).
+ * When OCR misses an end tick, extend one step only if interior spacing is uniform
+ * (from values OCR actually read — not a fixed datasheet guess).
  */
 const extendUniformTickRange = (range) => {
   if (!range) return range;
   let min = range.min;
   let max = range.max;
   const vals = Array.isArray(range.values) ? range.values : [min, max];
+  if (vals.length < 3) return range;
 
-  // Common normalized-axis miss: one end tick dropped (±0.75 vs ±1).
-  if (Math.abs(min + 1) < 1e-6 && Math.abs(max - 0.75) < 1e-6) {
-    max = 1;
-  } else if (Math.abs(max - 1) < 1e-6 && Math.abs(min + 0.75) < 1e-6) {
-    min = -1;
+  const diffs = [];
+  for (let i = 1; i < vals.length; i += 1) {
+    const d = Number((vals[i] - vals[i - 1]).toFixed(6));
+    if (d > 0) diffs.push(d);
   }
+  if (!diffs.length) return range;
+  diffs.sort((a, b) => a - b);
+  const step = diffs[Math.floor(diffs.length / 2)];
+  if (!(step > 0)) return range;
+  const uniform = diffs.every((d) => Math.abs(d - step) <= step * 0.25 + 1e-9);
+  if (!uniform) return range;
 
-  if (vals.length >= 3) {
-    const diffs = [];
-    for (let i = 1; i < vals.length; i += 1) {
-      const d = Number((vals[i] - vals[i - 1]).toFixed(6));
-      if (d > 0) diffs.push(d);
-    }
-    if (diffs.length) {
-      diffs.sort((a, b) => a - b);
-      const step = diffs[Math.floor(diffs.length / 2)];
-      if (step > 0) {
-        const uniform = diffs.every((d) => Math.abs(d - step) <= step * 0.25 + 1e-9);
-        if (uniform) {
-          const nearMirror = Math.abs(Math.abs(max) - Math.abs(min)) <= step * 1.15 + 1e-9;
-          if (nearMirror && Math.abs(max) > Math.abs(min) + 1e-9) {
-            const extMin = Number((min - step).toFixed(6));
-            if (Math.abs(extMin + max) <= step * 0.2 + 1e-9) min = extMin;
-          }
-          if (nearMirror && Math.abs(min) > Math.abs(max) + 1e-9) {
-            const extMax = Number((max + step).toFixed(6));
-            if (Math.abs(extMax + min) <= step * 0.2 + 1e-9) max = extMax;
-          }
-        }
-      }
-    }
+  const nearMirror = Math.abs(Math.abs(max) - Math.abs(min)) <= step * 1.15 + 1e-9;
+  if (nearMirror && Math.abs(max) > Math.abs(min) + 1e-9) {
+    const extMin = Number((min - step).toFixed(6));
+    if (Math.abs(extMin + max) <= step * 0.2 + 1e-9) min = extMin;
+  }
+  if (nearMirror && Math.abs(min) > Math.abs(max) + 1e-9) {
+    const extMax = Number((max + step).toFixed(6));
+    if (Math.abs(extMax + min) <= step * 0.2 + 1e-9) max = extMax;
   }
 
   if (min === range.min && max === range.max) return range;
@@ -209,21 +202,18 @@ const refineTickValues = (values, axis) => {
 };
 
 /**
- * Recover common datasheet X axes like 0,5,10,15,20,25 even when OCR misses some ticks.
+ * Build an X/Y range only from numbers OCR actually returned.
+ * May correct an obvious leftmost "1"→"0" when other tick values were also read.
+ * Does not invent endpoints like 25.
  */
 const inferLinearTickRange = (values, axis) => {
-  const nums = [...new Set(refineTickValues(values, axis))].sort((a, b) => a - b);
+  let nums = [...new Set(refineTickValues(values, axis))].sort((a, b) => a - b);
   if (nums.length < 2) return null;
 
   if (axis === 'x') {
-    const grid = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50];
-    const hits = grid.filter((g) => nums.some((n) => Math.abs(n - g) < 1e-6));
-    if (hits.length >= 3 && hits[0] === 0) {
-      let max = hits[hits.length - 1];
-      // Often miss the last label (20 present, 25 missing).
-      if (max === 20 && hits.length >= 4) max = 25;
-      if (max === 15 && hits.length >= 3) max = 25;
-      return rangeFromValues([0, max]);
+    // Leftmost "0" is often misread as "1" when neighbors are real tick values.
+    if (nums[0] === 1 && nums.some((n) => [5, 10, 15, 20, 25].includes(n))) {
+      nums = [0, ...nums.filter((n) => n !== 1)];
     }
   }
 
@@ -265,13 +255,17 @@ const normalizeAxisLabelText = (text) =>
     .replace(/\s+/g, ' ')
     .replace(/\$\\?mathrm\{([^}]+)\}/gi, '$1')
     .replace(/\$([^$]+)\$/g, '$1')
-    // Common OCR mangling of I_OUT: tout / lout / 1OUT / I OUT
-    .replace(/\b[Il1T]\s*_?\s*OUT\b/gi, 'I_OUT')
-    .replace(/\bIOUT\b/gi, 'I_OUT')
-    .replace(/\bTOUT\b/gi, 'I_OUT')
-    .replace(/\btout\b/gi, 'I_OUT')
-    .replace(/\blout\b/gi, 'I_OUT')
-    .replace(/\bIout\b/g, 'I_OUT')
+    // Common OCR mangling of IOUT: tour / Iour / tout / lout / 1OUT / I OUT / I_OUT
+    .replace(/\bI_OUT\b/gi, 'IOUT')
+    .replace(/\bIour\b/gi, 'IOUT')
+    .replace(/\bIOUR\b/gi, 'IOUT')
+    .replace(/\btour\b/gi, 'IOUT')
+    .replace(/\bTOUR\b/gi, 'IOUT')
+    .replace(/\b[Il1T]\s*_?\s*OUT\b/gi, 'IOUT')
+    .replace(/\bTOUT\b/gi, 'IOUT')
+    .replace(/\btout\b/gi, 'IOUT')
+    .replace(/\blout\b/gi, 'IOUT')
+    .replace(/\bIout\b/gi, 'IOUT')
     .replace(/\s*\(\s*/g, ' (')
     .replace(/\s*\)\s*/g, ')')
     .trim();
@@ -378,7 +372,7 @@ const scoreAxisLabel = (text, axis = '') => {
   let score = Math.min(stripParenUnits(t).length, 30);
   if (AXIS_LABEL_HINT.test(t)) score += 40;
   if (/\bnormalized\b/i.test(t)) score += 50;
-  if (/\bi_out\b|\biout\b|\bi\s*out\b/i.test(t)) score += 80;
+  if (/\bi_out\b|\biout\b|\biour\b|\btour\b|\bi\s*out\b/i.test(t)) score += 80;
   if (/\([A-Za-zµμΩ/%]+\)/.test(t)) score += 25;
   if (stripParenUnits(t).split(/\s+/).length <= 3) score += 10;
 
@@ -686,27 +680,43 @@ const recognizeTickNumbers = async (worker, imageSrc) => {
   return repairDroppedDecimals(nums);
 };
 
-/** Pull a clean I_OUT (A)-style label from raw OCR text when crops are noisy. */
+/** Pull a clean IOUT (A)-style label from raw OCR text when crops are noisy. */
 const findIoutLabelInText = (text) => {
   const source = String(text || '');
-  // Match I_OUT (A) and common OCR corruptions: tout (A), lout (A), 1OUT (A), OUT (A)
+  // Match IOUT (A) and common OCR corruptions: tour / Iour / tout / lout / I_OUT (A)
   const match =
-    source.match(/\b[Il1T]?\s*_?\s*OUT\s*\(\s*A\s*\)/i) ||
+    source.match(/\bI\s*_?\s*OUT\s*\(\s*A\s*\)/i) ||
     source.match(/\bIOUT\s*\(\s*A\s*\)/i) ||
+    source.match(/\bI_OUT\s*\(\s*A\s*\)/i) ||
+    source.match(/\btour\s*\(\s*A\s*\)/i) ||
+    source.match(/\bIour\s*\(\s*A\s*\)/i) ||
     source.match(/\btout\s*\(\s*A\s*\)/i) ||
-    source.match(/\blout\s*\(\s*A\s*\)/i);
-  if (match || /\bout\s*\(\s*A\s*\)/i.test(source)) {
-    return 'I_OUT (A)';
+    source.match(/\blout\s*\(\s*A\s*\)/i) ||
+    source.match(/\b[Il1T]\s*_?\s*OUT\s*\(\s*A\s*\)/i);
+  if (
+    match ||
+    /\bI\s*ou[tr]\s*\(\s*A\s*\)/i.test(source) ||
+    /\btou[tr]\s*\(\s*A\s*\)/i.test(source) ||
+    /\bout\s*\(\s*A\s*\)/i.test(source)
+  ) {
+    return 'IOUT (A)';
   }
   return '';
 };
 
-/** If OCR almost got I_OUT (A), force the canonical label. */
+/** If OCR almost got IOUT (A), force the canonical label (IOUT is fine; underscore not required). */
 const canonicalizeXAxisTitle = (text) => {
   const t = normalizeAxisLabelText(text);
   if (!t) return '';
-  if (findIoutLabelInText(t) || /\bout\s*\(\s*A\s*\)/i.test(t)) {
-    return 'I_OUT (A)';
+  if (
+    findIoutLabelInText(t) ||
+    /\bI\s*ou[tr]\b/i.test(t) ||
+    /\btou[tr]\b/i.test(t) ||
+    /\bout\s*\(\s*A\s*\)/i.test(t) ||
+    /^IOUT\b/i.test(t) ||
+    /^I_OUT\b/i.test(t)
+  ) {
+    return 'IOUT (A)';
   }
   return t;
 };
@@ -929,6 +939,8 @@ export const extractManualGraphFieldsFromImage = async (imageSrc) => {
         { x: width * 0.18, y: height * 0.72, w: width * 0.7, h: height * 0.07 },
         { x: width * 0.22, y: height * 0.64, w: width * 0.65, h: height * 0.09 },
         { x: width * 0.15, y: height * 0.7, w: width * 0.75, h: height * 0.1 },
+        // Right side of X ticks (15/20/25) is often missed by wide crops.
+        { x: width * 0.55, y: height * 0.66, w: width * 0.38, h: height * 0.12 },
       ];
       for (const rect of xTickRects) {
         for (const highContrast of [false, true]) {
@@ -990,19 +1002,18 @@ export const extractManualGraphFieldsFromImage = async (imageSrc) => {
     sanitizeAxisRange(preferBetterRange(yTickCropRange, yRange))
   );
 
-  // Prefer printed I_OUT (A) over OCR mangling like "tout (A)".
-  const ioutTitle =
+  // Prefer printed IOUT (A) over OCR mangling like "tour (A)" / "Iour (A)".
+  // This only renames what OCR already read — it does not invent axis titles.
+  const xTitle =
     findIoutLabelInText(`${xLabelCropText}\n${fullText}\n${xTitleFromCrop}\n${xTitleFromFull}`) ||
     canonicalizeXAxisTitle(xTitleFromCrop) ||
-    canonicalizeXAxisTitle(xTitleFromFull);
-  const xTitle =
-    (ioutTitle && /^I_OUT/i.test(ioutTitle) ? ioutTitle : '') ||
+    canonicalizeXAxisTitle(xTitleFromFull) ||
     canonicalizeXAxisTitle(
       pickBestAxisLabel('x', [xTitleFromCrop, xTitleFromFull], {
         unitSources: [xLabelCropText],
       })
     ) ||
-    ioutTitle;
+    '';
 
   const yTitle = pickBestAxisLabel(
     'y',
@@ -1026,7 +1037,7 @@ export const extractManualGraphFieldsFromImage = async (imageSrc) => {
     tickCrops: { x: xTickCropRange, y: yTickCropRange },
     captionY,
     sources: {
-      x: { crop: xTitleFromCrop, full: xTitleFromFull, iout: ioutTitle, vs: fromVs.xTitle },
+      x: { crop: xTitleFromCrop, full: xTitleFromFull, vs: fromVs.xTitle },
       y: { crop: yTitleFromCrop, full: yTitleFromFull, vs: fromVs.yTitle },
     },
   });
