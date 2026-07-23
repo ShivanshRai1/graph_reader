@@ -1,6 +1,6 @@
 import ImageUpload from '../components/ImageUpload';
 import GraphCanvas from '../components/GraphCanvas';
-import GraphConfig from '../components/GraphConfig';
+import GraphConfig, { CURVE_NAME_INPUT_ID } from '../components/GraphConfig';
 import CapturedPointsList from '../components/CapturedPointsList';
 import SavedGraphPreview from '../components/SavedGraphPreview';
 import SavedGraphCombinedPreview from '../components/SavedGraphCombinedPreview';
@@ -4628,6 +4628,28 @@ const GraphCapture = () => {
     graphConfig.curveName,
   ]);
 
+  const [needCurveNameHint, setNeedCurveNameHint] = useState(false);
+
+  const focusCurveNameField = useCallback(() => {
+    setNeedCurveNameHint(true);
+    window.requestAnimationFrame(() => {
+      const el = document.getElementById(CURVE_NAME_INPUT_ID);
+      if (!el) return;
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      try {
+        el.focus({ preventScroll: true });
+      } catch {
+        el.focus();
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    if (String(graphConfig.curveName || '').trim()) {
+      setNeedCurveNameHint(false);
+    }
+  }, [graphConfig.curveName]);
+
   const groupedCurves = useMemo(() => {
     const uniqueCurves = uniqueSavedCurves;
     const groups = new Map();
@@ -8676,7 +8698,29 @@ const GraphCapture = () => {
                 onImageSizeChange={(size) => {
                   imageSizeRef.current = size;
                 }}
+                onNeedCurveName={focusCurveNameField}
               />
+              {needCurveNameHint ? (
+                <div
+                  className="rounded-lg border-2 border-amber-400 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <p className="m-0 font-semibold">
+                    Enter a new Curve or Line Name before clicking points.
+                  </p>
+                  <p className="m-0 mt-1 text-amber-900">
+                    Use the highlighted field in Graph settings on the right, then click the graph.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={focusCurveNameField}
+                    className="mt-2 px-3 py-1.5 rounded bg-amber-600 text-white text-xs font-semibold hover:bg-amber-700"
+                  >
+                    Go to Curve Name
+                  </button>
+                </div>
+              ) : null}
               <CapturedPointsList isReadOnly={isReadOnly} hasReturnUrl={!!urlParams.return_url} isEditingCurve={Boolean(editingCurveId)} isAxisMappingConfirmed={isAxisMappingConfirmed} />
             </div>
             <div className="w-full lg:w-3/5">
@@ -8709,6 +8753,7 @@ const GraphCapture = () => {
                 sessionSavedCurves={savedCurves}
                 isAxisMappingConfirmed={isAxisMappingConfirmed}
                 allowNextCurveNameEntry={allowNextCurveNameEntry}
+                curveNameAttention={needCurveNameHint}
                 isEditingCurve={Boolean(editingCurveId)}
                 isPartNumberFromUrl={Boolean(urlParams.partno)}
                 isPartNumberLocked={partNumberLocked}

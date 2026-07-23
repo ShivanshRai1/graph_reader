@@ -67,7 +67,9 @@ const convertTemperatureToCelsius = (rawValue, unit) => {
   return formatTemperatureNumber(numericValue);
 };
 
-const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNameReadOnly = false, isXTitleReadOnly = false, isYTitleReadOnly = false, initialCurveName = '', initialGraphTitle = '', initialXTitle = '', initialYTitle = '', isAxisMappingConfirmed = false, isEditingCurve = false, allowNextCurveNameEntry = false, isPartNumberFromUrl = false, isPartNumberLocked = false, showManufacturerField = false, showUsernameField = false, companyGraphId = '', sessionSavedCurves = [], onConfirmAxisMapping = () => {}, onRetakeAxis = () => {}, children = null }) => {
+export const CURVE_NAME_INPUT_ID = 'graph-capture-curve-name-input';
+
+const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNameReadOnly = false, isXTitleReadOnly = false, isYTitleReadOnly = false, initialCurveName = '', initialGraphTitle = '', initialXTitle = '', initialYTitle = '', isAxisMappingConfirmed = false, isEditingCurve = false, allowNextCurveNameEntry = false, isPartNumberFromUrl = false, isPartNumberLocked = false, showManufacturerField = false, showUsernameField = false, companyGraphId = '', sessionSavedCurves = [], curveNameAttention = false, onConfirmAxisMapping = () => {}, onRetakeAxis = () => {}, children = null }) => {
   const { graphConfig, setGraphConfig } = useGraph();
   const [apiUrl, setApiUrl] = useState(() => getPreferredApiUrlSync());
   const [logError, setLogError] = useState({ x: '', y: '' });
@@ -697,19 +699,22 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
         <label
           className="block mb-3 font-medium text-gray-800"
           style={{
-            opacity: allowNextCurveNameEntry ? 1 : undefined,
-            pointerEvents: allowNextCurveNameEntry ? 'auto' : undefined,
+            opacity: allowNextCurveNameEntry || curveNameAttention ? 1 : undefined,
+            pointerEvents: allowNextCurveNameEntry || curveNameAttention ? 'auto' : undefined,
           }}
         >
           <span className="block mb-1 text-sm font-semibold text-gray-900">Curve or Line Name:</span>
           <input
+            id={CURVE_NAME_INPUT_ID}
             type="text"
             name="curveName"
             value={graphConfig.curveName}
             onChange={handleChange}
             placeholder="Enter curve name"
             className={`w-full px-3 py-2 border rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed ${
-              allowNextCurveNameEntry ? 'border-amber-400 ring-1 ring-amber-200' : 'border-gray-300'
+              curveNameAttention || allowNextCurveNameEntry
+                ? 'border-amber-500 ring-2 ring-amber-300'
+                : 'border-gray-300'
             }`}
             readOnly={isCurveNameFieldLocked}
             disabled={isCurveNameFieldLocked}
