@@ -8847,11 +8847,12 @@ const GraphCapture = () => {
                 )}
               </GraphConfig>
 
-              <div className="mt-6 flex flex-row gap-4 items-center">
+              <div className="mt-6 flex flex-col gap-3">
                 {urlParams.graph_title === 'rth_cth' ? (
                   <button
                     onClick={handleSave}
-                    className="px-4 py-2 rounded bg-blue-600 text-white font-medium disabled:opacity-50"
+                    className="w-full px-4 py-3 rounded bg-blue-600 text-white text-sm font-semibold disabled:opacity-50"
+                    style={{ backgroundColor: '#2563eb', color: '#ffffff' }}
                     disabled={isSaving}
                   >
                     Fit, convert and export to RC ladder sim
@@ -8859,7 +8860,8 @@ const GraphCapture = () => {
                 ) : !!urlParams.return_url ? (
                   <button
                     onClick={handleSave}
-                    className="px-4 py-2 rounded bg-blue-600 text-white font-medium disabled:opacity-50"
+                    className="w-full px-4 py-3 rounded bg-blue-600 text-white text-sm font-semibold disabled:opacity-50"
+                    style={{ backgroundColor: '#2563eb', color: '#ffffff' }}
                     disabled={isSaving}
                   >
                     Submit
@@ -8867,15 +8869,15 @@ const GraphCapture = () => {
                 ) : (
                   <button
                     onClick={handleSaveDataPoints}
-                    className={`px-4 py-2 rounded font-medium disabled:opacity-50 transition ${
+                    className={`w-full px-4 py-3 rounded text-sm font-semibold transition ${
                       canSaveCurve
                         ? 'bg-blue-700 text-white hover:bg-blue-800'
-                        : 'bg-slate-200 text-slate-500 cursor-not-allowed'
+                        : 'bg-slate-200 text-slate-600 cursor-not-allowed'
                     }`}
                     style={
                       canSaveCurve
-                        ? { backgroundColor: '#1d4ed8', color: '#ffffff' }
-                        : { backgroundColor: '#e2e8f0', color: '#64748b' }
+                        ? { backgroundColor: '#1d4ed8', color: '#ffffff', fontSize: '0.95rem' }
+                        : { backgroundColor: '#e2e8f0', color: '#475569', fontSize: '0.95rem', opacity: 1 }
                     }
                     disabled={isSaving || !canSaveCurve}
                     title={
@@ -8888,24 +8890,24 @@ const GraphCapture = () => {
                   </button>
                 )}
                 {!!urlParams.return_url ? (
-                  <>
+                  <div className="flex flex-row flex-wrap gap-3 items-center">
                     <button
                       onClick={handleReturnNow}
-                      className="px-4 py-2 rounded bg-blue-600 text-white font-medium border-none shadow-none disabled:opacity-50"
-                      style={{ backgroundColor: '#2563eb' }}
+                      className="px-4 py-2.5 rounded bg-blue-600 text-white text-sm font-medium border-none shadow-none disabled:opacity-50"
+                      style={{ backgroundColor: '#2563eb', color: '#ffffff' }}
                       disabled={isSaving || isRemovingAllGraphs}
                     >
                       Return to Original Page
                     </button>
                     <button
                       onClick={handleRemoveAllGraphs}
-                      className="px-4 py-2 rounded bg-red-600 text-white font-medium disabled:opacity-50"
-                      style={{ backgroundColor: '#dc2626' }}
+                      className="px-4 py-2.5 rounded bg-red-600 text-white text-sm font-medium disabled:opacity-50"
+                      style={{ backgroundColor: '#dc2626', color: '#ffffff' }}
                       disabled={isSaving || isRemovingAllGraphs || savedCurves.length === 0}
                     >
                       {isRemovingAllGraphs ? 'Removing All Graphs...' : 'Remove All Graphs'}
                     </button>
-                  </>
+                  </div>
                 ) : null}
                 {isSaving ? (
                   <span className="text-sm" style={{ color: '#6b7280' }}>
