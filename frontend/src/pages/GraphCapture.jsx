@@ -4632,7 +4632,7 @@ const GraphCapture = () => {
 
   const focusCurveNameField = useCallback(() => {
     setNeedCurveNameHint(true);
-    window.requestAnimationFrame(() => {
+    const run = () => {
       const el = document.getElementById(CURVE_NAME_INPUT_ID);
       if (!el) return;
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -4641,6 +4641,10 @@ const GraphCapture = () => {
       } catch {
         el.focus();
       }
+    };
+    // After save alerts / React re-render, wait briefly so the field is visible and focusable.
+    window.requestAnimationFrame(() => {
+      window.setTimeout(run, 80);
     });
   }, []);
 
@@ -7831,6 +7835,8 @@ const GraphCapture = () => {
         } else {
           alert(`Save completed. API did not return any curve details (graph_id ${companyGraphId}).`);
         }
+        // Stay on page for next curve — bring Curve Name into view after the alert.
+        focusCurveNameField();
       }
 
       return result.id;
@@ -7877,6 +7883,7 @@ const GraphCapture = () => {
     setSelectedCurveId('');
     setCombinedGroupId('');
     setShowAllCombinedModal(false);
+    focusCurveNameField();
     
     // Verify session state is still intact after closing modal
     setTimeout(() => {
