@@ -670,11 +670,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
   const isCapturePhase = captureUiPhase === 'capture';
 
   return (
-    <div
-      className={`w-full p-5 bg-white rounded-lg mt-5 shadow transition ${
-        isCapturePhase ? 'opacity-70' : ''
-      }`}
-    >
+    <div className="w-full p-5 bg-white rounded-lg mt-5 border border-gray-200">
       <h3 className="text-gray-900 text-lg font-semibold mb-5">Graph settings</h3>
 
       <div
@@ -683,15 +679,15 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
           opacity: isNeedCurveNamePhase
             ? 1
             : isMetadataLocked && !allowNextCurveNameEntry
-              ? 0.45
+              ? 0.5
               : isSetupPhase
-                ? 0.72
+                ? 0.85
                 : 1,
           pointerEvents: isMetadataLocked && !isNeedCurveNamePhase ? 'none' : 'auto',
         }}
       >
-        <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 mb-3">Names &amp; labels</p>
-        <div className={isNeedCurveNamePhase ? 'opacity-40 pointer-events-none' : ''}>
+        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">Names &amp; labels</p>
+        <div className={isNeedCurveNamePhase ? 'opacity-45 pointer-events-none' : ''}>
         <label className="block mb-3 font-medium text-gray-800">
           <span className="block mb-1 text-sm font-semibold text-gray-900">Graph Title:</span>
           <input
@@ -712,7 +708,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
         </div>
         <label
           className={`block mb-3 font-medium text-gray-800 ${
-            isNeedCurveNamePhase ? 'relative z-10 rounded-lg p-2 -mx-2 bg-amber-50' : ''
+            isNeedCurveNamePhase ? 'relative z-10' : ''
           }`}
           style={{
             opacity: isNeedCurveNamePhase ? 1 : undefined,
@@ -729,7 +725,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             placeholder="Enter curve name"
             className={`w-full px-3 py-2 border rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed ${
               isNeedCurveNamePhase
-                ? 'border-amber-500 ring-2 ring-amber-400'
+                ? 'border-amber-500 ring-2 ring-amber-300'
                 : 'border-gray-300'
             }`}
             readOnly={isCurveNameFieldLocked}
@@ -896,13 +892,13 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
         </div>
       ) : null}
 
-      <p className={`text-xs font-semibold uppercase tracking-wide text-gray-600 mt-6 mb-0 ${isNeedCurveNamePhase ? 'opacity-40' : ''}`}>Axis min / max</p>
+      <p className={`text-xs font-semibold uppercase tracking-wide text-gray-500 mt-6 mb-0 ${isNeedCurveNamePhase ? 'opacity-45' : ''}`}>Axis min / max</p>
       <div
         className={`grid grid-cols-1 md:grid-cols-2 gap-6 mt-3 rounded-lg transition ${
-          isSetupPhase ? 'p-3 -mx-1 ring-2 ring-green-300 bg-green-50/40' : ''
+          isSetupPhase ? 'p-3 -mx-1 border border-gray-300 bg-gray-50' : ''
         }`}
         style={{
-          opacity: isNeedCurveNamePhase ? 0.4 : (isAxisMappingConfirmed || isEditingCurve) ? 0.5 : 1,
+          opacity: isNeedCurveNamePhase ? 0.45 : (isAxisMappingConfirmed || isEditingCurve) ? 0.55 : 1,
           pointerEvents: (isAxisMappingConfirmed || isEditingCurve || isNeedCurveNamePhase) ? 'none' : 'auto',
         }}
       >
@@ -1039,30 +1035,27 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
 
       {/* Axis status & controls */}
       <div
-        className={`mt-6 p-4 border-2 rounded-lg ${isNeedCurveNamePhase ? 'opacity-50' : ''}`}
+        className={`mt-6 p-4 border rounded-lg ${isNeedCurveNamePhase ? 'opacity-50' : ''}`}
         style={{
-          borderColor: isAxisMappingConfirmed ? '#4caf50' : '#22c55e',
-          backgroundColor: isAxisMappingConfirmed ? '#e8f5e9' : isSetupPhase ? '#f0fdf4' : '#fff3e0',
+          borderColor: isAxisMappingConfirmed ? '#d1d5db' : '#9ca3af',
+          backgroundColor: isAxisMappingConfirmed ? '#f9fafb' : '#ffffff',
         }}
       >
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             {isAxisMappingConfirmed ? (
               <>
-                <span className="text-2xl" aria-hidden="true">🔒</span>
-                <span className="text-sm font-semibold text-green-700">Axes locked</span>
+                <span className="text-sm" aria-hidden="true">🔒</span>
+                <span className="text-sm font-semibold text-gray-800">Axes locked</span>
               </>
             ) : (
-              <>
-                <span className="text-2xl" aria-hidden="true">○</span>
-                <span className="text-sm font-semibold text-green-800">Review min/max, then lock</span>
-              </>
+              <span className="text-sm font-semibold text-gray-800">Ready to lock axes</span>
             )}
           </div>
         </div>
         
         {/* Always Display Current Axis Values */}
-        <div className="text-xs text-gray-700 bg-white p-2 rounded mb-3" style={{ border: '1px solid #ccc' }}>
+        <div className="text-xs text-gray-700 bg-white p-2 rounded mb-3 border border-gray-200">
           <div className="grid grid-cols-2 gap-4">
             <div>
               <strong>X-Axis:</strong> [{formatAxisDisplay(graphConfig.xMin, graphConfig.xScale)}, {formatAxisDisplay(graphConfig.xMax, graphConfig.xScale)}] ({graphConfig.xScale})
@@ -1093,12 +1086,12 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
               return (
                 <>
                   {missing.length > 0 && (
-                    <div className="mb-2 p-2 rounded bg-red-50 border border-red-300 text-xs text-red-700">
-                      ❌ Required: Set {missing.join(', ')}
+                    <div className="mb-2 p-2 rounded bg-gray-50 border border-gray-300 text-xs text-gray-700">
+                      Required: {missing.join(', ')}
                     </div>
                   )}
                   {hasErrors && (
-                    <div className="mb-2 p-2 rounded bg-red-50 border border-red-300 text-xs text-red-700">
+                    <div className="mb-2 p-2 rounded bg-gray-50 border border-gray-300 text-xs text-red-700">
                       {logError.x}{logError.x && logError.y && ' | '}{logError.y}
                     </div>
                   )}
@@ -1107,8 +1100,8 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
                     disabled={isDisabled}
                     className={`w-full px-4 py-2 rounded font-medium text-sm transition ${
                       isDisabled
-                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                        : 'bg-green-600 text-white hover:bg-green-700 ring-2 ring-green-300 ring-offset-1'
+                        ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                        : 'bg-gray-900 text-white hover:bg-gray-800'
                     }`}
                     title={isDisabled ? 'Fill required fields first' : 'Review settings, then lock axes to start clicking points'}
                   >
@@ -1128,10 +1121,10 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             }}
             className={`w-full mt-3 px-4 py-2 rounded font-medium ${
               isNeedCurveNamePhase
-                ? 'bg-gray-400 text-gray-100 opacity-60'
-                : 'bg-orange-600 text-white hover:bg-orange-700'
+                ? 'bg-gray-200 text-gray-400'
+                : 'bg-white text-gray-800 border border-gray-300 hover:bg-gray-50'
             }`}
-            style={{ pointerEvents: 'auto', filter: isNeedCurveNamePhase ? 'none' : 'brightness(1.4)' }}
+            style={{ pointerEvents: 'auto' }}
             title="Edit axis settings (clears captured points)"
           >
             Edit axes

@@ -1424,29 +1424,27 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
         </div>
       ) : null}
       <div
-        className={`border rounded mb-4 overflow-auto transition-shadow ${
-          captureUiPhase === 'capture'
-            ? 'border-green-500 ring-2 ring-green-300 shadow-sm'
-            : captureUiPhase === 'setup'
-              ? 'border-blue-400 ring-2 ring-blue-200'
-              : captureUiPhase === 'needCurveName'
-                ? 'border-gray-200 opacity-60'
-                : 'border-gray-200'
+        className={`border rounded mb-4 overflow-auto transition ${
+          captureUiPhase === 'needCurveName'
+            ? 'border-gray-200 opacity-55'
+            : captureUiPhase === 'capture'
+              ? 'border-gray-400 shadow-sm'
+              : 'border-gray-300'
         }`}
       >
         <div
-          className="sticky top-0 z-10 px-3 py-2 bg-gray-900 bg-opacity-90 text-white border-b border-green-500 font-mono text-sm font-bold"
+          className="sticky top-0 z-10 px-3 py-2 bg-gray-900 bg-opacity-90 text-white border-b border-gray-600 font-mono text-sm font-bold"
           style={{ visibility: captureHudVisible ? 'visible' : 'hidden', opacity: showCapturePointStatus || showCoords || savedViewCrosscheckActive ? 1 : 0.35 }}
         >
           {showCapturePointStatus ? (
-            <div className="text-yellow-300 text-xs font-semibold mb-1">
+            <div className="text-gray-200 text-xs font-semibold mb-1">
               {manualCapturePoints.length > 0
                 ? `Captured: ${manualCapturePoints.length} point${manualCapturePoints.length === 1 ? '' : 's'} · Next: #${manualCapturePoints.length + 1}`
                 : 'Next point: #1'}
             </div>
           ) : null}
           {savedViewCrosscheckActive ? (
-            <div className="text-green-300 text-xs font-semibold mb-1">
+            <div className="text-gray-300 text-xs font-semibold mb-1">
               {showCoords
                 ? 'Cross-check · hover coordinates'
                 : 'Hover over the graph to cross-check coordinates'}
@@ -1489,8 +1487,8 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
           <button
             className={`px-4 py-2 rounded font-medium ${
               captureUiPhase === 'capture'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-400 text-gray-100'
+                ? 'bg-gray-800 text-white'
+                : 'bg-gray-300 text-gray-500'
             }`}
             onClick={() => setShowFixPoints((prev) => !prev)}
             title={showFixPoints ? 'Hide connecting lines between points' : 'Show lines connecting your points'}
@@ -1526,9 +1524,9 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
         <button
           className={`px-4 py-2 rounded font-medium transition ${
             isAxisMappingConfirmed && !isEditingCurve
-              ? 'bg-gray-400 text-gray-100 cursor-not-allowed opacity-50'
+              ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
               : captureUiPhase === 'setup'
-                ? 'bg-blue-600 text-white ring-2 ring-blue-300 ring-offset-1'
+                ? 'bg-gray-900 text-white'
                 : 'bg-gray-700 text-white'
           }`}
           disabled={isAxisMappingConfirmed && !isEditingCurve}
@@ -1563,8 +1561,8 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
         <button
           className={`px-4 py-2 rounded font-medium ${
             captureUiPhase === 'capture' || captureUiPhase === 'edit'
-              ? 'bg-red-700 text-white'
-              : 'bg-gray-500 text-gray-100 opacity-45'
+              ? 'bg-gray-800 text-white'
+              : 'bg-gray-200 text-gray-400'
           }`}
           onClick={handleClearPoints}
           title="Clear all captured points (keeps axis settings)"
