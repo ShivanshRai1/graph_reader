@@ -1428,7 +1428,9 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
           className={`mb-3 px-3 py-2.5 rounded text-sm font-semibold ${
             captureUiPhase === 'needCurveName'
               ? 'bg-amber-50 text-amber-950 border border-amber-400'
-              : 'bg-gray-900 text-white'
+              : captureUiPhase === 'capture'
+                ? 'bg-blue-800 text-white'
+                : 'bg-slate-800 text-white'
           }`}
           role="status"
         >
@@ -1542,9 +1544,16 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
             isAxisMappingConfirmed && !isEditingCurve
               ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
               : captureUiPhase === 'setup'
-                ? 'bg-gray-900 text-white'
-                : 'bg-gray-700 text-white'
+                ? 'bg-blue-700 text-white'
+                : 'bg-slate-700 text-white'
           }`}
+          style={
+            isAxisMappingConfirmed && !isEditingCurve
+              ? { backgroundColor: '#e2e8f0', color: '#94a3b8' }
+              : captureUiPhase === 'setup'
+                ? { backgroundColor: '#1d4ed8', color: '#ffffff' }
+                : { backgroundColor: '#334155', color: '#ffffff' }
+          }
           disabled={isAxisMappingConfirmed && !isEditingCurve}
           onClick={() => {
             if (isAxisMappingConfirmed && !isEditingCurve) return;

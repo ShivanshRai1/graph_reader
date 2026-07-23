@@ -8869,9 +8869,14 @@ const GraphCapture = () => {
                     onClick={handleSaveDataPoints}
                     className={`px-4 py-2 rounded font-medium disabled:opacity-50 transition ${
                       canSaveCurve
-                        ? 'bg-gray-900 text-white hover:bg-gray-800'
-                        : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                        ? 'bg-blue-700 text-white hover:bg-blue-800'
+                        : 'bg-slate-200 text-slate-500 cursor-not-allowed'
                     }`}
+                    style={
+                      canSaveCurve
+                        ? { backgroundColor: '#1d4ed8', color: '#ffffff' }
+                        : { backgroundColor: '#e2e8f0', color: '#64748b' }
+                    }
                     disabled={isSaving || !canSaveCurve}
                     title={
                       canSaveCurve

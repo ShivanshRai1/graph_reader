@@ -680,19 +680,20 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
 
       {showCompactLocked ? (
         <>
-          <div className="mb-5 rounded-lg border border-gray-300 bg-white p-4">
+          <div className="mb-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
             <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-              <div className="text-base font-semibold text-gray-900">Axes locked</div>
+              <div className="text-base font-semibold text-slate-900">Axes locked</div>
               <button
                 type="button"
                 onClick={handleUnlockAxes}
-                className="px-3 py-1.5 rounded border border-gray-300 bg-white text-sm font-medium text-gray-900 hover:bg-gray-50"
+                className="px-3 py-1.5 rounded border border-slate-300 bg-white text-sm font-medium text-slate-900 hover:bg-slate-100"
+                style={{ backgroundColor: '#ffffff', color: '#0f172a' }}
                 title="Edit axis settings (clears captured points)"
               >
                 Edit axes
               </button>
             </div>
-            <div className="text-sm text-gray-900 space-y-1.5">
+            <div className="text-sm text-slate-800 space-y-1.5">
               <div>
                 <span className="font-medium">X</span>
                 {': '}
@@ -1137,9 +1138,14 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
                     disabled={isDisabled}
                     className={`w-full px-4 py-2 rounded font-medium text-sm transition ${
                       isDisabled
-                        ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                        : 'bg-gray-900 text-white hover:bg-gray-800'
+                        ? 'bg-slate-200 text-slate-500 cursor-not-allowed'
+                        : 'bg-blue-700 text-white hover:bg-blue-800'
                     }`}
+                    style={
+                      isDisabled
+                        ? { backgroundColor: '#e2e8f0', color: '#64748b' }
+                        : { backgroundColor: '#1d4ed8', color: '#ffffff' }
+                    }
                     title={isDisabled ? 'Fill required fields first' : 'Review settings, then lock axes to start clicking points'}
                   >
                     Lock axes
@@ -1153,7 +1159,8 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
         {isAxisMappingConfirmed && (
           <button
             onClick={handleUnlockAxes}
-            className="w-full mt-3 px-4 py-2 rounded font-medium bg-white text-gray-900 border border-gray-300 hover:bg-gray-50"
+            className="w-full mt-3 px-4 py-2 rounded font-medium bg-white text-slate-900 border border-slate-300 hover:bg-slate-50"
+            style={{ backgroundColor: '#ffffff', color: '#0f172a' }}
             title="Edit axis settings (clears captured points)"
           >
             Edit axes
@@ -1225,7 +1232,8 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
                 No, go back
               </button>
               <button
-                className="px-4 py-2 rounded bg-gray-900 text-white font-medium"
+                className="px-4 py-2 rounded bg-blue-700 text-white font-medium"
+                style={{ backgroundColor: '#1d4ed8', color: '#ffffff' }}
                 onClick={() => {
                   setShowConfirmModal(false);
                   onConfirmAxisMapping();
