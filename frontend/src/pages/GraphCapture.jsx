@@ -5044,7 +5044,7 @@ const GraphCapture = () => {
     const graphId = String(urlParams.graph_id || activeSessionGraphIdRef.current || '').trim();
     const exportOptions = { persistedAxis: getPersistedGraphContext(graphId)?.axis || null };
     if (!isSavedCurvesExportReady(curves, graphConfig, exportOptions)) {
-      alert('Setup required before exporting .tc: confirm axis mapping with X/Y min, max, scale, and unit in Graph Setup.');
+      alert('Setup required before exporting .tc: lock axes with X/Y min, max, scale, and unit in Graph settings.');
       return;
     }
 
@@ -5078,7 +5078,7 @@ const GraphCapture = () => {
     const exportOptions = { persistedAxis: getPersistedGraphContext(graphId)?.axis || null };
     const readyGroups = groupedCurves.filter((group) => isSavedCurvesExportReady(group.curves, graphConfig, exportOptions));
     if (readyGroups.length === 0) {
-      alert('Setup required before exporting .tc: confirm axis mapping with X/Y min, max, scale, and unit in Graph Setup.');
+      alert('Setup required before exporting .tc: lock axes with X/Y min, max, scale, and unit in Graph settings.');
       return;
     }
 
@@ -5101,7 +5101,7 @@ const GraphCapture = () => {
 
     const exportOptions = getSavedCurvesExportOptions();
     if (!isSavedCurvesExportReady([curve], graphConfig, exportOptions)) {
-      alert('Setup required before downloading: confirm axis mapping with X/Y min, max, scale, and unit in Graph Setup.');
+      alert('Setup required before downloading: lock axes with X/Y min, max, scale, and unit in Graph settings.');
       return;
     }
 
@@ -5122,7 +5122,7 @@ const GraphCapture = () => {
 
     const exportOptions = getSavedCurvesExportOptions();
     if (!isSavedCurvesExportReady(curves, graphConfig, exportOptions)) {
-      alert('Setup required before exporting CSV: confirm axis mapping with X/Y min, max, scale, and unit in Graph Setup.');
+      alert('Setup required before exporting CSV: lock axes with X/Y min, max, scale, and unit in Graph settings.');
       return;
     }
 
@@ -5143,7 +5143,7 @@ const GraphCapture = () => {
 
     const exportOptions = getSavedCurvesExportOptions();
     if (!isSavedCurvesExportReady(curves, graphConfig, exportOptions)) {
-      alert('Setup required before exporting JSON: confirm axis mapping with X/Y min, max, scale, and unit in Graph Setup.');
+      alert('Setup required before exporting JSON: lock axes with X/Y min, max, scale, and unit in Graph settings.');
       return;
     }
 
@@ -5170,7 +5170,7 @@ const GraphCapture = () => {
       isSavedCurvesExportReady(group.curves, graphConfig, exportOptions)
     );
     if (readyGroups.length === 0) {
-      alert('Setup required before exporting CSV: confirm axis mapping with X/Y min, max, scale, and unit in Graph Setup.');
+      alert('Setup required before exporting CSV: lock axes with X/Y min, max, scale, and unit in Graph settings.');
       return;
     }
 
@@ -5192,7 +5192,7 @@ const GraphCapture = () => {
       isSavedCurvesExportReady(group.curves, graphConfig, exportOptions)
     );
     if (readyGroups.length === 0) {
-      alert('Setup required before exporting JSON: confirm axis mapping with X/Y min, max, scale, and unit in Graph Setup.');
+      alert('Setup required before exporting JSON: lock axes with X/Y min, max, scale, and unit in Graph settings.');
       return;
     }
 
@@ -8684,11 +8684,11 @@ const GraphCapture = () => {
                 <div className="mb-4 rounded border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                   {isAxisMappingConfirmed ? (
                     <>
-                      Curve saved. Enter a new <strong>Curve or Line Name</strong>, capture points on the graph, then click <strong>Save Data Points</strong> again. Axis mapping stays locked for this graph.
+                      Curve saved. Enter a new <strong>Curve or Line Name</strong>, capture points on the graph, then click <strong>Save curve</strong> again. Axes stay locked for this graph.
                     </>
                   ) : (
                     <>
-                      Enter a new curve or line name, then click <strong>Final Check</strong> to capture the next curve.
+                      Enter a new curve or line name, then click <strong>Lock axes</strong> to capture the next curve.
                     </>
                   )}
                 </div>
@@ -8815,7 +8815,7 @@ const GraphCapture = () => {
                     className="px-4 py-2 rounded bg-green-600 text-white font-medium disabled:opacity-50"
                     disabled={isSaving}
                   >
-                    Save Data Points
+                    Save curve
                   </button>
                 )}
                 {!!urlParams.return_url ? (

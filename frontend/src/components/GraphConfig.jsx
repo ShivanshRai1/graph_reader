@@ -667,7 +667,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
     <div
       className="w-full p-5 bg-white rounded-lg mt-5 shadow"
     >
-      <h3 className="text-gray-900 text-lg font-semibold mb-5">Graph Configuration</h3>
+      <h3 className="text-gray-900 text-lg font-semibold mb-5">Graph settings</h3>
 
       <div
         className="mb-5"
@@ -676,8 +676,9 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
           pointerEvents: isMetadataLocked ? 'none' : 'auto',
         }}
       >
+        <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 mb-3">Names &amp; labels</p>
         <label className="block mb-3 font-medium text-gray-800">
-          <span className="block mb-1 text-sm text-gray-800">Graph Title:</span>
+          <span className="block mb-1 text-sm font-semibold text-gray-900">Graph Title:</span>
           <input
             type="text"
             name="graphTitle"
@@ -700,7 +701,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             pointerEvents: allowNextCurveNameEntry ? 'auto' : undefined,
           }}
         >
-          <span className="block mb-1 text-sm text-gray-800">Curve or Line Name:</span>
+          <span className="block mb-1 text-sm font-semibold text-gray-900">Curve or Line Name:</span>
           <input
             type="text"
             name="curveName"
@@ -762,7 +763,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
           />
         </label>
         <label className="block mb-3 font-medium text-gray-800">
-          <span className="block mb-1 text-sm text-gray-800">X Title:</span>
+          <span className="block mb-1 text-sm font-semibold text-gray-900">X Title:</span>
           <input
             type="text"
             name="xLabel"
@@ -775,7 +776,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
           />
         </label>
         <label className="block mb-3 font-medium text-gray-800">
-          <span className="block mb-1 text-sm text-gray-800">Y Title:</span>
+          <span className="block mb-1 text-sm font-semibold text-gray-900">Y Title:</span>
           <input
             type="text"
             name="yLabel"
@@ -851,7 +852,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
                 Use axis settings from similar captures
               </button>
               <p className="text-xs text-amber-800 mt-2">
-                Uses past graphs like this one from your saved curves. You still align the blue box and click Final Check.
+                Uses past graphs like this one from your saved curves. You still align the blue box and lock axes.
               </p>
             </div>
           ) : null}
@@ -872,11 +873,12 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
         </div>
       ) : null}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6" style={{ opacity: (isAxisMappingConfirmed || isEditingCurve) ? 0.5 : 1, pointerEvents: (isAxisMappingConfirmed || isEditingCurve) ? 'none' : 'auto' }}>
+      <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 mt-6 mb-0">Axis min / max</p>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-3" style={{ opacity: (isAxisMappingConfirmed || isEditingCurve) ? 0.5 : 1, pointerEvents: (isAxisMappingConfirmed || isEditingCurve) ? 'none' : 'auto' }}>
         <div>
           <h4 className="text-gray-800 font-semibold mb-3">Y-Axis {isAxisMappingConfirmed && '🔒'} {isEditingCurve && '(disabled during edit)'}</h4>
           <label className="block mb-3">
-            <span className="block text-sm font-medium text-gray-800 mb-1">Scale:</span>
+            <span className="block text-sm font-semibold text-gray-900 mb-1">Scale:</span>
             <select name="yScale" value={graphConfig.yScale} onChange={handleChange} disabled={isAxisMappingConfirmed || isEditingCurve} className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed">
               <option value="Linear">Linear</option>
               <option value="Logarithmic">Logarithmic</option>
@@ -1004,19 +1006,19 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
 
       {children ? <div className="mt-4">{children}</div> : null}
 
-      {/* Axis Mapping Status & Controls */}
+      {/* Axis status & controls */}
       <div className="mt-6 p-4 border-2 rounded-lg" style={{ borderColor: isAxisMappingConfirmed ? '#4caf50' : '#ffc107', backgroundColor: isAxisMappingConfirmed ? '#e8f5e9' : '#fff3e0' }}>
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             {isAxisMappingConfirmed ? (
               <>
-                <span className="text-2xl">🔒</span>
-                <span className="text-sm font-semibold text-green-700">Axis Mapping - Final Check: CONFIRMED</span>
+                <span className="text-2xl" aria-hidden="true">🔒</span>
+                <span className="text-sm font-semibold text-green-700">Axes locked — click points on the graph</span>
               </>
             ) : (
               <>
-                <span className="text-2xl">⚠️</span>
-                <span className="text-sm font-semibold text-orange-700">Axis Mapping - Final Check: PENDING</span>
+                <span className="text-2xl" aria-hidden="true">⚠️</span>
+                <span className="text-sm font-semibold text-orange-700">Set scale and min/max, then lock axes</span>
               </>
             )}
           </div>
@@ -1076,9 +1078,9 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
                         ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                         : 'bg-green-600 text-white hover:bg-green-700'
                     }`}
-                    title={isDisabled ? 'All axis values must be set and valid' : 'Review axis configuration before locking'}
+                    title={isDisabled ? 'Fill required fields first' : 'Review settings, then lock axes to start clicking points'}
                   >
-                    Final Check
+                    Lock axes
                   </button>
                 </>
               );
@@ -1094,9 +1096,9 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             }}
             className="w-full mt-3 px-4 py-2 rounded bg-orange-600 text-white font-medium hover:bg-orange-700"
             style={{ pointerEvents: 'auto', filter: 'brightness(1.4)' }}
-            title="Unlock configuration (will clear captured points)"
+            title="Edit axis settings (clears captured points)"
           >
-            Unlock Configuration
+            Edit axes
           </button>
         )}
       </div>
@@ -1123,9 +1125,9 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
               padding: 20,
             }}
           >
-            <div className="text-base font-semibold mb-3">Proceed with this final axis mapping check?</div>
+            <div className="text-base font-semibold mb-3">Lock these axis settings?</div>
             <div className="text-sm mb-4" style={{ color: '#4b5563' }}>
-              Confirm the values below. If you continue, axis mapping is locked and point capture begins.
+              Confirm the values below. After you continue, axes are locked and you can click points on the graph.
             </div>
             {showScaleAndUnitCrossCheckInModal ? (
               <div className="mb-4 flex items-start gap-2 rounded-lg border-2 border-orange-400 bg-orange-50 px-3 py-2.5">
@@ -1153,7 +1155,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
               <div><strong>Y Unit:</strong> {getUnitLabel(graphConfig.yUnitPrefix)}</div>
             </div>
             <div className="text-xs mt-3" style={{ color: '#6b7280' }}>
-              Need to change values? Click "Unlock Configuration" to edit the configuration.
+              Need to change later? Use <strong>Edit axes</strong> (this clears captured points).
             </div>
             <div className="mt-5 flex gap-3 justify-end">
               <button
@@ -1169,7 +1171,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
                   onConfirmAxisMapping();
                 }}
               >
-                Yes, proceed
+                Yes, lock axes
               </button>
             </div>
           </div>

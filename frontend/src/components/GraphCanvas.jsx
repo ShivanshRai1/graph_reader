@@ -1414,15 +1414,12 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
 
   return (
     <div className="w-full p-5 bg-white rounded-lg mt-5">
-      <div className="bg-blue-50 p-4 rounded mb-4">
-        <p className="text-blue-700 font-medium mb-2"><strong>Instructions:</strong></p>
-        <ul className="list-disc pl-5 text-gray-700">
-          <li>Align the blue box to the printed axis ticks (0.1 and 100 on X, 0.1 and 1000 on Y for this graph) — not the image border.</li>
-          <li>Set axis min/max to match those tick values (e.g. X max = 100, Y max = 1000), then confirm axis mapping.</li>
-          <li>Click on the plot to add data points</li>
-          <li>Right-click on a captured point to remove it</li>
-          <li>Use the buttons below to adjust the box or clear points; hover to see the magnifier</li>
-        </ul>
+      <div className="bg-blue-50 p-4 rounded mb-4" role="status">
+        <p className="text-blue-800 font-medium m-0 text-sm leading-relaxed">
+          {isAxisMappingConfirmed
+            ? 'Click along the curve to add points. Right-click a point to remove it.'
+            : 'Drag the blue box to match the printed axes, set min/max on the right, then lock axes.'}
+        </p>
       </div>
       
 
@@ -1487,8 +1484,9 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
           <button
             className="px-4 py-2 rounded bg-blue-600 text-white font-medium"
             onClick={() => setShowFixPoints((prev) => !prev)}
+            title={showFixPoints ? 'Hide connecting lines between points' : 'Show lines connecting your points'}
           >
-            {showFixPoints ? 'Hide points' : 'Connect points'}
+            {showFixPoints ? 'Hide lines' : 'Show lines'}
           </button>
           {showFixPoints && (
             <div className="absolute left-0 top-full mt-3 z-10 min-w-max">
@@ -1539,20 +1537,24 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
             setShowRedrawMsg(false);
             onGraphAreaManuallyAdjusted?.();
           }}
-          title={isAxisMappingConfirmed && !isEditingCurve ? 'Unlock configuration to redraw the axis box' : 'Redraw/retake the bounding box for the axis (clears only the box, not captured points)'}
+          title={
+            isAxisMappingConfirmed && !isEditingCurve
+              ? 'Click Edit axes first to adjust the plot area'
+              : 'Drag the blue box to match the graph axes (does not clear points)'
+          }
         >
-          Redraw Axis Box
+          Adjust plot area
         </button>
         <button
           className="px-4 py-2 rounded bg-red-700 text-white font-medium"
           onClick={handleClearPoints}
-          title="Clear all captured data points (keeps axis mapping)"
+          title="Clear all captured points (keeps axis settings)"
         >
-          Retake Points
+          Clear points
         </button>
         {showRedrawMsg && (
           <div className="text-red-600 font-bold mt-2">
-            Please redraw the axis box
+            Please adjust the plot area
           </div>
         )}
         {showAiAlignmentGuidance() && (
@@ -1571,7 +1573,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
             <ol className="list-decimal list-inside space-y-1 m-0 pl-0.5">
               <li>Set <strong>X/Y min and max</strong> to match the graph axis labels.</li>
               <li>
-                Verify <strong>scale (Linear/Logarithmic)</strong> and <strong>unit</strong> in the configuration panel match the printed graph axes.
+                Verify <strong>scale (Linear/Logarithmic)</strong> and <strong>unit</strong> in Graph settings match the printed graph axes.
               </li>
               <li>
                 Drag the <strong>blue box</strong> to align with the plot area
