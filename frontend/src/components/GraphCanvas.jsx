@@ -1423,28 +1423,44 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
           Part Number: {partNumber && manufacturer ? `${partNumber}(${manufacturer})` : partNumber || ''}
         </div>
       ) : null}
+      {captureUiPhase === 'setup' || captureUiPhase === 'capture' || captureUiPhase === 'needCurveName' ? (
+        <div
+          className={`mb-3 px-3 py-2.5 rounded text-sm font-semibold ${
+            captureUiPhase === 'needCurveName'
+              ? 'bg-amber-50 text-amber-950 border border-amber-400'
+              : 'bg-gray-900 text-white'
+          }`}
+          role="status"
+        >
+          {captureUiPhase === 'setup'
+            ? 'Adjust the blue box, then Lock axes'
+            : captureUiPhase === 'needCurveName'
+              ? 'Enter a curve name on the right'
+              : 'Click points on the graph'}
+        </div>
+      ) : null}
       <div
         className={`border rounded mb-4 overflow-auto transition ${
           captureUiPhase === 'needCurveName'
-            ? 'border-gray-200 opacity-55'
+            ? 'border-gray-200 opacity-50'
             : captureUiPhase === 'capture'
-              ? 'border-gray-400 shadow-sm'
+              ? 'border-gray-800'
               : 'border-gray-300'
         }`}
       >
         <div
-          className="sticky top-0 z-10 px-3 py-2 bg-gray-900 bg-opacity-90 text-white border-b border-gray-600 font-mono text-sm font-bold"
+          className="sticky top-0 z-10 px-3 py-2 bg-gray-900 text-white border-b border-gray-700 font-mono text-sm font-bold"
           style={{ visibility: captureHudVisible ? 'visible' : 'hidden', opacity: showCapturePointStatus || showCoords || savedViewCrosscheckActive ? 1 : 0.35 }}
         >
           {showCapturePointStatus ? (
-            <div className="text-gray-200 text-xs font-semibold mb-1">
+            <div className="text-white text-xs font-semibold mb-1">
               {manualCapturePoints.length > 0
-                ? `Captured: ${manualCapturePoints.length} point${manualCapturePoints.length === 1 ? '' : 's'} · Next: #${manualCapturePoints.length + 1}`
+                ? `Captured: ${manualCapturePoints.length} · Next #${manualCapturePoints.length + 1}`
                 : 'Next point: #1'}
             </div>
           ) : null}
           {savedViewCrosscheckActive ? (
-            <div className="text-gray-300 text-xs font-semibold mb-1">
+            <div className="text-gray-200 text-xs font-semibold mb-1">
               {showCoords
                 ? 'Cross-check · hover coordinates'
                 : 'Hover over the graph to cross-check coordinates'}

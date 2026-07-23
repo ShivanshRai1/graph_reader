@@ -667,26 +667,86 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
 
   const isNeedCurveNamePhase = captureUiPhase === 'needCurveName' || curveNameAttention;
   const isSetupPhase = captureUiPhase === 'setup';
+  const showCompactLocked = Boolean(isAxisMappingConfirmed && !isEditingCurve);
+
+  const handleUnlockAxes = () => {
+    setLogInputMode(DEFAULT_LOG_INPUT_MODE);
+    onRetakeAxis();
+  };
 
   return (
     <div className="w-full p-5 bg-white rounded-lg mt-5 border border-gray-200">
       <h3 className="text-gray-900 text-lg font-semibold mb-5">Graph settings</h3>
 
-      <div
-        className="mb-5"
-        style={{
-          opacity: isNeedCurveNamePhase
-            ? 1
-            : isMetadataLocked && !allowNextCurveNameEntry
-              ? 0.5
-              : isSetupPhase
-                ? 0.85
-                : 1,
-          pointerEvents: isMetadataLocked && !isNeedCurveNamePhase ? 'none' : 'auto',
-        }}
-      >
+      {showCompactLocked ? (
+        <>
+          <div className="mb-5 rounded-lg border border-gray-300 bg-white p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+              <div className="text-base font-semibold text-gray-900">Axes locked</div>
+              <button
+                type="button"
+                onClick={handleUnlockAxes}
+                className="px-3 py-1.5 rounded border border-gray-300 bg-white text-sm font-medium text-gray-900 hover:bg-gray-50"
+                title="Edit axis settings (clears captured points)"
+              >
+                Edit axes
+              </button>
+            </div>
+            <div className="text-sm text-gray-900 space-y-1.5">
+              <div>
+                <span className="font-medium">X</span>
+                {': '}
+                [{formatAxisDisplay(graphConfig.xMin, graphConfig.xScale)}, {formatAxisDisplay(graphConfig.xMax, graphConfig.xScale)}]
+                {' · '}
+                {graphConfig.xScale}
+              </div>
+              <div>
+                <span className="font-medium">Y</span>
+                {': '}
+                [{formatAxisDisplay(graphConfig.yMin, graphConfig.yScale)}, {formatAxisDisplay(graphConfig.yMax, graphConfig.yScale)}]
+                {' · '}
+                {graphConfig.yScale}
+              </div>
+            </div>
+          </div>
+
+          <label className="block mb-5 font-medium text-gray-800">
+            <span className="block mb-1 text-sm font-semibold text-gray-900">Curve or Line Name</span>
+            <input
+              id={CURVE_NAME_INPUT_ID}
+              type="text"
+              name="curveName"
+              value={graphConfig.curveName}
+              onChange={handleChange}
+              placeholder="Enter curve name"
+              className={`w-full px-3 py-2.5 border rounded text-sm text-gray-900 bg-white ${
+                isNeedCurveNamePhase
+                  ? 'border-amber-500 ring-2 ring-amber-300'
+                  : 'border-gray-300'
+              }`}
+              readOnly={isCurveNameFieldLocked}
+              disabled={isCurveNameFieldLocked}
+            />
+          </label>
+
+          {children ? <div className="mb-4">{children}</div> : null}
+
+          <details className="text-sm text-gray-700">
+            <summary className="cursor-pointer select-none text-gray-600 hover:text-gray-900">
+              Graph details
+            </summary>
+            <div className="mt-3 space-y-2 rounded border border-gray-200 bg-gray-50 p-3 text-gray-900">
+              <div><span className="text-gray-600">Title:</span> {graphConfig.graphTitle || '—'}</div>
+              <div><span className="text-gray-600">Part:</span> {graphConfig.partNumber || '—'}</div>
+              <div><span className="text-gray-600">X title:</span> {graphConfig.xLabel || '—'}</div>
+              <div><span className="text-gray-600">Y title:</span> {graphConfig.yLabel || '—'}</div>
+            </div>
+          </details>
+        </>
+      ) : (
+        <>
+      <div className="mb-5">
         <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">Names &amp; labels</p>
-        <div className={isNeedCurveNamePhase ? 'opacity-45 pointer-events-none' : ''}>
         <label className="block mb-3 font-medium text-gray-800">
           <span className="block mb-1 text-sm font-semibold text-gray-900">Graph Title:</span>
           <input
@@ -704,16 +764,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             disabled={isGraphTitleReadOnly || isMetadataLocked}
           />
         </label>
-        </div>
-        <label
-          className={`block mb-3 font-medium text-gray-800 ${
-            isNeedCurveNamePhase ? 'relative z-10' : ''
-          }`}
-          style={{
-            opacity: isNeedCurveNamePhase ? 1 : undefined,
-            pointerEvents: isNeedCurveNamePhase ? 'auto' : undefined,
-          }}
-        >
+        <label className="block mb-3 font-medium text-gray-800">
           <span className="block mb-1 text-sm font-semibold text-gray-900">Curve or Line Name:</span>
           <input
             id={CURVE_NAME_INPUT_ID}
@@ -722,16 +773,11 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             value={graphConfig.curveName}
             onChange={handleChange}
             placeholder="Enter curve name"
-            className={`w-full px-3 py-2 border rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed ${
-              isNeedCurveNamePhase
-                ? 'border-amber-500 ring-2 ring-amber-300'
-                : 'border-gray-300'
-            }`}
+            className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed"
             readOnly={isCurveNameFieldLocked}
             disabled={isCurveNameFieldLocked}
           />
         </label>
-        <div className={isNeedCurveNamePhase ? 'opacity-40 pointer-events-none' : ''}>
         {showManufacturerField && (
           <label className="block mb-3 font-medium text-gray-800">
             <span className="block mb-1 text-sm text-gray-800">Manufacturer:</span>
@@ -805,7 +851,6 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             disabled={isMetadataLocked || isYTitleReadOnly}
           />
         </label>
-        </div>
       </div>
 
       {showScaleGuidancePanel ? (
@@ -891,14 +936,14 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
         </div>
       ) : null}
 
-      <p className={`text-xs font-semibold uppercase tracking-wide text-gray-500 mt-6 mb-0 ${isNeedCurveNamePhase ? 'opacity-45' : ''}`}>Axis min / max</p>
+      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mt-6 mb-0">Axis min / max</p>
       <div
-        className={`grid grid-cols-1 md:grid-cols-2 gap-6 mt-3 rounded-lg transition ${
+        className={`grid grid-cols-1 md:grid-cols-2 gap-6 mt-3 rounded-lg ${
           isSetupPhase ? 'p-3 -mx-1 border border-gray-300 bg-gray-50' : ''
         }`}
         style={{
-          opacity: isNeedCurveNamePhase ? 0.45 : (isAxisMappingConfirmed || isEditingCurve) ? 0.55 : 1,
-          pointerEvents: (isAxisMappingConfirmed || isEditingCurve || isNeedCurveNamePhase) ? 'none' : 'auto',
+          opacity: (isAxisMappingConfirmed || isEditingCurve) ? 0.55 : 1,
+          pointerEvents: (isAxisMappingConfirmed || isEditingCurve) ? 'none' : 'auto',
         }}
       >
         <div>
@@ -1034,33 +1079,26 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
 
       {/* Axis status & controls */}
       <div
-        className={`mt-6 p-4 border rounded-lg ${isNeedCurveNamePhase ? 'opacity-50' : ''}`}
-        style={{
-          borderColor: isAxisMappingConfirmed ? '#d1d5db' : '#9ca3af',
-          backgroundColor: isAxisMappingConfirmed ? '#f9fafb' : '#ffffff',
-        }}
+        className="mt-6 p-4 border border-gray-300 rounded-lg bg-white"
       >
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             {isAxisMappingConfirmed ? (
-              <>
-                <span className="text-sm" aria-hidden="true">🔒</span>
-                <span className="text-sm font-semibold text-gray-800">Axes locked</span>
-              </>
+              <span className="text-sm font-semibold text-gray-900">Axes locked</span>
             ) : (
-              <span className="text-sm font-semibold text-gray-800">Ready to lock axes</span>
+              <span className="text-sm font-semibold text-gray-900">Lock axes when ready</span>
             )}
           </div>
         </div>
         
         {/* Always Display Current Axis Values */}
-        <div className="text-xs text-gray-700 bg-white p-2 rounded mb-3 border border-gray-200">
+        <div className="text-sm text-gray-900 bg-gray-50 p-3 rounded mb-3 border border-gray-200">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <strong>X-Axis:</strong> [{formatAxisDisplay(graphConfig.xMin, graphConfig.xScale)}, {formatAxisDisplay(graphConfig.xMax, graphConfig.xScale)}] ({graphConfig.xScale})
+              <strong>X:</strong> [{formatAxisDisplay(graphConfig.xMin, graphConfig.xScale)}, {formatAxisDisplay(graphConfig.xMax, graphConfig.xScale)}] ({graphConfig.xScale})
             </div>
             <div>
-              <strong>Y-Axis:</strong> [{formatAxisDisplay(graphConfig.yMin, graphConfig.yScale)}, {formatAxisDisplay(graphConfig.yMax, graphConfig.yScale)}] ({graphConfig.yScale})
+              <strong>Y:</strong> [{formatAxisDisplay(graphConfig.yMin, graphConfig.yScale)}, {formatAxisDisplay(graphConfig.yMax, graphConfig.yScale)}] ({graphConfig.yScale})
             </div>
           </div>
         </div>
@@ -1114,22 +1152,16 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
         
         {isAxisMappingConfirmed && (
           <button
-            onClick={() => {
-              setLogInputMode(DEFAULT_LOG_INPUT_MODE);
-              onRetakeAxis();
-            }}
-            className={`w-full mt-3 px-4 py-2 rounded font-medium ${
-              isNeedCurveNamePhase
-                ? 'bg-gray-200 text-gray-400'
-                : 'bg-white text-gray-800 border border-gray-300 hover:bg-gray-50'
-            }`}
-            style={{ pointerEvents: 'auto' }}
+            onClick={handleUnlockAxes}
+            className="w-full mt-3 px-4 py-2 rounded font-medium bg-white text-gray-900 border border-gray-300 hover:bg-gray-50"
             title="Edit axis settings (clears captured points)"
           >
             Edit axes
           </button>
         )}
       </div>
+        </>
+      )}
 
       {showConfirmModal && (
         <div

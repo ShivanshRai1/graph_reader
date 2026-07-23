@@ -333,10 +333,10 @@ const CapturedPointsList = ({ isReadOnly = false, hasReturnUrl = false, isEditin
           {manualCapturePoints.length === 0 && importedOverlayCount === 0 && (
             <p className="text-xs text-gray-500 mt-1">
               {isAxisMappingConfirmed && !String(graphConfig.curveName || '').trim() && !isEditingCurve
-                ? 'No points yet. Enter a Curve or Line Name on the right, then click the graph.'
+                ? 'Enter a curve name on the right.'
                 : isAxisMappingConfirmed
-                  ? 'No points yet. Click the curve on the graph to add the first point.'
-                  : 'No points yet. Lock axes first, then click on the graph.'}
+                  ? 'Click the graph to add points.'
+                  : 'Lock axes first.'}
             </p>
           )}
 
