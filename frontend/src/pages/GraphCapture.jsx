@@ -8943,8 +8943,8 @@ const GraphCapture = () => {
                   </h2>
                   <div className="mb-3 flex flex-wrap gap-2">
                     <button
-                      className="px-3 py-1 rounded bg-yellow-400 text-black text-xs"
-                      style={{ backgroundColor: '#facc15', color: '#111827', borderColor: '#facc15' }}
+                      className="rounded font-semibold"
+                      style={{ backgroundColor: '#facc15', color: '#111827', padding: '10px 16px', fontSize: '14px' }}
                       onClick={handleViewAllCombinedGraphs}
                     >
                       View all graphs combined
@@ -8953,12 +8953,14 @@ const GraphCapture = () => {
                       href={buildTcCheckerUrl()}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="px-3 py-1 rounded text-xs font-medium inline-flex items-center"
+                      className="rounded font-semibold inline-flex items-center"
                       style={{
                         color: '#1d4ed8',
                         backgroundColor: '#eff6ff',
                         border: '1px solid #93c5fd',
                         textDecoration: 'none',
+                        padding: '10px 16px',
+                        fontSize: '14px',
                       }}
                       title="Open plot checker to compare captured export against reference"
                     >
@@ -8968,33 +8970,37 @@ const GraphCapture = () => {
                   <div className="flex flex-col gap-4 max-h-80 overflow-y-auto pr-2">
                     {groupedCurves.map((group, groupIndex) => (
                       <div key={group.id} className="rounded p-3" style={{ border: '1px solid var(--color-border)', background: '#ffffff' }}>
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="font-semibold" style={{ color: '#213547' }}>
+                        <div className="flex flex-col gap-3 mb-2 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="font-semibold text-base" style={{ color: '#213547' }}>
                             {group.curves[0]?.config?.graphTitle || group.curves[0]?.graph_title || `Graph ${groupIndex + 1}`} ({group.curves.length} curves)
                           </div>
                           <div className="flex flex-wrap gap-2">
                           <button
-                            className="px-3 py-1 rounded bg-gray-900 text-white text-xs"
+                            className="rounded font-semibold"
+                            style={{ backgroundColor: '#0f172a', color: '#ffffff', padding: '8px 14px', fontSize: '13px' }}
                               onClick={() => handleViewCombinedGroup(group)}
                           >
                             View combined graph
                           </button>
                             <button
-                              className="px-3 py-1 rounded bg-gray-700 text-white text-xs"
+                              className="rounded font-semibold"
+                              style={{ backgroundColor: '#334155', color: '#ffffff', padding: '8px 14px', fontSize: '13px' }}
                               onClick={() => handleExportGroupToTC(group)}
                               title="Export all curves in this graph to one HPPeval .tc file"
                             >
                               Export .tc
                             </button>
                             <button
-                              className="px-3 py-1 rounded bg-gray-700 text-white text-xs"
+                              className="rounded font-semibold"
+                              style={{ backgroundColor: '#334155', color: '#ffffff', padding: '8px 14px', fontSize: '13px' }}
                               onClick={() => handleExportGroupToCSV(group)}
                               title="Download one combined CSV with all curves in this graph"
                             >
                               Export CSV
                             </button>
                             <button
-                              className="px-3 py-1 rounded bg-gray-700 text-white text-xs"
+                              className="rounded font-semibold"
+                              style={{ backgroundColor: '#334155', color: '#ffffff', padding: '8px 14px', fontSize: '13px' }}
                               onClick={() => handleExportGroupToJSON(group)}
                               title="Download one combined JSON with all curves in this graph"
                             >
