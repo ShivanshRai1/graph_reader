@@ -1500,14 +1500,16 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
           The graph image could not be loaded from the server. Re-upload the screenshot, or open this graph after it was saved once in this tool (stored copy).
         </div>
       )}
-      <div className="flex items-center gap-4 mt-4 mb-6 flex-wrap">
+      <div className="flex items-center gap-3 mt-4 mb-6 flex-wrap">
         <div className={`relative ${captureUiPhase === 'setup' || captureUiPhase === 'needCurveName' ? 'opacity-40' : ''}`}>
           <button
-            className={`px-4 py-2 rounded font-medium ${
+            type="button"
+            className="gc-action-btn rounded"
+            style={
               captureUiPhase === 'capture'
-                ? 'bg-gray-800 text-white'
-                : 'bg-gray-300 text-gray-500'
-            }`}
+                ? { backgroundColor: '#1e293b', color: '#ffffff' }
+                : { backgroundColor: '#cbd5e1', color: '#64748b' }
+            }
             onClick={() => setShowFixPoints((prev) => !prev)}
             title={showFixPoints ? 'Hide connecting lines between points' : 'Show lines connecting your points'}
           >
@@ -1540,12 +1542,9 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
           )}
         </div>
         <button
-          className={`px-4 py-2 rounded font-medium transition ${
-            isAxisMappingConfirmed && !isEditingCurve
-              ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-              : captureUiPhase === 'setup'
-                ? 'bg-blue-700 text-white'
-                : 'bg-slate-700 text-white'
+          type="button"
+          className={`gc-action-btn rounded ${
+            isAxisMappingConfirmed && !isEditingCurve ? 'cursor-not-allowed' : ''
           }`}
           style={
             isAxisMappingConfirmed && !isEditingCurve
@@ -1584,11 +1583,13 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
           Adjust plot area
         </button>
         <button
-          className={`px-4 py-2 rounded font-medium ${
+          type="button"
+          className="gc-action-btn rounded"
+          style={
             captureUiPhase === 'capture' || captureUiPhase === 'edit'
-              ? 'bg-gray-800 text-white'
-              : 'bg-gray-200 text-gray-400'
-          }`}
+              ? { backgroundColor: '#1e293b', color: '#ffffff' }
+              : { backgroundColor: '#e2e8f0', color: '#94a3b8' }
+          }
           onClick={handleClearPoints}
           title="Clear all captured points (keeps axis settings)"
         >

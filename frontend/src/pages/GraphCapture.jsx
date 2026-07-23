@@ -8869,30 +8869,13 @@ const GraphCapture = () => {
                 ) : (
                   <button
                     onClick={handleSaveDataPoints}
-                    className={`w-full rounded text-base font-semibold transition ${
-                      canSaveCurve
-                        ? 'bg-blue-700 text-white hover:bg-blue-800'
-                        : 'bg-slate-200 text-slate-700 cursor-not-allowed'
+                    className={`gc-action-btn gc-action-btn-lg rounded ${
+                      canSaveCurve ? '' : 'cursor-not-allowed'
                     }`}
                     style={
                       canSaveCurve
-                        ? {
-                            backgroundColor: '#1d4ed8',
-                            color: '#ffffff',
-                            width: '100%',
-                            minHeight: '48px',
-                            padding: '14px 16px',
-                            fontSize: '1rem',
-                          }
-                        : {
-                            backgroundColor: '#e2e8f0',
-                            color: '#334155',
-                            width: '100%',
-                            minHeight: '48px',
-                            padding: '14px 16px',
-                            fontSize: '1rem',
-                            opacity: 1,
-                          }
+                        ? { backgroundColor: '#1d4ed8', color: '#ffffff' }
+                        : { backgroundColor: '#e2e8f0', color: '#334155' }
                     }
                     disabled={isSaving || !canSaveCurve}
                     title={
@@ -8943,8 +8926,9 @@ const GraphCapture = () => {
                   </h2>
                   <div className="mb-3 flex flex-wrap gap-2">
                     <button
-                      className="rounded font-semibold"
-                      style={{ backgroundColor: '#facc15', color: '#111827', padding: '10px 16px', fontSize: '14px' }}
+                      type="button"
+                      className="gc-action-btn rounded"
+                      style={{ backgroundColor: '#facc15', color: '#111827' }}
                       onClick={handleViewAllCombinedGraphs}
                     >
                       View all graphs combined
@@ -8953,54 +8937,56 @@ const GraphCapture = () => {
                       href={buildTcCheckerUrl()}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="rounded font-semibold inline-flex items-center"
+                      className="gc-action-btn rounded"
                       style={{
                         color: '#1d4ed8',
                         backgroundColor: '#eff6ff',
                         border: '1px solid #93c5fd',
                         textDecoration: 'none',
-                        padding: '10px 16px',
-                        fontSize: '14px',
                       }}
                       title="Open plot checker to compare captured export against reference"
                     >
                       Check
                     </a>
                   </div>
-                  <div className="flex flex-col gap-4 max-h-80 overflow-y-auto pr-2">
+                  <div className="flex flex-col gap-4 max-h-[28rem] overflow-y-auto pr-2">
                     {groupedCurves.map((group, groupIndex) => (
                       <div key={group.id} className="rounded p-3" style={{ border: '1px solid var(--color-border)', background: '#ffffff' }}>
-                        <div className="flex flex-col gap-3 mb-2 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="flex flex-col gap-3 mb-3">
                           <div className="font-semibold text-base" style={{ color: '#213547' }}>
                             {group.curves[0]?.config?.graphTitle || group.curves[0]?.graph_title || `Graph ${groupIndex + 1}`} ({group.curves.length} curves)
                           </div>
                           <div className="flex flex-wrap gap-2">
                           <button
-                            className="rounded font-semibold"
-                            style={{ backgroundColor: '#0f172a', color: '#ffffff', padding: '8px 14px', fontSize: '13px' }}
+                            type="button"
+                            className="gc-action-btn rounded"
+                            style={{ backgroundColor: '#0f172a', color: '#ffffff' }}
                               onClick={() => handleViewCombinedGroup(group)}
                           >
                             View combined graph
                           </button>
                             <button
-                              className="rounded font-semibold"
-                              style={{ backgroundColor: '#334155', color: '#ffffff', padding: '8px 14px', fontSize: '13px' }}
+                              type="button"
+                              className="gc-action-btn rounded"
+                              style={{ backgroundColor: '#334155', color: '#ffffff' }}
                               onClick={() => handleExportGroupToTC(group)}
                               title="Export all curves in this graph to one HPPeval .tc file"
                             >
                               Export .tc
                             </button>
                             <button
-                              className="rounded font-semibold"
-                              style={{ backgroundColor: '#334155', color: '#ffffff', padding: '8px 14px', fontSize: '13px' }}
+                              type="button"
+                              className="gc-action-btn rounded"
+                              style={{ backgroundColor: '#334155', color: '#ffffff' }}
                               onClick={() => handleExportGroupToCSV(group)}
                               title="Download one combined CSV with all curves in this graph"
                             >
                               Export CSV
                             </button>
                             <button
-                              className="rounded font-semibold"
-                              style={{ backgroundColor: '#334155', color: '#ffffff', padding: '8px 14px', fontSize: '13px' }}
+                              type="button"
+                              className="gc-action-btn rounded"
+                              style={{ backgroundColor: '#334155', color: '#ffffff' }}
                               onClick={() => handleExportGroupToJSON(group)}
                               title="Download one combined JSON with all curves in this graph"
                             >
@@ -9223,25 +9209,28 @@ const GraphCapture = () => {
                                   </div>
                                 </div>
                               ) : (
-                                <div className="flex flex-wrap gap-2 mt-2">
+                                <div className="flex flex-wrap gap-2 mt-3">
                                   <button
-                                    className="rounded bg-blue-600 text-white text-xs font-medium"
-                                    style={{ backgroundColor: '#2563eb', color: '#ffffff', padding: '6px 12px', fontSize: '12px' }}
+                                    type="button"
+                                    className="gc-action-btn rounded"
+                                    style={{ backgroundColor: '#2563eb', color: '#ffffff' }}
                                     onClick={() => handleViewCurve(curve)}
                                   >
                                     View
                                   </button>
                                   <button
-                                    className="rounded bg-red-600 text-white text-xs font-medium"
-                                    style={{ backgroundColor: '#dc2626', color: '#ffffff', padding: '6px 12px', fontSize: '12px' }}
+                                    type="button"
+                                    className="gc-action-btn rounded"
+                                    style={{ backgroundColor: '#dc2626', color: '#ffffff' }}
                                     onClick={() => handleRemoveCurve(curve)}
                                     disabled={isRemovingCurveId === curve.id || isRemovingAllGraphs}
                                   >
                                     {isRemovingCurveId === curve.id ? 'Removing...' : 'Remove'}
                                   </button>
                                   <button
-                                    className="rounded bg-amber-400 text-xs font-medium"
-                                    style={{ backgroundColor: '#fbbf24', color: '#0f172a', padding: '6px 12px', fontSize: '12px' }}
+                                    type="button"
+                                    className="gc-action-btn rounded"
+                                    style={{ backgroundColor: '#fbbf24', color: '#0f172a' }}
                                     onClick={() => handleEditCurveStart(curve)}
                                   >
                                     Edit
