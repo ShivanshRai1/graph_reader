@@ -1,13 +1,13 @@
 /**
- * Graph Capture API routing: DigitalOcean first, Render as backup.
+ * Graph Capture API routing: Render first, DigitalOcean as backup.
  *
- * Production Netlify is HTTPS, so the browser talks to same-origin `/do-api`
- * (proxied to DO). Direct http://DO would be blocked as mixed content.
+ * Render is primary (long AI extraction waits, no Netlify proxy timeout).
+ * DO is reached via same-origin `/do-api` when Render is down or for failover.
  */
 
 const DO_DIRECT = 'http://165.22.212.92:8010';
 const DO_VIA_NETLIFY_PROXY = '/do-api';
-const RENDER_BACKUP = 'https://graph-reader-0ot9.onrender.com';
+const RENDER_PRIMARY = 'https://graph-reader-0ot9.onrender.com';
 
 const CACHE_KEY = 'graphCapture.apiBaseUrl';
 const HEALTH_TIMEOUT_MS = 2500;
@@ -16,7 +16,7 @@ const stripSlash = (url) => String(url || '').trim().replace(/\/$/, '');
 
 const isRenderUrl = (url) => /onrender\.com/i.test(String(url || ''));
 
-/** Primary (DO) URL without consulting session failover cache. */
+/** Primary (Render) URL without consulting session failover cache. */
 export const getPrimaryApiUrl = () => {
   const explicitPrimary = stripSlash(
     import.meta.env.VITE_API_PRIMARY_URL || ''
@@ -25,25 +25,21 @@ export const getPrimaryApiUrl = () => {
 
   if (import.meta.env.DEV) {
     const envUrl = stripSlash(import.meta.env.VITE_API_URL || '');
-    // In local_dev prefer localhost; don't force DO unless asked.
     if (envUrl && !isRenderUrl(envUrl)) return envUrl;
     return 'http://localhost:8000';
   }
 
-  // Production: DO via HTTPS proxy. Ignore legacy VITE_API_URL=Render as primary.
   const envUrl = stripSlash(import.meta.env.VITE_API_URL || '');
-  if (envUrl && !isRenderUrl(envUrl)) return envUrl;
-  return DO_VIA_NETLIFY_PROXY;
+  if (envUrl) return envUrl;
+
+  return RENDER_PRIMARY;
 };
 
 export const getBackupApiUrl = () => {
   const explicit = stripSlash(import.meta.env.VITE_API_BACKUP_URL || '');
   if (explicit) return explicit;
 
-  const envUrl = stripSlash(import.meta.env.VITE_API_URL || '');
-  if (isRenderUrl(envUrl)) return envUrl;
-
-  return RENDER_BACKUP;
+  return DO_VIA_NETLIFY_PROXY;
 };
 
 export const getPreferredApiUrlSync = () => {
@@ -92,8 +88,8 @@ const probeHealth = async (baseUrl, timeoutMs = HEALTH_TIMEOUT_MS) => {
 let resolveInFlight = null;
 
 /**
- * Pick a live API base: DigitalOcean (primary), else Render (backup).
- * Always tries DO first — session cache only skips a second probe after success.
+ * Pick a live API base: Render (primary), else DO via /do-api (backup).
+ * Always tries Render first — session cache only skips a second probe after success.
  */
 export const resolveApiUrl = async ({ force = false } = {}) => {
   if (resolveInFlight && !force) return resolveInFlight;
@@ -106,7 +102,6 @@ export const resolveApiUrl = async ({ force = false } = {}) => {
     if (!force && typeof window !== 'undefined') {
       try {
         const cached = stripSlash(sessionStorage.getItem(CACHE_KEY));
-        // Reuse cached ONLY when it is still the DO primary (healthy preference).
         if (cached && cached === primary && (await probeHealth(cached, 1200))) {
           return cached;
         }
@@ -115,13 +110,12 @@ export const resolveApiUrl = async ({ force = false } = {}) => {
       }
     }
 
-    // Local: only probe backup when explicitly configured (avoid surprise Render).
     const candidates = import.meta.env.DEV
       ? [primary, backupEnv].filter(
           (url, index, all) => url && all.indexOf(url) === index
         )
       : force
-        ? [DO_VIA_NETLIFY_PROXY, DO_DIRECT, backup].filter(
+        ? [RENDER_PRIMARY, DO_VIA_NETLIFY_PROXY, DO_DIRECT].filter(
             (url, index, all) => url && all.indexOf(url) === index
           )
         : [primary, backup].filter(
@@ -134,7 +128,6 @@ export const resolveApiUrl = async ({ force = false } = {}) => {
       }
     }
 
-    // Neither answered — stick with primary so errors stay attributable.
     return remember(primary);
   })();
 
@@ -160,5 +153,5 @@ export const failoverApiUrl = async (failedBaseUrl) => {
 export const API_BASE_DEFAULTS = {
   doDirect: DO_DIRECT,
   doProxy: DO_VIA_NETLIFY_PROXY,
-  renderBackup: RENDER_BACKUP,
+  renderPrimary: RENDER_PRIMARY,
 };
