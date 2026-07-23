@@ -686,8 +686,8 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
               <button
                 type="button"
                 onClick={handleUnlockAxes}
-                className="px-3 py-1.5 rounded border border-slate-300 bg-white text-sm font-medium text-slate-900 hover:bg-slate-100"
-                style={{ backgroundColor: '#ffffff', color: '#0f172a' }}
+                className="gc-action-btn rounded"
+                style={{ backgroundColor: '#facc15', color: '#111827' }}
                 title="Edit axis settings (clears captured points)"
               >
                 Edit axes
