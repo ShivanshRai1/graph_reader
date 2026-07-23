@@ -8869,15 +8869,30 @@ const GraphCapture = () => {
                 ) : (
                   <button
                     onClick={handleSaveDataPoints}
-                    className={`w-full px-4 py-3 rounded text-sm font-semibold transition ${
+                    className={`w-full rounded text-base font-semibold transition ${
                       canSaveCurve
                         ? 'bg-blue-700 text-white hover:bg-blue-800'
-                        : 'bg-slate-200 text-slate-600 cursor-not-allowed'
+                        : 'bg-slate-200 text-slate-700 cursor-not-allowed'
                     }`}
                     style={
                       canSaveCurve
-                        ? { backgroundColor: '#1d4ed8', color: '#ffffff', fontSize: '0.95rem' }
-                        : { backgroundColor: '#e2e8f0', color: '#475569', fontSize: '0.95rem', opacity: 1 }
+                        ? {
+                            backgroundColor: '#1d4ed8',
+                            color: '#ffffff',
+                            width: '100%',
+                            minHeight: '48px',
+                            padding: '14px 16px',
+                            fontSize: '1rem',
+                          }
+                        : {
+                            backgroundColor: '#e2e8f0',
+                            color: '#334155',
+                            width: '100%',
+                            minHeight: '48px',
+                            padding: '14px 16px',
+                            fontSize: '1rem',
+                            opacity: 1,
+                          }
                     }
                     disabled={isSaving || !canSaveCurve}
                     title={
@@ -9202,33 +9217,28 @@ const GraphCapture = () => {
                                   </div>
                                 </div>
                               ) : (
-                                <div className="flex gap-2 mt-2">
+                                <div className="flex flex-wrap gap-2 mt-2">
                                   <button
-                                    className="px-3 py-1 rounded bg-blue-600 text-white text-xs"
+                                    className="rounded bg-blue-600 text-white text-xs font-medium"
+                                    style={{ backgroundColor: '#2563eb', color: '#ffffff', padding: '6px 12px', fontSize: '12px' }}
                                     onClick={() => handleViewCurve(curve)}
                                   >
                                     View
                                   </button>
                                   <button
-                                    className="px-3 py-1 rounded bg-red-600 text-white text-xs"
-                                    style={{ backgroundColor: '#dc2626' }}
+                                    className="rounded bg-red-600 text-white text-xs font-medium"
+                                    style={{ backgroundColor: '#dc2626', color: '#ffffff', padding: '6px 12px', fontSize: '12px' }}
                                     onClick={() => handleRemoveCurve(curve)}
                                     disabled={isRemovingCurveId === curve.id || isRemovingAllGraphs}
                                   >
                                     {isRemovingCurveId === curve.id ? 'Removing...' : 'Remove'}
                                   </button>
                                   <button
-                                    className="px-3 py-1 rounded bg-yellow-500 text-white text-xs"
+                                    className="rounded bg-amber-400 text-xs font-medium"
+                                    style={{ backgroundColor: '#fbbf24', color: '#0f172a', padding: '6px 12px', fontSize: '12px' }}
                                     onClick={() => handleEditCurveStart(curve)}
                                   >
                                     Edit
-                                  </button>
-                                  <button
-                                    className="px-3 py-1 rounded bg-gray-700 text-white text-xs"
-                                    onClick={() => handleDownloadCurve(curve)}
-                                    title="Download this curve as CSV and JSON"
-                                  >
-                                    Download
                                   </button>
                                 </div>
                               )}
