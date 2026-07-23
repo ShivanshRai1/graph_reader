@@ -8707,27 +8707,6 @@ const GraphCapture = () => {
                 }}
                 onNeedCurveName={focusCurveNameField}
               />
-              {needCurveNameHint ? (
-                <div
-                  className="rounded-lg border-2 border-amber-400 bg-amber-50 px-4 py-3 text-sm text-amber-950"
-                  role="status"
-                  aria-live="polite"
-                >
-                  <p className="m-0 font-semibold">
-                    Enter a new Curve or Line Name before clicking points.
-                  </p>
-                  <p className="m-0 mt-1 text-amber-900">
-                    Use the highlighted field in Graph settings on the right, then click the graph.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={focusCurveNameField}
-                    className="mt-2 px-3 py-1.5 rounded bg-amber-600 text-white text-xs font-semibold hover:bg-amber-700"
-                  >
-                    Go to Curve Name
-                  </button>
-                </div>
-              ) : null}
               <CapturedPointsList isReadOnly={isReadOnly} hasReturnUrl={!!urlParams.return_url} isEditingCurve={Boolean(editingCurveId)} isAxisMappingConfirmed={isAxisMappingConfirmed} />
             </div>
             <div className="w-full lg:w-3/5">
@@ -8735,11 +8714,11 @@ const GraphCapture = () => {
                 <div className="mb-4 rounded border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                   {isAxisMappingConfirmed ? (
                     <>
-                      Curve saved. Enter a new <strong>Curve or Line Name</strong>, capture points on the graph, then click <strong>Save curve</strong> again. Axes stay locked for this graph.
+                      <strong>Next:</strong> Enter a new <strong>Curve or Line Name</strong> below, then click points on the graph.
                     </>
                   ) : (
                     <>
-                      Enter a new curve or line name, then click <strong>Lock axes</strong> to capture the next curve.
+                      <strong>Next:</strong> Enter a new curve name, then click <strong>Lock axes</strong>.
                     </>
                   )}
                 </div>
