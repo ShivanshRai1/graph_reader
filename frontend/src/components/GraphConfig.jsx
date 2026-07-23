@@ -667,7 +667,6 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
 
   const isNeedCurveNamePhase = captureUiPhase === 'needCurveName' || curveNameAttention;
   const isSetupPhase = captureUiPhase === 'setup';
-  const isCapturePhase = captureUiPhase === 'capture';
 
   return (
     <div className="w-full p-5 bg-white rounded-lg mt-5 border border-gray-200">
@@ -1194,7 +1193,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
                 No, go back
               </button>
               <button
-                className="px-4 py-2 rounded bg-green-600 text-white font-medium"
+                className="px-4 py-2 rounded bg-gray-900 text-white font-medium"
                 onClick={() => {
                   setShowConfirmModal(false);
                   onConfirmAxisMapping();
