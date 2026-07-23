@@ -6,7 +6,7 @@ import {
   SCALE_AND_UNIT_CROSS_CHECK_MESSAGE,
 } from '../utils/quantityUnitGuidance';
 
-const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', isAxisMappingConfirmed = false, hasReturnUrl = false, isEditingCurve = false, editingCurveOverlayId = '', savedCurveViewActive = false, hasAiSavedCurves = false, showAiCaptureGuidance = false, useInsetDefaultAxisBox = false, onGraphAreaManuallyAdjusted, onImageSizeChange, onNeedCurveName }) => {
+const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', isAxisMappingConfirmed = false, hasReturnUrl = false, isEditingCurve = false, editingCurveOverlayId = '', savedCurveViewActive = false, hasAiSavedCurves = false, showAiCaptureGuidance = false, useInsetDefaultAxisBox = false, onGraphAreaManuallyAdjusted, onImageSizeChange, onNeedCurveName, captureUiPhase = '' }) => {
   const { uploadedImage, graphArea, setGraphArea, setCaptureGraphArea, isPlotReferenceLocked, getMappingArea, establishPlotReference, dataPoints, addDataPoint, clearDataPoints, graphConfig, deleteDataPoint, convertGraphToCanvasCoordinates, convertCanvasToGraphCoordinates, replaceDataPoints, updateDataPointFromCanvas } = useGraph();
   const [showRedrawMsg, setShowRedrawMsg] = useState(false);
   const canvasRef = useRef(null);
@@ -1418,21 +1418,22 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
 
   return (
     <div className="w-full p-5 bg-white rounded-lg mt-5">
-      <div className="bg-blue-50 p-4 rounded mb-4" role="status">
-        <p className="text-blue-800 font-medium m-0 text-sm leading-relaxed">
-          {isAxisMappingConfirmed
-            ? 'Click along the curve to add points. Right-click a point to remove it.'
-            : 'Drag the blue box to match the printed axes, set min/max on the right, then lock axes.'}
-        </p>
-      </div>
-      
-
       {(partNumber || manufacturer) ? (
         <div className="mb-4 p-3 bg-gray-100 rounded font-semibold text-gray-800 max-w-xs">
           Part Number: {partNumber && manufacturer ? `${partNumber}(${manufacturer})` : partNumber || ''}
         </div>
       ) : null}
-      <div className="border border-gray-200 rounded mb-4 overflow-auto">
+      <div
+        className={`border rounded mb-4 overflow-auto transition-shadow ${
+          captureUiPhase === 'capture'
+            ? 'border-green-500 ring-2 ring-green-300 shadow-sm'
+            : captureUiPhase === 'setup'
+              ? 'border-blue-400 ring-2 ring-blue-200'
+              : captureUiPhase === 'needCurveName'
+                ? 'border-gray-200 opacity-60'
+                : 'border-gray-200'
+        }`}
+      >
         <div
           className="sticky top-0 z-10 px-3 py-2 bg-gray-900 bg-opacity-90 text-white border-b border-green-500 font-mono text-sm font-bold"
           style={{ visibility: captureHudVisible ? 'visible' : 'hidden', opacity: showCapturePointStatus || showCoords || savedViewCrosscheckActive ? 1 : 0.35 }}
@@ -1483,10 +1484,14 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
           The graph image could not be loaded from the server. Re-upload the screenshot, or open this graph after it was saved once in this tool (stored copy).
         </div>
       )}
-      <div className="flex items-center gap-4 mt-4 mb-6">
-        <div className="relative">
+      <div className="flex items-center gap-4 mt-4 mb-6 flex-wrap">
+        <div className={`relative ${captureUiPhase === 'setup' || captureUiPhase === 'needCurveName' ? 'opacity-40' : ''}`}>
           <button
-            className="px-4 py-2 rounded bg-blue-600 text-white font-medium"
+            className={`px-4 py-2 rounded font-medium ${
+              captureUiPhase === 'capture'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-400 text-gray-100'
+            }`}
             onClick={() => setShowFixPoints((prev) => !prev)}
             title={showFixPoints ? 'Hide connecting lines between points' : 'Show lines connecting your points'}
           >
@@ -1519,7 +1524,13 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
           )}
         </div>
         <button
-          className={`px-4 py-2 rounded font-medium ${isAxisMappingConfirmed && !isEditingCurve ? 'bg-gray-400 text-gray-100 cursor-not-allowed' : 'bg-gray-700 text-white'}`}
+          className={`px-4 py-2 rounded font-medium transition ${
+            isAxisMappingConfirmed && !isEditingCurve
+              ? 'bg-gray-400 text-gray-100 cursor-not-allowed opacity-50'
+              : captureUiPhase === 'setup'
+                ? 'bg-blue-600 text-white ring-2 ring-blue-300 ring-offset-1'
+                : 'bg-gray-700 text-white'
+          }`}
           disabled={isAxisMappingConfirmed && !isEditingCurve}
           onClick={() => {
             if (isAxisMappingConfirmed && !isEditingCurve) return;
@@ -1550,14 +1561,18 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
           Adjust plot area
         </button>
         <button
-          className="px-4 py-2 rounded bg-red-700 text-white font-medium"
+          className={`px-4 py-2 rounded font-medium ${
+            captureUiPhase === 'capture' || captureUiPhase === 'edit'
+              ? 'bg-red-700 text-white'
+              : 'bg-gray-500 text-gray-100 opacity-45'
+          }`}
           onClick={handleClearPoints}
           title="Clear all captured points (keeps axis settings)"
         >
           Clear points
         </button>
         {showRedrawMsg && (
-          <div className="text-red-600 font-bold mt-2">
+          <div className="text-red-600 font-bold mt-2 w-full">
             Please adjust the plot area
           </div>
         )}

@@ -40,6 +40,7 @@ import {
   resolveRcLadderUrl,
   rewriteRcLadderUrl,
 } from '../utils/rcLadderBase';
+import { resolveCaptureUiPhase } from '../utils/captureUiPhase';
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 
 const MiniGraphCanvas = ({ points }) => {
@@ -4654,6 +4655,38 @@ const GraphCapture = () => {
     }
   }, [graphConfig.curveName]);
 
+  const savedCurveViewActive = Boolean(
+    (selectedCurveId || combinedGroupId || showAllCombinedModal) && !editingCurveId
+  );
+
+  const captureUiPhase = useMemo(
+    () =>
+      resolveCaptureUiPhase({
+        isEditingCurve: Boolean(editingCurveId),
+        isAxisMappingConfirmed,
+        curveName: graphConfig.curveName,
+        savedCurveViewActive,
+      }),
+    [
+      editingCurveId,
+      isAxisMappingConfirmed,
+      graphConfig.curveName,
+      savedCurveViewActive,
+    ]
+  );
+
+  const manualCapturePointCount = useMemo(
+    () => getManualCapturePoints(dataPoints).length,
+    [dataPoints]
+  );
+
+  const canSaveCurve = Boolean(
+    isAxisMappingConfirmed &&
+      !editingCurveId &&
+      String(graphConfig.curveName || '').trim() &&
+      manualCapturePointCount > 0
+  );
+
   const groupedCurves = useMemo(() => {
     const uniqueCurves = uniqueSavedCurves;
     const groups = new Map();
@@ -8706,23 +8739,13 @@ const GraphCapture = () => {
                   imageSizeRef.current = size;
                 }}
                 onNeedCurveName={focusCurveNameField}
+                captureUiPhase={captureUiPhase}
               />
-              <CapturedPointsList isReadOnly={isReadOnly} hasReturnUrl={!!urlParams.return_url} isEditingCurve={Boolean(editingCurveId)} isAxisMappingConfirmed={isAxisMappingConfirmed} />
+              <div className={captureUiPhase === 'needCurveName' ? 'opacity-45' : undefined}>
+                <CapturedPointsList isReadOnly={isReadOnly} hasReturnUrl={!!urlParams.return_url} isEditingCurve={Boolean(editingCurveId)} isAxisMappingConfirmed={isAxisMappingConfirmed} />
+              </div>
             </div>
             <div className="w-full lg:w-3/5">
-              {allowNextCurveNameEntry ? (
-                <div className="mb-4 rounded border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                  {isAxisMappingConfirmed ? (
-                    <>
-                      <strong>Next:</strong> Enter a new <strong>Curve or Line Name</strong> below, then click points on the graph.
-                    </>
-                  ) : (
-                    <>
-                      <strong>Next:</strong> Enter a new curve name, then click <strong>Lock axes</strong>.
-                    </>
-                  )}
-                </div>
-              ) : null}
               <GraphConfig 
                 showTctj={shouldShowTemperatureInput} 
                 isGraphTitleReadOnly={Boolean(urlParams.graph_id || urlParams.graph_title) && !graphTitleUnlocked} 
@@ -8740,6 +8763,7 @@ const GraphCapture = () => {
                 isAxisMappingConfirmed={isAxisMappingConfirmed}
                 allowNextCurveNameEntry={allowNextCurveNameEntry}
                 curveNameAttention={needCurveNameHint}
+                captureUiPhase={captureUiPhase}
                 isEditingCurve={Boolean(editingCurveId)}
                 isPartNumberFromUrl={Boolean(urlParams.partno)}
                 isPartNumberLocked={partNumberLocked}
@@ -8843,8 +8867,17 @@ const GraphCapture = () => {
                 ) : (
                   <button
                     onClick={handleSaveDataPoints}
-                    className="px-4 py-2 rounded bg-green-600 text-white font-medium disabled:opacity-50"
-                    disabled={isSaving}
+                    className={`px-4 py-2 rounded font-medium disabled:opacity-50 transition ${
+                      canSaveCurve
+                        ? 'bg-green-600 text-white ring-2 ring-green-300 ring-offset-1'
+                        : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    }`}
+                    disabled={isSaving || !canSaveCurve}
+                    title={
+                      canSaveCurve
+                        ? 'Save this curve'
+                        : 'Add a curve name and capture points before saving'
+                    }
                   >
                     Save curve
                   </button>

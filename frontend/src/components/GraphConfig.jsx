@@ -69,7 +69,7 @@ const convertTemperatureToCelsius = (rawValue, unit) => {
 
 export const CURVE_NAME_INPUT_ID = 'graph-capture-curve-name-input';
 
-const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNameReadOnly = false, isXTitleReadOnly = false, isYTitleReadOnly = false, initialCurveName = '', initialGraphTitle = '', initialXTitle = '', initialYTitle = '', isAxisMappingConfirmed = false, isEditingCurve = false, allowNextCurveNameEntry = false, isPartNumberFromUrl = false, isPartNumberLocked = false, showManufacturerField = false, showUsernameField = false, companyGraphId = '', sessionSavedCurves = [], curveNameAttention = false, onConfirmAxisMapping = () => {}, onRetakeAxis = () => {}, children = null }) => {
+const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNameReadOnly = false, isXTitleReadOnly = false, isYTitleReadOnly = false, initialCurveName = '', initialGraphTitle = '', initialXTitle = '', initialYTitle = '', isAxisMappingConfirmed = false, isEditingCurve = false, allowNextCurveNameEntry = false, isPartNumberFromUrl = false, isPartNumberLocked = false, showManufacturerField = false, showUsernameField = false, companyGraphId = '', sessionSavedCurves = [], curveNameAttention = false, captureUiPhase = '', onConfirmAxisMapping = () => {}, onRetakeAxis = () => {}, children = null }) => {
   const { graphConfig, setGraphConfig } = useGraph();
   const [apiUrl, setApiUrl] = useState(() => getPreferredApiUrlSync());
   const [logError, setLogError] = useState({ x: '', y: '' });
@@ -665,20 +665,33 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
     );
   };
 
+  const isNeedCurveNamePhase = captureUiPhase === 'needCurveName' || curveNameAttention;
+  const isSetupPhase = captureUiPhase === 'setup';
+  const isCapturePhase = captureUiPhase === 'capture';
+
   return (
     <div
-      className="w-full p-5 bg-white rounded-lg mt-5 shadow"
+      className={`w-full p-5 bg-white rounded-lg mt-5 shadow transition ${
+        isCapturePhase ? 'opacity-70' : ''
+      }`}
     >
       <h3 className="text-gray-900 text-lg font-semibold mb-5">Graph settings</h3>
 
       <div
         className="mb-5"
         style={{
-          opacity: isMetadataLocked && !allowNextCurveNameEntry ? 0.55 : 1,
-          pointerEvents: isMetadataLocked ? 'none' : 'auto',
+          opacity: isNeedCurveNamePhase
+            ? 1
+            : isMetadataLocked && !allowNextCurveNameEntry
+              ? 0.45
+              : isSetupPhase
+                ? 0.72
+                : 1,
+          pointerEvents: isMetadataLocked && !isNeedCurveNamePhase ? 'none' : 'auto',
         }}
       >
         <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 mb-3">Names &amp; labels</p>
+        <div className={isNeedCurveNamePhase ? 'opacity-40 pointer-events-none' : ''}>
         <label className="block mb-3 font-medium text-gray-800">
           <span className="block mb-1 text-sm font-semibold text-gray-900">Graph Title:</span>
           <input
@@ -696,11 +709,14 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             disabled={isGraphTitleReadOnly || isMetadataLocked}
           />
         </label>
+        </div>
         <label
-          className="block mb-3 font-medium text-gray-800"
+          className={`block mb-3 font-medium text-gray-800 ${
+            isNeedCurveNamePhase ? 'relative z-10 rounded-lg p-2 -mx-2 bg-amber-50' : ''
+          }`}
           style={{
-            opacity: allowNextCurveNameEntry || curveNameAttention ? 1 : undefined,
-            pointerEvents: allowNextCurveNameEntry || curveNameAttention ? 'auto' : undefined,
+            opacity: isNeedCurveNamePhase ? 1 : undefined,
+            pointerEvents: isNeedCurveNamePhase ? 'auto' : undefined,
           }}
         >
           <span className="block mb-1 text-sm font-semibold text-gray-900">Curve or Line Name:</span>
@@ -712,14 +728,15 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             onChange={handleChange}
             placeholder="Enter curve name"
             className={`w-full px-3 py-2 border rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed ${
-              curveNameAttention || allowNextCurveNameEntry
-                ? 'border-amber-500 ring-2 ring-amber-300'
+              isNeedCurveNamePhase
+                ? 'border-amber-500 ring-2 ring-amber-400'
                 : 'border-gray-300'
             }`}
             readOnly={isCurveNameFieldLocked}
             disabled={isCurveNameFieldLocked}
           />
         </label>
+        <div className={isNeedCurveNamePhase ? 'opacity-40 pointer-events-none' : ''}>
         {showManufacturerField && (
           <label className="block mb-3 font-medium text-gray-800">
             <span className="block mb-1 text-sm text-gray-800">Manufacturer:</span>
@@ -793,6 +810,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             disabled={isMetadataLocked || isYTitleReadOnly}
           />
         </label>
+        </div>
       </div>
 
       {showScaleGuidancePanel ? (
@@ -878,8 +896,16 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
         </div>
       ) : null}
 
-      <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 mt-6 mb-0">Axis min / max</p>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-3" style={{ opacity: (isAxisMappingConfirmed || isEditingCurve) ? 0.5 : 1, pointerEvents: (isAxisMappingConfirmed || isEditingCurve) ? 'none' : 'auto' }}>
+      <p className={`text-xs font-semibold uppercase tracking-wide text-gray-600 mt-6 mb-0 ${isNeedCurveNamePhase ? 'opacity-40' : ''}`}>Axis min / max</p>
+      <div
+        className={`grid grid-cols-1 md:grid-cols-2 gap-6 mt-3 rounded-lg transition ${
+          isSetupPhase ? 'p-3 -mx-1 ring-2 ring-green-300 bg-green-50/40' : ''
+        }`}
+        style={{
+          opacity: isNeedCurveNamePhase ? 0.4 : (isAxisMappingConfirmed || isEditingCurve) ? 0.5 : 1,
+          pointerEvents: (isAxisMappingConfirmed || isEditingCurve || isNeedCurveNamePhase) ? 'none' : 'auto',
+        }}
+      >
         <div>
           <h4 className="text-gray-800 font-semibold mb-3">Y-Axis {isAxisMappingConfirmed && '🔒'} {isEditingCurve && '(disabled during edit)'}</h4>
           <label className="block mb-3">
@@ -1012,18 +1038,24 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
       {children ? <div className="mt-4">{children}</div> : null}
 
       {/* Axis status & controls */}
-      <div className="mt-6 p-4 border-2 rounded-lg" style={{ borderColor: isAxisMappingConfirmed ? '#4caf50' : '#ffc107', backgroundColor: isAxisMappingConfirmed ? '#e8f5e9' : '#fff3e0' }}>
+      <div
+        className={`mt-6 p-4 border-2 rounded-lg ${isNeedCurveNamePhase ? 'opacity-50' : ''}`}
+        style={{
+          borderColor: isAxisMappingConfirmed ? '#4caf50' : '#22c55e',
+          backgroundColor: isAxisMappingConfirmed ? '#e8f5e9' : isSetupPhase ? '#f0fdf4' : '#fff3e0',
+        }}
+      >
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             {isAxisMappingConfirmed ? (
               <>
                 <span className="text-2xl" aria-hidden="true">🔒</span>
-                <span className="text-sm font-semibold text-green-700">Axes locked — click points on the graph</span>
+                <span className="text-sm font-semibold text-green-700">Axes locked</span>
               </>
             ) : (
               <>
-                <span className="text-2xl" aria-hidden="true">⚠️</span>
-                <span className="text-sm font-semibold text-orange-700">Set scale and min/max, then lock axes</span>
+                <span className="text-2xl" aria-hidden="true">○</span>
+                <span className="text-sm font-semibold text-green-800">Review min/max, then lock</span>
               </>
             )}
           </div>
@@ -1055,11 +1087,6 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
               if (!graphConfig.yMin && graphConfig.yMin !== 0) missing.push('Y Min');
               if (!graphConfig.yMax && graphConfig.yMax !== 0) missing.push('Y Max');
               
-              const xMin = parseFloat(graphConfig.xMin);
-              const xMax = parseFloat(graphConfig.xMax);
-              const yMin = parseFloat(graphConfig.yMin);
-              const yMax = parseFloat(graphConfig.yMax);
-              
               const hasErrors = logError.x || logError.y;
               const isDisabled = missing.length > 0 || hasErrors;
               
@@ -1081,7 +1108,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
                     className={`w-full px-4 py-2 rounded font-medium text-sm transition ${
                       isDisabled
                         ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                        : 'bg-green-600 text-white hover:bg-green-700'
+                        : 'bg-green-600 text-white hover:bg-green-700 ring-2 ring-green-300 ring-offset-1'
                     }`}
                     title={isDisabled ? 'Fill required fields first' : 'Review settings, then lock axes to start clicking points'}
                   >
@@ -1099,8 +1126,12 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
               setLogInputMode(DEFAULT_LOG_INPUT_MODE);
               onRetakeAxis();
             }}
-            className="w-full mt-3 px-4 py-2 rounded bg-orange-600 text-white font-medium hover:bg-orange-700"
-            style={{ pointerEvents: 'auto', filter: 'brightness(1.4)' }}
+            className={`w-full mt-3 px-4 py-2 rounded font-medium ${
+              isNeedCurveNamePhase
+                ? 'bg-gray-400 text-gray-100 opacity-60'
+                : 'bg-orange-600 text-white hover:bg-orange-700'
+            }`}
+            style={{ pointerEvents: 'auto', filter: isNeedCurveNamePhase ? 'none' : 'brightness(1.4)' }}
             title="Edit axis settings (clears captured points)"
           >
             Edit axes
