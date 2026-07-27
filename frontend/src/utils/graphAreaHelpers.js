@@ -551,8 +551,11 @@ export const buildPlotReferenceAreaFromCaptureBox = (
   }
 
   if (graphConfig.yScale === 'Logarithmic') {
-    const vertical = expandLogPlotReferenceVertically(captureBox, canvasW, canvasH);
-    let expandedLogYToPlot = false;
+    // Log Y: expand through remaining canvas (same as linear Y). Fixed plot-top
+    // margins clipped the upper decade on titled datasheets (stuck near the 4-line
+    // while axis max is 10). Slight title-padding skew is acceptable to edit later.
+    // Log X keeps plot-grid margins above — do not change that path.
+    const vertical = expandLinearPlotReferenceVertically(captureBox, canvasH);
     if (vertical) {
       const applied = clampGraphAreaToCanvas(
         { x, y: vertical.y, width, height: vertical.height },
@@ -561,13 +564,7 @@ export const buildPlotReferenceAreaFromCaptureBox = (
       );
       y = applied.y;
       height = applied.height;
-      expandedLogYToPlot = true;
-    }
-
-    // Decade extension only when we did not already expand to the plot grid.
-    // Leftover pixels above the plot are title/padding, not a missing decade —
-    // extending into them pulls ymax off the top tick and blocks the upper decade.
-    if (!expandedLogYToPlot) {
+    } else {
       const canvasHeight = Math.max(
         Number(canvasH) || 0,
         y + height + GRAPH_AREA_EDGE_MARGIN
