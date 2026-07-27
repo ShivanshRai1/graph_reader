@@ -369,12 +369,12 @@ const LINEAR_X_PLOT_MARGINS = {
 
 /**
  * Log plot-reference margins: map axis max to the printed grid, not image padding.
- * top is larger than a bare inset so titles above the plot are excluded (otherwise
- * ymax lands in the title strip and the top grid tick reads ~9 instead of ~10).
+ * top ~0.10 skips the title without dropping ymax below the top decade tick
+ * (0.14 was too large — upper ticks hit ymax early, e.g. stuck near the 5-line).
  */
 const LOG_PLOT_MARGINS = {
   left: 0.12,
-  top: 0.14,
+  top: 0.10,
   right: 0.04,
   bottom: 0.12,
 };
@@ -552,6 +552,7 @@ export const buildPlotReferenceAreaFromCaptureBox = (
 
   if (graphConfig.yScale === 'Logarithmic') {
     const vertical = expandLogPlotReferenceVertically(captureBox, canvasW, canvasH);
+    let expandedLogYToPlot = false;
     if (vertical) {
       const applied = clampGraphAreaToCanvas(
         { x, y: vertical.y, width, height: vertical.height },
@@ -560,32 +561,38 @@ export const buildPlotReferenceAreaFromCaptureBox = (
       );
       y = applied.y;
       height = applied.height;
+      expandedLogYToPlot = true;
     }
 
-    const canvasHeight = Math.max(
-      Number(canvasH) || 0,
-      y + height + GRAPH_AREA_EDGE_MARGIN
-    );
-    const remainingTop = y;
-    const visibleYMax = inferLogVisibleMaxAtInnerEdge(yMin, yMax, height, remainingTop);
-    if (visibleYMax < yMax) {
-      const expandedTop = expandLogCanvasSpanFromBottomAnchor(
-        y,
-        y + height,
-        yMin,
-        yMax,
-        visibleYMax
+    // Decade extension only when we did not already expand to the plot grid.
+    // Leftover pixels above the plot are title/padding, not a missing decade —
+    // extending into them pulls ymax off the top tick and blocks the upper decade.
+    if (!expandedLogYToPlot) {
+      const canvasHeight = Math.max(
+        Number(canvasH) || 0,
+        y + height + GRAPH_AREA_EDGE_MARGIN
       );
-      const nextY = expandedTop.top;
-      const nextHeight = Math.max(height, expandedTop.bottom - expandedTop.top);
-      const applied = clampGraphAreaToCanvas(
-        { x, y: nextY, width, height: nextHeight },
-        canvasW,
-        canvasH
-      );
-      if (applied.height > height + 0.5) {
-        y = applied.y;
-        height = applied.height;
+      const remainingTop = y;
+      const visibleYMax = inferLogVisibleMaxAtInnerEdge(yMin, yMax, height, remainingTop);
+      if (visibleYMax < yMax) {
+        const expandedTop = expandLogCanvasSpanFromBottomAnchor(
+          y,
+          y + height,
+          yMin,
+          yMax,
+          visibleYMax
+        );
+        const nextY = expandedTop.top;
+        const nextHeight = Math.max(height, expandedTop.bottom - expandedTop.top);
+        const applied = clampGraphAreaToCanvas(
+          { x, y: nextY, width, height: nextHeight },
+          canvasW,
+          canvasH
+        );
+        if (applied.height > height + 0.5) {
+          y = applied.y;
+          height = applied.height;
+        }
       }
     }
   } else if (yMax > yMin) {
