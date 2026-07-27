@@ -368,12 +368,13 @@ const LINEAR_X_PLOT_MARGINS = {
 };
 
 /**
- * Log plot-reference margins: tighter right/top than canvas-edge expansion so
- * axis max lands near the last printed decade (canvas-edge made 100 read ~82).
+ * Log plot-reference margins: map axis max to the printed grid, not image padding.
+ * top is larger than a bare inset so titles above the plot are excluded (otherwise
+ * ymax lands in the title strip and the top grid tick reads ~9 instead of ~10).
  */
 const LOG_PLOT_MARGINS = {
   left: 0.12,
-  top: 0.08,
+  top: 0.14,
   right: 0.04,
   bottom: 0.12,
 };
