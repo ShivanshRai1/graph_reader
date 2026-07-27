@@ -368,11 +368,17 @@ const LINEAR_X_PLOT_MARGINS = {
 };
 
 /**
- * Extend linear plot reference horizontally to the datasheet plot grid.
- * Full-canvas left/right expansion skewed X (e.g. -50→-28, 125→112) via labels/padding.
- * Y expansion is unchanged. Approximate coords remain acceptable to edit later.
+ * Extend plot reference horizontally to the datasheet plot grid.
+ * Full-canvas left/right expansion skewed linear X (e.g. -50→-28, 125→112).
+ * For log X, extendRightToCanvas expands through remaining image past the box so
+ * xmax is not pinned to the blue-box right edge (common when the box ends mid-decade).
  */
-const expandLinearPlotReferenceHorizontally = (captureBox, canvasW, canvasH) => {
+const expandLinearPlotReferenceHorizontally = (
+  captureBox,
+  canvasW,
+  canvasH,
+  { extendRightToCanvas = false } = {}
+) => {
   const widthLimit = Number(canvasW);
   const heightLimit = Number(canvasH);
   if (!Number.isFinite(widthLimit) || widthLimit <= 0) return null;
@@ -381,18 +387,25 @@ const expandLinearPlotReferenceHorizontally = (captureBox, canvasW, canvasH) => 
   const plot = buildDatasheetPlotArea(widthLimit, heightLimit, LINEAR_X_PLOT_MARGINS);
   if (!(plot.width > 0)) return null;
 
-  const targetLeft = plot.x;
-  const targetRight = plot.x + plot.width;
+  const plotLeft = plot.x;
+  const plotRight = plot.x + plot.width;
+  const canvasRight = widthLimit - GRAPH_AREA_EDGE_MARGIN;
   const boxRight = captureBox.x + captureBox.width;
+  const remainingRight = Math.max(0, canvasRight - boxRight);
 
-  const nextX = Math.min(captureBox.x, targetLeft);
-  const nextRight = Math.max(boxRight, targetRight);
-  const nextWidth = nextRight - nextX;
-  if (!(nextWidth > captureBox.width + 0.5) && Math.abs(nextX - captureBox.x) <= 0.5) {
+  const targetLeft = Math.min(captureBox.x, plotLeft);
+  let targetRight = Math.max(boxRight, plotRight);
+  // Log plots often end the blue box on an inner decade while grid continues to xmax.
+  if (extendRightToCanvas && hasSignificantOuterPlotSpan(remainingRight, captureBox.width)) {
+    targetRight = Math.max(targetRight, canvasRight);
+  }
+
+  const nextWidth = targetRight - targetLeft;
+  if (!(nextWidth > captureBox.width + 0.5) && Math.abs(targetLeft - captureBox.x) <= 0.5) {
     return null;
   }
 
-  return { x: nextX, width: nextWidth };
+  return { x: targetLeft, width: nextWidth };
 };
 
 /**
@@ -455,7 +468,9 @@ export const buildPlotReferenceAreaFromCaptureBox = (
   // Log axes: expand partial blue boxes to the plot/canvas like linear so outside
   // capture works. Keep decade-extension afterward for boxes that end on an inner tick.
   if (graphConfig.xScale === 'Logarithmic') {
-    const horizontal = expandLinearPlotReferenceHorizontally(captureBox, canvasW, canvasH);
+    const horizontal = expandLinearPlotReferenceHorizontally(captureBox, canvasW, canvasH, {
+      extendRightToCanvas: true,
+    });
     if (horizontal) {
       const applied = clampGraphAreaToCanvas(
         { x: horizontal.x, y, width: horizontal.width, height },
