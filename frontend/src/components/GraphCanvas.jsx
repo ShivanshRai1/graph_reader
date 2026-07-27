@@ -1345,43 +1345,57 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   const drawMagnifier = (canvasX, canvasY) => {
     const magnifier = magnifierRef.current;
     if (!magnifier || !canvasRef.current) return;
-    
+
     const mainCanvas = canvasRef.current;
     const ctx = magnifier.getContext('2d');
     const magnifierSize = 250; // Size of magnifier canvas
     const zoomLevel = 3; // 3x zoom
     const sourceSize = magnifierSize / zoomLevel; // Area to copy from main canvas
-    
+
     // Set magnifier canvas size
     magnifier.width = magnifierSize;
     magnifier.height = magnifierSize;
-    
-    // Calculate source rectangle (area to magnify from main canvas)
-    const sourceX = Math.max(0, canvasX - sourceSize / 2);
-    const sourceY = Math.max(0, canvasY - sourceSize / 2);
-    const actualSourceWidth = Math.min(sourceSize, mainCanvas.width - sourceX);
-    const actualSourceHeight = Math.min(sourceSize, mainCanvas.height - sourceY);
-    
+
+    // Keep a full source window on-canvas when possible; shift it at edges instead of
+    // shrinking (shrinking + centered crosshair made the cursor look stuck before the edge).
+    let sourceX = canvasX - sourceSize / 2;
+    let sourceY = canvasY - sourceSize / 2;
+    if (sourceX < 0) sourceX = 0;
+    if (sourceY < 0) sourceY = 0;
+    if (sourceX + sourceSize > mainCanvas.width) {
+      sourceX = Math.max(0, mainCanvas.width - sourceSize);
+    }
+    if (sourceY + sourceSize > mainCanvas.height) {
+      sourceY = Math.max(0, mainCanvas.height - sourceSize);
+    }
+
+    const actualSourceWidth = Math.max(1, Math.min(sourceSize, mainCanvas.width - sourceX));
+    const actualSourceHeight = Math.max(1, Math.min(sourceSize, mainCanvas.height - sourceY));
+
+    // Cursor position inside the source window → magnifier pixels (not always center).
+    const crossX = ((canvasX - sourceX) / actualSourceWidth) * magnifierSize;
+    const crossY = ((canvasY - sourceY) / actualSourceHeight) * magnifierSize;
+
     // Clear magnifier
     ctx.clearRect(0, 0, magnifierSize, magnifierSize);
-    
+
     // Draw zoomed section
     ctx.drawImage(
       mainCanvas,
       sourceX, sourceY, actualSourceWidth, actualSourceHeight,
       0, 0, magnifierSize, magnifierSize
     );
-    
-    // Draw crosshair at center
+
+    // Draw crosshair at the real cursor location within the zoomed view
     ctx.strokeStyle = 'red';
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(magnifierSize / 2 - 10, magnifierSize / 2);
-    ctx.lineTo(magnifierSize / 2 + 10, magnifierSize / 2);
-    ctx.moveTo(magnifierSize / 2, magnifierSize / 2 - 10);
-    ctx.lineTo(magnifierSize / 2, magnifierSize / 2 + 10);
+    ctx.moveTo(Math.max(0, crossX - 10), crossY);
+    ctx.lineTo(Math.min(magnifierSize, crossX + 10), crossY);
+    ctx.moveTo(crossX, Math.max(0, crossY - 10));
+    ctx.lineTo(crossX, Math.min(magnifierSize, crossY + 10));
     ctx.stroke();
-    
+
     // Draw border
     ctx.strokeStyle = '#333';
     ctx.lineWidth = 2;
