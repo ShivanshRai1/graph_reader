@@ -305,13 +305,13 @@ const ImageUpload = ({ onImageLoaded, onAiExtensionCapture, isAiExtractionLoadin
       ) : null}
       {pendingCapture && (
         <div className="mt-3">
-          <div className="flex items-center gap-3 mb-2 p-2 border border-green-300 rounded bg-green-50">
+          <div className="flex items-center gap-3 mb-2 p-2 border border-blue-300 rounded bg-blue-50">
             <img
               src={pendingCapture.imageBase64}
               alt="Pasted preview"
               className="h-16 w-24 object-contain rounded border border-gray-200 bg-white shrink-0"
             />
-            <span className="text-sm font-medium text-green-700">
+            <span className="text-sm font-medium text-blue-800">
               ✓ Image ready — choose how to proceed
             </span>
           </div>
