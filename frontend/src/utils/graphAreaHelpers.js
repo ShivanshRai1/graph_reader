@@ -353,6 +353,48 @@ const plotReferenceFitsOnCanvas = (area, canvasW, canvasH) => {
 
 const PLOT_EDGE_TOLERANCE_PX = 8;
 
+const resolvePlotReferenceCanvasSize = (captureBox, canvasSize = {}, expandedRef = null) => {
+  const width = Math.max(
+    Number(canvasSize.width) || 0,
+    captureBox.x + captureBox.width + GRAPH_AREA_EDGE_MARGIN,
+    expandedRef ? expandedRef.x + expandedRef.width + GRAPH_AREA_EDGE_MARGIN : 0,
+    1
+  );
+  const height = Math.max(
+    Number(canvasSize.height) || 0,
+    captureBox.y + captureBox.height + GRAPH_AREA_EDGE_MARGIN,
+    expandedRef ? expandedRef.y + expandedRef.height + GRAPH_AREA_EDGE_MARGIN : 0,
+    1
+  );
+  return { width, height };
+};
+
+const plotReferenceExpandsCaptureBox = (captureBox, candidate, tolerancePx = PLOT_EDGE_TOLERANCE_PX) => {
+  if (!captureBox || !candidate) return false;
+  const tol = Math.max(0, tolerancePx);
+  return (
+    candidate.width > captureBox.width + tol ||
+    candidate.height > captureBox.height + tol ||
+    candidate.x < captureBox.x - tol ||
+    candidate.y < captureBox.y - tol
+  );
+};
+
+const applyExpandedPlotReference = (captureBox, expandedRef, canvasW, canvasH) => {
+  if (!expandedRef) return null;
+  const clamped = clampGraphAreaToCanvas(
+    {
+      x: expandedRef.x,
+      y: expandedRef.y,
+      width: expandedRef.width,
+      height: expandedRef.height,
+    },
+    canvasW,
+    canvasH
+  );
+  return plotReferenceExpandsCaptureBox(captureBox, clamped) ? clamped : null;
+};
+
 const inferLinearAxisValueOnPlotX = (axisMin, axisMax, canvasX, plot) =>
   axisMin + ((canvasX - plot.x) / plot.width) * (axisMax - axisMin);
 
@@ -487,8 +529,55 @@ const expandLinearPlotReferenceFromPartialBox = (
   return { x: nextX, y: nextY, width: nextWidth, height: nextHeight };
 };
 
+/** Fallback when tick inference cannot expand: union capture box with datasheet plot area. */
+const buildLinearPlotReferenceFallback = (captureBox, canvasW, canvasH) => {
+  const widthLimit = Number(canvasW);
+  const heightLimit = Number(canvasH);
+  if (!Number.isFinite(widthLimit) || widthLimit <= 0) return null;
+  if (!Number.isFinite(heightLimit) || heightLimit <= 0) return null;
+
+  const plot = buildDatasheetPlotArea(widthLimit, heightLimit);
+  if (!(plot.width > 0) || !(plot.height > 0)) return null;
+
+  const minX = Math.min(captureBox.x, plot.x);
+  const minY = Math.min(captureBox.y, plot.y);
+  const maxX = Math.max(captureBox.x + captureBox.width, plot.x + plot.width);
+  const maxY = Math.max(captureBox.y + captureBox.height, plot.y + plot.height);
+
+  return {
+    x: minX,
+    y: minY,
+    width: Math.max(1, maxX - minX),
+    height: Math.max(1, maxY - minY),
+  };
+};
+
+const resolveLinearPlotReferenceFromPartialBox = (
+  captureBox,
+  canvasW,
+  canvasH,
+  xMin,
+  xMax,
+  yMin,
+  yMax
+) => {
+  const expanded = expandLinearPlotReferenceFromPartialBox(
+    captureBox,
+    canvasW,
+    canvasH,
+    xMin,
+    xMax,
+    yMin,
+    yMax
+  );
+  if (expanded && plotReferenceExpandsCaptureBox(captureBox, expanded)) {
+    return expanded;
+  }
+  return buildLinearPlotReferenceFallback(captureBox, canvasW, canvasH);
+};
+
 const expandLinearPlotReferenceHorizontally = (captureBox, canvasW, canvasH, xMin, xMax, yMin, yMax) => {
-  const mapped = expandLinearPlotReferenceFromPartialBox(
+  const mapped = resolveLinearPlotReferenceFromPartialBox(
     captureBox,
     canvasW,
     canvasH,
@@ -509,7 +598,7 @@ const expandLinearPlotReferenceHorizontally = (captureBox, canvasW, canvasH, xMi
 };
 
 const expandLinearPlotReferenceVertically = (captureBox, canvasW, canvasH, xMin, xMax, yMin, yMax) => {
-  const mapped = expandLinearPlotReferenceFromPartialBox(
+  const mapped = resolveLinearPlotReferenceFromPartialBox(
     captureBox,
     canvasW,
     canvasH,
@@ -554,12 +643,25 @@ export const buildPlotReferenceAreaFromCaptureBox = (
   let height = captureBox.height;
   const right = x + width;
 
-  const canvasW =
+  let canvasW =
     Number(canvasSize.width) ||
     Math.max(x + width + GRAPH_AREA_EDGE_MARGIN, captureBox.x + captureBox.width + GRAPH_AREA_EDGE_MARGIN);
-  const canvasH =
+  let canvasH =
     Number(canvasSize.height) ||
     Math.max(y + height + GRAPH_AREA_EDGE_MARGIN, captureBox.y + captureBox.height + GRAPH_AREA_EDGE_MARGIN);
+
+  const applyLinearPlotReferenceCandidate = (linearRef) => {
+    if (!linearRef) return;
+    const resolvedCanvas = resolvePlotReferenceCanvasSize(captureBox, canvasSize, linearRef);
+    canvasW = Math.max(canvasW, resolvedCanvas.width);
+    canvasH = Math.max(canvasH, resolvedCanvas.height);
+    const applied = applyExpandedPlotReference(captureBox, linearRef, canvasW, canvasH);
+    if (!applied) return;
+    x = applied.x;
+    y = applied.y;
+    width = applied.width;
+    height = applied.height;
+  };
 
   // Keep the capture box left/bottom edges fixed. Extend plot reference when the box
   // ends on inner ticks while config max goes further (e.g. box to 100, axis to 1000).
@@ -582,24 +684,17 @@ export const buildPlotReferenceAreaFromCaptureBox = (
     }
   } else if (xMax > xMin) {
     if (graphConfig.yScale !== 'Logarithmic' && yMax > yMin) {
-      const linearRef = expandLinearPlotReferenceFromPartialBox(
-        captureBox,
-        canvasW,
-        canvasH,
-        xMin,
-        xMax,
-        yMin,
-        yMax
+      applyLinearPlotReferenceCandidate(
+        resolveLinearPlotReferenceFromPartialBox(
+          captureBox,
+          canvasW,
+          canvasH,
+          xMin,
+          xMax,
+          yMin,
+          yMax
+        )
       );
-      if (linearRef) {
-        const candidate = { x: linearRef.x, y: linearRef.y, width: linearRef.width, height: linearRef.height };
-        if (plotReferenceFitsOnCanvas(candidate, canvasW, canvasH)) {
-          x = linearRef.x;
-          y = linearRef.y;
-          width = linearRef.width;
-          height = linearRef.height;
-        }
-      }
     } else {
       const horizontal = expandLinearPlotReferenceHorizontally(
         captureBox,
@@ -611,11 +706,12 @@ export const buildPlotReferenceAreaFromCaptureBox = (
         yMax
       );
       if (horizontal) {
-        const candidate = { x: horizontal.x, y, width: horizontal.width, height };
-        if (plotReferenceFitsOnCanvas(candidate, canvasW, canvasH)) {
-          x = horizontal.x;
-          width = horizontal.width;
-        }
+        applyLinearPlotReferenceCandidate({
+          x: horizontal.x,
+          y: captureBox.y,
+          width: horizontal.width,
+          height: captureBox.height,
+        });
       }
     }
   }
@@ -656,11 +752,12 @@ export const buildPlotReferenceAreaFromCaptureBox = (
         yMax
       );
       if (vertical) {
-        const candidate = { x, y: vertical.y, width, height: vertical.height };
-        if (plotReferenceFitsOnCanvas(candidate, canvasW, canvasH)) {
-          y = vertical.y;
-          height = vertical.height;
-        }
+        applyLinearPlotReferenceCandidate({
+          x,
+          y: vertical.y,
+          width,
+          height: vertical.height,
+        });
       }
     }
   }

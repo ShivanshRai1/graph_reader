@@ -8737,6 +8737,22 @@ const GraphCapture = () => {
                 onGraphAreaManuallyAdjusted={handleGraphAreaManuallyAdjusted}
                 onImageSizeChange={(size) => {
                   imageSizeRef.current = size;
+                  if (
+                    isAxisMappingConfirmed &&
+                    graphArea.width > 0 &&
+                    graphArea.height > 0 &&
+                    Number(size?.width) > 0 &&
+                    Number(size?.height) > 0
+                  ) {
+                    const plotRef = resolveLockedPlotReferenceArea(
+                      graphArea,
+                      graphConfig,
+                      size
+                    );
+                    if (plotRef?.width > 0 && plotRef?.height > 0) {
+                      lockPlotReference(plotRef);
+                    }
+                  }
                 }}
                 onNeedCurveName={focusCurveNameField}
                 captureUiPhase={captureUiPhase}
