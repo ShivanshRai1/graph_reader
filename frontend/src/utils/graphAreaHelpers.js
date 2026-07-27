@@ -423,8 +423,8 @@ const expandLinearPlotReferenceVertically = (captureBox, canvasH) => {
 
 /**
  * Build the full plot-reference rectangle from the capture box at axis confirm.
- * For linear axes, expand the mapping area through remaining canvas so a partial
- * blue box does not become a hard capture wall. Coords may be approximate.
+ * Partial blue boxes expand so axis min/max map across the plot, not only the box.
+ * Linear and log both expand; log also keeps decade-extension when needed.
  */
 export const buildPlotReferenceAreaFromCaptureBox = (
   captureBox,
@@ -444,7 +444,6 @@ export const buildPlotReferenceAreaFromCaptureBox = (
   let y = captureBox.y;
   let width = captureBox.width;
   let height = captureBox.height;
-  const right = x + width;
 
   const canvasW =
     Number(canvasSize.width) ||
@@ -453,21 +452,37 @@ export const buildPlotReferenceAreaFromCaptureBox = (
     Number(canvasSize.height) ||
     Math.max(y + height + GRAPH_AREA_EDGE_MARGIN, captureBox.y + captureBox.height + GRAPH_AREA_EDGE_MARGIN);
 
-  // Log axes: keep existing decade-extension behavior (unchanged).
+  // Log axes: expand partial blue boxes to the plot/canvas like linear so outside
+  // capture works. Keep decade-extension afterward for boxes that end on an inner tick.
   if (graphConfig.xScale === 'Logarithmic') {
+    const horizontal = expandLinearPlotReferenceHorizontally(captureBox, canvasW, canvasH);
+    if (horizontal) {
+      const applied = clampGraphAreaToCanvas(
+        { x: horizontal.x, y, width: horizontal.width, height },
+        canvasW,
+        canvasH
+      );
+      x = applied.x;
+      width = applied.width;
+    }
+
     const canvasWidth = Math.max(
       Number(canvasW) || 0,
-      captureBox.x + captureBox.width + GRAPH_AREA_EDGE_MARGIN
+      x + width + GRAPH_AREA_EDGE_MARGIN
     );
-    const remainingRight = canvasWidth - (captureBox.x + captureBox.width);
-    const visibleXMax = inferLogVisibleMaxAtInnerEdge(xMin, xMax, captureBox.width, remainingRight);
+    const remainingRight = canvasWidth - (x + width);
+    const visibleXMax = inferLogVisibleMaxAtInnerEdge(xMin, xMax, width, remainingRight);
     if (visibleXMax < xMax) {
-      const expandedRight = expandLogCanvasSpanFromMinAnchor(x, right, xMin, xMax, visibleXMax);
-      const nextWidth = Math.max(captureBox.width, expandedRight.max - captureBox.x);
-      const candidate = { x: captureBox.x, y, width: nextWidth, height };
-      if (plotReferenceFitsOnCanvas(candidate, canvasW, canvasH)) {
-        x = captureBox.x;
-        width = nextWidth;
+      const expandedRight = expandLogCanvasSpanFromMinAnchor(x, x + width, xMin, xMax, visibleXMax);
+      const nextWidth = Math.max(width, expandedRight.max - x);
+      const applied = clampGraphAreaToCanvas(
+        { x, y, width: nextWidth, height },
+        canvasW,
+        canvasH
+      );
+      if (applied.width > width + 0.5) {
+        x = applied.x;
+        width = applied.width;
       }
     }
   } else if (xMax > xMin) {
@@ -486,26 +501,41 @@ export const buildPlotReferenceAreaFromCaptureBox = (
 
   const bottom = y + height;
   if (graphConfig.yScale === 'Logarithmic') {
+    const vertical = expandLinearPlotReferenceVertically(captureBox, canvasH);
+    if (vertical) {
+      const applied = clampGraphAreaToCanvas(
+        { x, y: vertical.y, width, height: vertical.height },
+        canvasW,
+        canvasH
+      );
+      y = applied.y;
+      height = applied.height;
+    }
+
     const canvasHeight = Math.max(
       Number(canvasH) || 0,
-      captureBox.y + captureBox.height + GRAPH_AREA_EDGE_MARGIN
+      y + height + GRAPH_AREA_EDGE_MARGIN
     );
-    const remainingTop = captureBox.y;
-    const visibleYMax = inferLogVisibleMaxAtInnerEdge(yMin, yMax, captureBox.height, remainingTop);
+    const remainingTop = y;
+    const visibleYMax = inferLogVisibleMaxAtInnerEdge(yMin, yMax, height, remainingTop);
     if (visibleYMax < yMax) {
       const expandedTop = expandLogCanvasSpanFromBottomAnchor(
         y,
-        bottom,
+        y + height,
         yMin,
         yMax,
         visibleYMax
       );
       const nextY = expandedTop.top;
-      const nextHeight = Math.max(captureBox.height, expandedTop.bottom - expandedTop.top);
-      const candidate = { x, y: nextY, width, height: nextHeight };
-      if (plotReferenceFitsOnCanvas(candidate, canvasW, canvasH)) {
-        y = nextY;
-        height = nextHeight;
+      const nextHeight = Math.max(height, expandedTop.bottom - expandedTop.top);
+      const applied = clampGraphAreaToCanvas(
+        { x, y: nextY, width, height: nextHeight },
+        canvasW,
+        canvasH
+      );
+      if (applied.height > height + 0.5) {
+        y = applied.y;
+        height = applied.height;
       }
     }
   } else if (yMax > yMin) {
