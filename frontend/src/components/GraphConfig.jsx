@@ -972,7 +972,8 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
               <label className="block mb-3">
                 <span className="block text-sm font-medium text-gray-800 mb-1">Min:</span>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   name="yMin"
                   value={graphConfig.yMin}
                   onChange={handleChange}
@@ -983,7 +984,8 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
               <label className="block mb-3">
                 <span className="block text-sm font-medium text-gray-800 mb-1">Max:</span>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   name="yMax"
                   value={graphConfig.yMax}
                   onChange={handleChange}
@@ -1021,7 +1023,8 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
               <label className="block mb-3">
                 <span className="block text-sm font-medium text-gray-800 mb-1">Min:</span>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   name="xMin"
                   value={graphConfig.xMin}
                   onChange={handleChange}
@@ -1032,7 +1035,8 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
               <label className="block mb-3">
                 <span className="block text-sm font-medium text-gray-800 mb-1">Max:</span>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   name="xMax"
                   value={graphConfig.xMax}
                   onChange={handleChange}

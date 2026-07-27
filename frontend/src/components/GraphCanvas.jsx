@@ -142,7 +142,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     !isEditingCurve &&
     canShowImportedCurveOverlay();
 
-  // Plot reference drives coordinate math once locked; the blue box is the capture zone.
+  // Plot reference drives coordinate math once locked; the blue box is the alignment guide.
   const canAdjustCaptureBox = () => {
     if (isReadOnly && !isEditingCurve) return false;
     if (isAxisMappingConfirmed && !isEditingCurve) return false;
@@ -717,11 +717,6 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   const isCanvasPointInsideGraphArea = (canvasX, canvasY, edgeTolerancePx = 0) =>
     isCanvasPointInsideArea(graphArea, canvasX, canvasY, edgeTolerancePx);
 
-  const isCanvasPointInsidePlotReference = (canvasX, canvasY, edgeTolerancePx = 0) => {
-    const mappingArea = getMappingArea();
-    return isCanvasPointInsideArea(mappingArea, canvasX, canvasY, edgeTolerancePx);
-  };
-
   const isGraphCoordCaptureValid = (graphX, graphY) => {
     if (!Number.isFinite(graphX) || !Number.isFinite(graphY)) return false;
     if (graphConfig.xScale === 'Logarithmic' && graphX <= 0) return false;
@@ -786,11 +781,8 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
     const captureX = canvasX;
     const captureY = canvasY;
 
-    if (!isCanvasPointInsidePlotReference(captureX, captureY, CAPTURE_EDGE_TOLERANCE_PX)) {
-      return false;
-    }
-
     const { x: graphX, y: graphY } = convertCanvasToGraphCoordinates(captureX, captureY);
+    // Allow clicks outside the blue box when mapped X/Y are still within axis min/max.
     if (!isGraphCoordCaptureValid(graphX, graphY)) {
       return false;
     }
