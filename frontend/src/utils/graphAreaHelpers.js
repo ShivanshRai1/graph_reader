@@ -353,82 +353,177 @@ const plotReferenceFitsOnCanvas = (area, canvasW, canvasH) => {
 
 const PLOT_EDGE_TOLERANCE_PX = 8;
 
+const inferLinearAxisValueOnPlotX = (axisMin, axisMax, canvasX, plot) =>
+  axisMin + ((canvasX - plot.x) / plot.width) * (axisMax - axisMin);
+
+const inferLinearAxisValueOnPlotY = (axisMin, axisMax, canvasY, plot) =>
+  axisMax - ((canvasY - plot.y) / plot.height) * (axisMax - axisMin);
+
+/** Box covers graphMin..graphMax; expand canvas span so axisMin..axisMax fits. */
+const expandLinearCanvasSpanBidirectional = (
+  canvasMin,
+  canvasMax,
+  graphMin,
+  graphMax,
+  axisMin,
+  axisMax
+) => {
+  const axisSpan = axisMax - axisMin;
+  const graphSpan = graphMax - graphMin;
+  if (!(axisSpan > 0) || !(graphSpan > 0)) {
+    return { min: canvasMin, max: canvasMax };
+  }
+
+  const fraction = graphSpan / axisSpan;
+  if (fraction <= 0.02 || fraction >= 0.98) {
+    return { min: canvasMin, max: canvasMax };
+  }
+
+  const canvasSpan = canvasMax - canvasMin;
+  if (!(canvasSpan > 0)) {
+    return { min: canvasMin, max: canvasMax };
+  }
+
+  const fullSpan = canvasSpan / fraction;
+  const extensionBefore = fullSpan * ((graphMin - axisMin) / axisSpan);
+  const nextMin = canvasMin - extensionBefore;
+  return { min: nextMin, max: nextMin + fullSpan };
+};
+
+/** Y axis: higher graph values are toward smaller canvas Y. */
+const expandLinearCanvasSpanBidirectionalY = (
+  canvasTop,
+  canvasBottom,
+  graphHigh,
+  graphLow,
+  axisMin,
+  axisMax
+) => {
+  const axisSpan = axisMax - axisMin;
+  const graphSpan = graphHigh - graphLow;
+  if (!(axisSpan > 0) || !(graphSpan > 0)) {
+    return { min: canvasTop, max: canvasBottom };
+  }
+
+  const fraction = graphSpan / axisSpan;
+  if (fraction <= 0.02 || fraction >= 0.98) {
+    return { min: canvasTop, max: canvasBottom };
+  }
+
+  const canvasSpan = canvasBottom - canvasTop;
+  if (!(canvasSpan > 0)) {
+    return { min: canvasTop, max: canvasBottom };
+  }
+
+  const fullSpan = canvasSpan / fraction;
+  const extensionTop = fullSpan * ((axisMax - graphHigh) / axisSpan);
+  const extensionBottom = fullSpan * ((graphLow - axisMin) / axisSpan);
+  return {
+    min: canvasTop - extensionTop,
+    max: canvasBottom + extensionBottom,
+  };
+};
+
 /**
- * Linear plot reference for partial blue boxes: anchor left/top at the datasheet
- * plot inset (avoids Y-axis label margin) but extend right/bottom to the canvas
- * edge where grid lines usually reach (estimated plot right is often too narrow).
+ * Partial blue boxes may align to inner ticks (e.g. 0–100 on a −50..125 axis).
+ * Infer tick values at box edges, then expand the plot reference in all directions.
  */
-const buildLinearPlotReferenceFromPartialBox = (captureBox, canvasW, canvasH) => {
+const expandLinearPlotReferenceFromPartialBox = (
+  captureBox,
+  canvasW,
+  canvasH,
+  xMin,
+  xMax,
+  yMin,
+  yMax
+) => {
   const widthLimit = Number(canvasW);
   const heightLimit = Number(canvasH);
   if (!Number.isFinite(widthLimit) || widthLimit <= 0) return null;
   if (!Number.isFinite(heightLimit) || heightLimit <= 0) return null;
 
   const plot = buildDatasheetPlotArea(widthLimit, heightLimit);
-  const margin = GRAPH_AREA_EDGE_MARGIN;
-  const canvasRight = widthLimit - margin;
-  const canvasBottom = heightLimit - margin;
-  const tol = PLOT_EDGE_TOLERANCE_PX;
-
-  const targetX = plot.x;
-  const targetWidth = Math.max(1, canvasRight - targetX);
-  const targetY = plot.y;
-  const targetHeight = Math.max(1, canvasBottom - targetY);
+  if (!(plot.width > 0) || !(plot.height > 0)) return null;
 
   const boxRight = captureBox.x + captureBox.width;
   const boxBottom = captureBox.y + captureBox.height;
+  const tol = PLOT_EDGE_TOLERANCE_PX;
 
-  const spansFullMappingWidth =
-    captureBox.x <= targetX + tol && boxRight >= canvasRight - tol;
-  const spansFullMappingHeight =
-    captureBox.y <= targetY + tol && boxBottom >= canvasBottom - tol;
+  const graphAtBoxLeft = inferLinearAxisValueOnPlotX(xMin, xMax, captureBox.x, plot);
+  const graphAtBoxRight = inferLinearAxisValueOnPlotX(xMin, xMax, boxRight, plot);
+  const graphAtBoxTop = inferLinearAxisValueOnPlotY(yMin, yMax, captureBox.y, plot);
+  const graphAtBoxBottom = inferLinearAxisValueOnPlotY(yMin, yMax, boxBottom, plot);
 
-  if (spansFullMappingWidth && spansFullMappingHeight) {
-    return null;
-  }
+  const expandedX = expandLinearCanvasSpanBidirectional(
+    captureBox.x,
+    boxRight,
+    graphAtBoxLeft,
+    graphAtBoxRight,
+    xMin,
+    xMax
+  );
+  const expandedY = expandLinearCanvasSpanBidirectionalY(
+    captureBox.y,
+    boxBottom,
+    graphAtBoxTop,
+    graphAtBoxBottom,
+    yMin,
+    yMax
+  );
 
-  const expandX =
-    !spansFullMappingWidth &&
-    (captureBox.x > targetX + tol ||
-      boxRight < canvasRight - tol ||
-      targetWidth > captureBox.width + tol);
-  const expandY =
-    !spansFullMappingHeight &&
-    (captureBox.y > targetY + tol ||
-      boxBottom < canvasBottom - tol ||
-      targetHeight > captureBox.height + tol);
+  const nextX = expandedX.min;
+  const nextWidth = expandedX.max - expandedX.min;
+  const nextY = expandedY.min;
+  const nextHeight = expandedY.max - expandedY.min;
 
-  if (!expandX && !expandY) {
-    return null;
-  }
+  const changed =
+    Math.abs(nextX - captureBox.x) > tol ||
+    Math.abs(nextWidth - captureBox.width) > tol ||
+    Math.abs(nextY - captureBox.y) > tol ||
+    Math.abs(nextHeight - captureBox.height) > tol;
 
-  return {
-    x: expandX ? targetX : captureBox.x,
-    width: expandX ? targetWidth : captureBox.width,
-    y: expandY ? targetY : captureBox.y,
-    height: expandY ? targetHeight : captureBox.height,
-  };
+  if (!changed) return null;
+
+  return { x: nextX, y: nextY, width: nextWidth, height: nextHeight };
 };
 
-const expandLinearPlotReferenceHorizontally = (captureBox, canvasW, canvasH) => {
-  const mapped = buildLinearPlotReferenceFromPartialBox(captureBox, canvasW, canvasH);
-  if (!mapped || mapped.width <= captureBox.width + 0.5) return null;
-  if (Math.abs(mapped.x - captureBox.x) > 0.5) {
-    return { x: mapped.x, width: mapped.width };
-  }
-  if (mapped.width > captureBox.width + 0.5) {
+const expandLinearPlotReferenceHorizontally = (captureBox, canvasW, canvasH, xMin, xMax, yMin, yMax) => {
+  const mapped = expandLinearPlotReferenceFromPartialBox(
+    captureBox,
+    canvasW,
+    canvasH,
+    xMin,
+    xMax,
+    yMin,
+    yMax
+  );
+  if (!mapped) return null;
+  const tol = PLOT_EDGE_TOLERANCE_PX;
+  if (
+    Math.abs(mapped.x - captureBox.x) > tol ||
+    Math.abs(mapped.width - captureBox.width) > tol
+  ) {
     return { x: mapped.x, width: mapped.width };
   }
   return null;
 };
 
-const expandLinearPlotReferenceVertically = (captureBox, canvasW, canvasH) => {
-  const mapped = buildLinearPlotReferenceFromPartialBox(captureBox, canvasW, canvasH);
-  if (!mapped || mapped.height <= captureBox.height + 0.5) return null;
-  if (Math.abs(mapped.y - captureBox.y) > 0.5) {
-    return { y: mapped.y, height: mapped.height };
-  }
-  if (mapped.height > captureBox.height + 0.5) {
+const expandLinearPlotReferenceVertically = (captureBox, canvasW, canvasH, xMin, xMax, yMin, yMax) => {
+  const mapped = expandLinearPlotReferenceFromPartialBox(
+    captureBox,
+    canvasW,
+    canvasH,
+    xMin,
+    xMax,
+    yMin,
+    yMax
+  );
+  if (!mapped) return null;
+  const tol = PLOT_EDGE_TOLERANCE_PX;
+  if (
+    Math.abs(mapped.y - captureBox.y) > tol ||
+    Math.abs(mapped.height - captureBox.height) > tol
+  ) {
     return { y: mapped.y, height: mapped.height };
   }
   return null;
@@ -436,8 +531,8 @@ const expandLinearPlotReferenceVertically = (captureBox, canvasW, canvasH) => {
 
 /**
  * Build the full plot-reference rectangle from the capture box at axis confirm.
- * Partial blue boxes (any sub-range) expand to the datasheet plot area so axis
- * min/max map across the full graph image, not only the box width.
+ * Partial blue boxes aligned to inner ticks expand bidirectionally so axis min/max
+ * map across the full plot, while outside-box capture stays valid.
  */
 export const buildPlotReferenceAreaFromCaptureBox = (
   captureBox,
@@ -486,12 +581,41 @@ export const buildPlotReferenceAreaFromCaptureBox = (
       }
     }
   } else if (xMax > xMin) {
-    const horizontal = expandLinearPlotReferenceHorizontally(captureBox, canvasW, canvasH);
-    if (horizontal) {
-      const candidate = { x: horizontal.x, y, width: horizontal.width, height };
-      if (plotReferenceFitsOnCanvas(candidate, canvasW, canvasH)) {
-        x = horizontal.x;
-        width = horizontal.width;
+    if (graphConfig.yScale !== 'Logarithmic' && yMax > yMin) {
+      const linearRef = expandLinearPlotReferenceFromPartialBox(
+        captureBox,
+        canvasW,
+        canvasH,
+        xMin,
+        xMax,
+        yMin,
+        yMax
+      );
+      if (linearRef) {
+        const candidate = { x: linearRef.x, y: linearRef.y, width: linearRef.width, height: linearRef.height };
+        if (plotReferenceFitsOnCanvas(candidate, canvasW, canvasH)) {
+          x = linearRef.x;
+          y = linearRef.y;
+          width = linearRef.width;
+          height = linearRef.height;
+        }
+      }
+    } else {
+      const horizontal = expandLinearPlotReferenceHorizontally(
+        captureBox,
+        canvasW,
+        canvasH,
+        xMin,
+        xMax,
+        yMin,
+        yMax
+      );
+      if (horizontal) {
+        const candidate = { x: horizontal.x, y, width: horizontal.width, height };
+        if (plotReferenceFitsOnCanvas(candidate, canvasW, canvasH)) {
+          x = horizontal.x;
+          width = horizontal.width;
+        }
       }
     }
   }
@@ -521,12 +645,22 @@ export const buildPlotReferenceAreaFromCaptureBox = (
       }
     }
   } else if (yMax > yMin) {
-    const vertical = expandLinearPlotReferenceVertically(captureBox, canvasW, canvasH);
-    if (vertical) {
-      const candidate = { x, y: vertical.y, width, height: vertical.height };
-      if (plotReferenceFitsOnCanvas(candidate, canvasW, canvasH)) {
-        y = vertical.y;
-        height = vertical.height;
+    if (graphConfig.xScale === 'Logarithmic') {
+      const vertical = expandLinearPlotReferenceVertically(
+        captureBox,
+        canvasW,
+        canvasH,
+        xMin,
+        xMax,
+        yMin,
+        yMax
+      );
+      if (vertical) {
+        const candidate = { x, y: vertical.y, width, height: vertical.height };
+        if (plotReferenceFitsOnCanvas(candidate, canvasW, canvasH)) {
+          y = vertical.y;
+          height = vertical.height;
+        }
       }
     }
   }
