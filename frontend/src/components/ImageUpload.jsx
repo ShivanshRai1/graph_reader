@@ -325,7 +325,7 @@ const ImageUpload = ({ onImageLoaded, onAiExtensionCapture, isAiExtractionLoadin
             <button
               onClick={handleCaptureWithAiExtension}
               disabled={isAiExtractionLoading}
-              className="w-full px-4 py-2 rounded bg-emerald-600 text-white font-medium hover:bg-emerald-700 transition-colors"
+              className="w-full px-4 py-2 rounded bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors"
             >
               {isAiExtractionLoading ? 'Loading, please wait...' : 'Capture with AI Extraction'}
             </button>
