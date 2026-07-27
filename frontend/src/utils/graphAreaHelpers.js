@@ -363,6 +363,63 @@ const expandLinearCanvasSpanFromMinAnchor = (canvasMin, canvasMax, axisMin, axis
   );
 };
 
+/** True when canvas margin past a box edge likely holds more plot (not just padding). */
+const hasSignificantOuterPlotSpan = (outerSpanPx, innerSpanPx) =>
+  outerSpanPx >= Math.max(8, innerSpanPx * 0.06);
+
+/**
+ * Extend linear plot reference through canvas left/right of a partial capture box so
+ * min/max map across the full visible plot, not only the blue box width.
+ */
+const expandLinearPlotReferenceHorizontally = (captureBox, canvasW) => {
+  const widthLimit = Number(canvasW);
+  if (!Number.isFinite(widthLimit) || widthLimit <= 0) return null;
+
+  const remainingLeft = Math.max(0, captureBox.x - GRAPH_AREA_EDGE_MARGIN);
+  const remainingRight = Math.max(
+    0,
+    widthLimit - (captureBox.x + captureBox.width) - GRAPH_AREA_EDGE_MARGIN
+  );
+  const expandLeft = hasSignificantOuterPlotSpan(remainingLeft, captureBox.width);
+  const expandRight = hasSignificantOuterPlotSpan(remainingRight, captureBox.width);
+  if (!expandLeft && !expandRight) return null;
+
+  const nextX = captureBox.x - (expandLeft ? remainingLeft : 0);
+  const nextWidth =
+    captureBox.width +
+    (expandLeft ? remainingLeft : 0) +
+    (expandRight ? remainingRight : 0);
+  if (!(nextWidth > captureBox.width + 0.5)) return null;
+
+  return { x: nextX, width: nextWidth };
+};
+
+/**
+ * Extend linear plot reference through canvas above/below a partial capture box.
+ */
+const expandLinearPlotReferenceVertically = (captureBox, canvasH) => {
+  const heightLimit = Number(canvasH);
+  if (!Number.isFinite(heightLimit) || heightLimit <= 0) return null;
+
+  const remainingTop = Math.max(0, captureBox.y - GRAPH_AREA_EDGE_MARGIN);
+  const remainingBottom = Math.max(
+    0,
+    heightLimit - (captureBox.y + captureBox.height) - GRAPH_AREA_EDGE_MARGIN
+  );
+  const expandTop = hasSignificantOuterPlotSpan(remainingTop, captureBox.height);
+  const expandBottom = hasSignificantOuterPlotSpan(remainingBottom, captureBox.height);
+  if (!expandTop && !expandBottom) return null;
+
+  const nextY = captureBox.y - (expandTop ? remainingTop : 0);
+  const nextHeight =
+    captureBox.height +
+    (expandTop ? remainingTop : 0) +
+    (expandBottom ? remainingBottom : 0);
+  if (!(nextHeight > captureBox.height + 0.5)) return null;
+
+  return { y: nextY, height: nextHeight };
+};
+
 /**
  * Build the full plot-reference rectangle from the capture box at axis confirm.
  * Assumes the capture box is aligned to axis min on left/bottom (typical) and may
@@ -415,13 +472,22 @@ export const buildPlotReferenceAreaFromCaptureBox = (
       }
     }
   } else if (xMax > xMin) {
-    const expandedRight = expandLinearCanvasSpanFromMinAnchor(x, right, xMin, xMax);
-    if (expandedRight.max - expandedRight.min > captureBox.width + 0.5) {
-      const nextWidth = Math.max(captureBox.width, expandedRight.max - captureBox.x);
-      const candidate = { x: captureBox.x, y, width: nextWidth, height };
+    const horizontal = expandLinearPlotReferenceHorizontally(captureBox, canvasW);
+    if (horizontal) {
+      const candidate = { x: horizontal.x, y, width: horizontal.width, height };
       if (plotReferenceFitsOnCanvas(candidate, canvasW, canvasH)) {
-        x = captureBox.x;
-        width = nextWidth;
+        x = horizontal.x;
+        width = horizontal.width;
+      }
+    } else {
+      const expandedRight = expandLinearCanvasSpanFromMinAnchor(x, right, xMin, xMax);
+      if (expandedRight.max - expandedRight.min > captureBox.width + 0.5) {
+        const nextWidth = Math.max(captureBox.width, expandedRight.max - captureBox.x);
+        const candidate = { x: captureBox.x, y, width: nextWidth, height };
+        if (plotReferenceFitsOnCanvas(candidate, canvasW, canvasH)) {
+          x = captureBox.x;
+          width = nextWidth;
+        }
       }
     }
   }
@@ -448,6 +514,15 @@ export const buildPlotReferenceAreaFromCaptureBox = (
       if (plotReferenceFitsOnCanvas(candidate, canvasW, canvasH)) {
         y = nextY;
         height = nextHeight;
+      }
+    }
+  } else if (yMax > yMin) {
+    const vertical = expandLinearPlotReferenceVertically(captureBox, canvasH);
+    if (vertical) {
+      const candidate = { x, y: vertical.y, width, height: vertical.height };
+      if (plotReferenceFitsOnCanvas(candidate, canvasW, canvasH)) {
+        y = vertical.y;
+        height = vertical.height;
       }
     }
   }
