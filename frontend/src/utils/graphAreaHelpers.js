@@ -425,28 +425,6 @@ const expandLogPlotReferenceHorizontally = (captureBox, canvasW, canvasH) => {
 };
 
 /**
- * Extend log plot reference vertically to the log plot grid (not full canvas).
- */
-const expandLogPlotReferenceVertically = (captureBox, canvasW, canvasH) => {
-  const widthLimit = Number(canvasW);
-  const heightLimit = Number(canvasH);
-  if (!Number.isFinite(widthLimit) || widthLimit <= 0) return null;
-  if (!Number.isFinite(heightLimit) || heightLimit <= 0) return null;
-
-  const plot = buildDatasheetPlotArea(widthLimit, heightLimit, LOG_PLOT_MARGINS);
-  if (!(plot.height > 0)) return null;
-
-  const targetTop = Math.min(captureBox.y, plot.y);
-  const targetBottom = Math.max(captureBox.y + captureBox.height, plot.y + plot.height);
-  const nextHeight = targetBottom - targetTop;
-  if (!(nextHeight > captureBox.height + 0.5) && Math.abs(targetTop - captureBox.y) <= 0.5) {
-    return null;
-  }
-
-  return { y: targetTop, height: nextHeight };
-};
-
-/**
  * Extend linear plot reference through canvas above/below a partial capture box.
  */
 const expandLinearPlotReferenceVertically = (captureBox, canvasH) => {
