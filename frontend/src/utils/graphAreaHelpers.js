@@ -356,29 +356,41 @@ const hasSignificantOuterPlotSpan = (outerSpanPx, innerSpanPx) =>
   outerSpanPx >= Math.max(8, innerSpanPx * 0.06);
 
 /**
- * Extend linear plot reference through canvas left/right of a partial capture box so
- * min/max map across the full visible plot, not only the blue box width.
- * Approximate coords are OK — users can edit points later.
+ * Linear X plot-reference margins: skip Y-axis label strip on the left and light
+ * padding on the right so xmin/xmax land on the grid (not full-canvas edges).
+ * Independent of DATASHEET_PLOT_MARGINS so default axis-box / Y behavior stays put.
  */
-const expandLinearPlotReferenceHorizontally = (captureBox, canvasW) => {
+const LINEAR_X_PLOT_MARGINS = {
+  left: 0.12,
+  top: 0.10,
+  right: 0.08,
+  bottom: 0.12,
+};
+
+/**
+ * Extend linear plot reference horizontally to the datasheet plot grid.
+ * Full-canvas left/right expansion skewed X (e.g. -50→-28, 125→112) via labels/padding.
+ * Y expansion is unchanged. Approximate coords remain acceptable to edit later.
+ */
+const expandLinearPlotReferenceHorizontally = (captureBox, canvasW, canvasH) => {
   const widthLimit = Number(canvasW);
+  const heightLimit = Number(canvasH);
   if (!Number.isFinite(widthLimit) || widthLimit <= 0) return null;
+  if (!Number.isFinite(heightLimit) || heightLimit <= 0) return null;
 
-  const remainingLeft = Math.max(0, captureBox.x - GRAPH_AREA_EDGE_MARGIN);
-  const remainingRight = Math.max(
-    0,
-    widthLimit - (captureBox.x + captureBox.width) - GRAPH_AREA_EDGE_MARGIN
-  );
-  const expandLeft = hasSignificantOuterPlotSpan(remainingLeft, captureBox.width);
-  const expandRight = hasSignificantOuterPlotSpan(remainingRight, captureBox.width);
-  if (!expandLeft && !expandRight) return null;
+  const plot = buildDatasheetPlotArea(widthLimit, heightLimit, LINEAR_X_PLOT_MARGINS);
+  if (!(plot.width > 0)) return null;
 
-  const nextX = captureBox.x - (expandLeft ? remainingLeft : 0);
-  const nextWidth =
-    captureBox.width +
-    (expandLeft ? remainingLeft : 0) +
-    (expandRight ? remainingRight : 0);
-  if (!(nextWidth > captureBox.width + 0.5)) return null;
+  const targetLeft = plot.x;
+  const targetRight = plot.x + plot.width;
+  const boxRight = captureBox.x + captureBox.width;
+
+  const nextX = Math.min(captureBox.x, targetLeft);
+  const nextRight = Math.max(boxRight, targetRight);
+  const nextWidth = nextRight - nextX;
+  if (!(nextWidth > captureBox.width + 0.5) && Math.abs(nextX - captureBox.x) <= 0.5) {
+    return null;
+  }
 
   return { x: nextX, width: nextWidth };
 };
@@ -459,7 +471,7 @@ export const buildPlotReferenceAreaFromCaptureBox = (
       }
     }
   } else if (xMax > xMin) {
-    const horizontal = expandLinearPlotReferenceHorizontally(captureBox, canvasW);
+    const horizontal = expandLinearPlotReferenceHorizontally(captureBox, canvasW, canvasH);
     if (horizontal) {
       // Always apply; clamp to canvas. Do not reject expansion (that locked mapping to the blue box).
       const applied = clampGraphAreaToCanvas(
