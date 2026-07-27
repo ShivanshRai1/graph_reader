@@ -367,24 +367,34 @@ const expandLinearCanvasSpanFromMinAnchor = (canvasMin, canvasMax, axisMin, axis
 const hasSignificantOuterPlotSpan = (outerSpanPx, innerSpanPx) =>
   outerSpanPx >= Math.max(8, innerSpanPx * 0.06);
 
-/**
- * Extend linear plot reference through canvas left/right of a partial capture box so
- * min/max map across the full visible plot, not only the blue box width.
- */
-const expandLinearPlotReferenceHorizontally = (captureBox, canvasW) => {
-  const widthLimit = Number(canvasW);
-  if (!Number.isFinite(widthLimit) || widthLimit <= 0) return null;
+const PLOT_EDGE_ANCHOR_TOLERANCE_PX = 24;
 
-  const remainingLeft = Math.max(0, captureBox.x - GRAPH_AREA_EDGE_MARGIN);
-  const remainingRight = Math.max(
-    0,
-    widthLimit - (captureBox.x + captureBox.width) - GRAPH_AREA_EDGE_MARGIN
-  );
-  const expandLeft = hasSignificantOuterPlotSpan(remainingLeft, captureBox.width);
-  const expandRight = hasSignificantOuterPlotSpan(remainingRight, captureBox.width);
+/**
+ * Extend linear plot reference through the datasheet plot area past a partial capture box.
+ * Skips label margins (e.g. Y-axis text left of xMin) when the box is already anchored there.
+ */
+const expandLinearPlotReferenceHorizontally = (captureBox, canvasW, canvasH) => {
+  const widthLimit = Number(canvasW);
+  const heightLimit = Number(canvasH);
+  if (!Number.isFinite(widthLimit) || widthLimit <= 0) return null;
+  if (!Number.isFinite(heightLimit) || heightLimit <= 0) return null;
+
+  const plot = buildDatasheetPlotArea(widthLimit, heightLimit);
+  const plotLeft = plot.x;
+  const plotRight = plot.x + plot.width;
+  const boxRight = captureBox.x + captureBox.width;
+
+  const remainingLeft = Math.max(0, captureBox.x - plotLeft);
+  const remainingRight = Math.max(0, plotRight - boxRight);
+
+  const isLeftAnchored = captureBox.x <= plotLeft + PLOT_EDGE_ANCHOR_TOLERANCE_PX;
+  const isRightAnchored = boxRight >= plotRight - PLOT_EDGE_ANCHOR_TOLERANCE_PX;
+
+  const expandLeft = !isLeftAnchored && hasSignificantOuterPlotSpan(remainingLeft, captureBox.width);
+  const expandRight = !isRightAnchored && hasSignificantOuterPlotSpan(remainingRight, captureBox.width);
   if (!expandLeft && !expandRight) return null;
 
-  const nextX = captureBox.x - (expandLeft ? remainingLeft : 0);
+  const nextX = expandLeft ? plotLeft : captureBox.x;
   const nextWidth =
     captureBox.width +
     (expandLeft ? remainingLeft : 0) +
@@ -395,22 +405,31 @@ const expandLinearPlotReferenceHorizontally = (captureBox, canvasW) => {
 };
 
 /**
- * Extend linear plot reference through canvas above/below a partial capture box.
+ * Extend linear plot reference vertically within the datasheet plot area.
+ * Skips expansion past yMin when the box bottom is already anchored there.
  */
-const expandLinearPlotReferenceVertically = (captureBox, canvasH) => {
+const expandLinearPlotReferenceVertically = (captureBox, canvasW, canvasH) => {
+  const widthLimit = Number(canvasW);
   const heightLimit = Number(canvasH);
+  if (!Number.isFinite(widthLimit) || widthLimit <= 0) return null;
   if (!Number.isFinite(heightLimit) || heightLimit <= 0) return null;
 
-  const remainingTop = Math.max(0, captureBox.y - GRAPH_AREA_EDGE_MARGIN);
-  const remainingBottom = Math.max(
-    0,
-    heightLimit - (captureBox.y + captureBox.height) - GRAPH_AREA_EDGE_MARGIN
-  );
-  const expandTop = hasSignificantOuterPlotSpan(remainingTop, captureBox.height);
-  const expandBottom = hasSignificantOuterPlotSpan(remainingBottom, captureBox.height);
+  const plot = buildDatasheetPlotArea(widthLimit, heightLimit);
+  const plotTop = plot.y;
+  const plotBottom = plot.y + plot.height;
+  const boxBottom = captureBox.y + captureBox.height;
+
+  const remainingTop = Math.max(0, captureBox.y - plotTop);
+  const remainingBottom = Math.max(0, plotBottom - boxBottom);
+
+  const isTopAnchored = captureBox.y <= plotTop + PLOT_EDGE_ANCHOR_TOLERANCE_PX;
+  const isBottomAnchored = boxBottom >= plotBottom - PLOT_EDGE_ANCHOR_TOLERANCE_PX;
+
+  const expandTop = !isTopAnchored && hasSignificantOuterPlotSpan(remainingTop, captureBox.height);
+  const expandBottom = !isBottomAnchored && hasSignificantOuterPlotSpan(remainingBottom, captureBox.height);
   if (!expandTop && !expandBottom) return null;
 
-  const nextY = captureBox.y - (expandTop ? remainingTop : 0);
+  const nextY = expandTop ? plotTop : captureBox.y;
   const nextHeight =
     captureBox.height +
     (expandTop ? remainingTop : 0) +
@@ -472,7 +491,7 @@ export const buildPlotReferenceAreaFromCaptureBox = (
       }
     }
   } else if (xMax > xMin) {
-    const horizontal = expandLinearPlotReferenceHorizontally(captureBox, canvasW);
+    const horizontal = expandLinearPlotReferenceHorizontally(captureBox, canvasW, canvasH);
     if (horizontal) {
       const candidate = { x: horizontal.x, y, width: horizontal.width, height };
       if (plotReferenceFitsOnCanvas(candidate, canvasW, canvasH)) {
@@ -517,7 +536,7 @@ export const buildPlotReferenceAreaFromCaptureBox = (
       }
     }
   } else if (yMax > yMin) {
-    const vertical = expandLinearPlotReferenceVertically(captureBox, canvasH);
+    const vertical = expandLinearPlotReferenceVertically(captureBox, canvasW, canvasH);
     if (vertical) {
       const candidate = { x, y: vertical.y, width, height: vertical.height };
       if (plotReferenceFitsOnCanvas(candidate, canvasW, canvasH)) {
