@@ -363,7 +363,7 @@ const hasSignificantOuterPlotSpan = (outerSpanPx, innerSpanPx) =>
 const LINEAR_X_PLOT_MARGINS = {
   left: 0.12,
   top: 0.10,
-  right: 0.08,
+  right: 0.10,
   bottom: 0.12,
 };
 
