@@ -380,8 +380,10 @@ const LOG_PLOT_MARGINS = {
 };
 
 /**
- * Extend plot reference horizontally to the datasheet plot grid.
- * Avoids full-canvas left/right expansion that skewed linear X.
+ * Extend plot reference horizontally for linear axes.
+ * Left stays on the plot inset (skip Y labels). Right uses the plot estimate, but when
+ * the blue box ends mid-scale with more image beyond it (e.g. box at 100, axis to 125),
+ * extend through that remaining canvas so xmax is not pinned to the box edge.
  */
 const expandLinearPlotReferenceHorizontally = (captureBox, canvasW, canvasH) => {
   const widthLimit = Number(canvasW);
@@ -392,8 +394,17 @@ const expandLinearPlotReferenceHorizontally = (captureBox, canvasW, canvasH) => 
   const plot = buildDatasheetPlotArea(widthLimit, heightLimit, LINEAR_X_PLOT_MARGINS);
   if (!(plot.width > 0)) return null;
 
+  const boxRight = captureBox.x + captureBox.width;
+  // Modest inset past the last tick — tighter than full canvas edge, looser than 10% plot margin.
+  const softRight = widthLimit - Math.max(GRAPH_AREA_EDGE_MARGIN, Math.round(widthLimit * 0.04));
+  const remainingRight = Math.max(0, softRight - boxRight);
+
   const targetLeft = Math.min(captureBox.x, plot.x);
-  const targetRight = Math.max(captureBox.x + captureBox.width, plot.x + plot.width);
+  let targetRight = Math.max(boxRight, plot.x + plot.width);
+  if (hasSignificantOuterPlotSpan(remainingRight, captureBox.width)) {
+    targetRight = Math.max(targetRight, softRight);
+  }
+
   const nextWidth = targetRight - targetLeft;
   if (!(nextWidth > captureBox.width + 0.5) && Math.abs(targetLeft - captureBox.x) <= 0.5) {
     return null;
