@@ -436,26 +436,23 @@ const expandLogPlotReferenceHorizontally = (captureBox, canvasW, canvasH) => {
 };
 
 /**
- * Extend linear plot reference through canvas above/below a partial capture box.
+ * Extend plot reference upward through leftover canvas above a partial capture box
+ * (title / top padding), so ymax can reach the top of the grid.
+ *
+ * Do NOT expand downward into X-label / canvas margin. That stretched ymin below the
+ * true axis, so clicks at the visual origin mapped to Y >> ymin (e.g. ~10 on 0–100).
+ * ymin stays anchored to the blue-box bottom (user-aligned axis line).
  */
 const expandLinearPlotReferenceVertically = (captureBox, canvasH) => {
   const heightLimit = Number(canvasH);
   if (!Number.isFinite(heightLimit) || heightLimit <= 0) return null;
 
   const remainingTop = Math.max(0, captureBox.y - GRAPH_AREA_EDGE_MARGIN);
-  const remainingBottom = Math.max(
-    0,
-    heightLimit - (captureBox.y + captureBox.height) - GRAPH_AREA_EDGE_MARGIN
-  );
   const expandTop = hasSignificantOuterPlotSpan(remainingTop, captureBox.height);
-  const expandBottom = hasSignificantOuterPlotSpan(remainingBottom, captureBox.height);
-  if (!expandTop && !expandBottom) return null;
+  if (!expandTop) return null;
 
-  const nextY = captureBox.y - (expandTop ? remainingTop : 0);
-  const nextHeight =
-    captureBox.height +
-    (expandTop ? remainingTop : 0) +
-    (expandBottom ? remainingBottom : 0);
+  const nextY = captureBox.y - remainingTop;
+  const nextHeight = captureBox.height + remainingTop;
   if (!(nextHeight > captureBox.height + 0.5)) return null;
 
   return { y: nextY, height: nextHeight };
@@ -540,9 +537,9 @@ export const buildPlotReferenceAreaFromCaptureBox = (
   }
 
   if (graphConfig.yScale === 'Logarithmic') {
-    // Log Y: expand through remaining canvas (same as linear Y). Fixed plot-top
+    // Log Y: expand upward through leftover canvas (same as linear Y). Fixed plot-top
     // margins clipped the upper decade on titled datasheets (stuck near the 4-line
-    // while axis max is 10). Slight title-padding skew is acceptable to edit later.
+    // while axis max is 10). Bottom stays on the blue box (true ymin / axis line).
     // Log X keeps plot-grid margins above — do not change that path.
     const vertical = expandLinearPlotReferenceVertically(captureBox, canvasH);
     if (vertical) {
