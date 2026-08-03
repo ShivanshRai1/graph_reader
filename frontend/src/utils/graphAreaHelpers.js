@@ -381,9 +381,10 @@ const LOG_PLOT_MARGINS = {
 
 /**
  * Extend plot reference horizontally for linear axes.
- * Left stays on the plot inset (skip Y labels). Right uses the plot estimate, but when
- * the blue box ends mid-scale with more image beyond it (e.g. box at 100, axis to 125),
- * extend through that remaining canvas so xmax is not pinned to the box edge.
+ * Left may move to the plot inset (skip Y-axis labels).
+ * Right stays on the blue-box edge: stretching into right padding mapped xmax past
+ * the last tick, so clicks on xmax read low (e.g. ~1.9 on a 0–2.5 scale).
+ * If the box ends mid-scale, adjust the blue box to the last tick, then Lock axes.
  */
 const expandLinearPlotReferenceHorizontally = (captureBox, canvasW, canvasH) => {
   const widthLimit = Number(canvasW);
@@ -395,18 +396,10 @@ const expandLinearPlotReferenceHorizontally = (captureBox, canvasW, canvasH) => 
   if (!(plot.width > 0)) return null;
 
   const boxRight = captureBox.x + captureBox.width;
-  // Modest inset past the last tick — tighter than full canvas edge, looser than 10% plot margin.
-  const softRight = widthLimit - Math.max(GRAPH_AREA_EDGE_MARGIN, Math.round(widthLimit * 0.04));
-  const remainingRight = Math.max(0, softRight - boxRight);
-
   const targetLeft = Math.min(captureBox.x, plot.x);
-  let targetRight = Math.max(boxRight, plot.x + plot.width);
-  if (hasSignificantOuterPlotSpan(remainingRight, captureBox.width)) {
-    targetRight = Math.max(targetRight, softRight);
-  }
-
+  const targetRight = boxRight;
   const nextWidth = targetRight - targetLeft;
-  if (!(nextWidth > captureBox.width + 0.5) && Math.abs(targetLeft - captureBox.x) <= 0.5) {
+  if (Math.abs(targetLeft - captureBox.x) <= 0.5) {
     return null;
   }
 
@@ -436,12 +429,11 @@ const expandLogPlotReferenceHorizontally = (captureBox, canvasW, canvasH) => {
 };
 
 /**
- * Extend plot reference upward through leftover canvas above a partial capture box
- * (title / top padding), so ymax can reach the top of the grid.
+ * Log-Y only: extend plot reference upward through leftover canvas above a partial
+ * capture box so the upper decade is not clipped. Linear Y does not use this —
+ * ymax stays on the blue-box top (same as ymin on the box bottom).
  *
- * Do NOT expand downward into X-label / canvas margin. That stretched ymin below the
- * true axis, so clicks at the visual origin mapped to Y >> ymin (e.g. ~10 on 0–100).
- * ymin stays anchored to the blue-box bottom (user-aligned axis line).
+ * Do NOT expand downward into X-label / canvas margin.
  */
 const expandLinearPlotReferenceVertically = (captureBox, canvasH) => {
   const heightLimit = Number(canvasH);
@@ -537,9 +529,8 @@ export const buildPlotReferenceAreaFromCaptureBox = (
   }
 
   if (graphConfig.yScale === 'Logarithmic') {
-    // Log Y: expand upward through leftover canvas (same as linear Y). Fixed plot-top
-    // margins clipped the upper decade on titled datasheets (stuck near the 4-line
-    // while axis max is 10). Bottom stays on the blue box (true ymin / axis line).
+    // Log Y: expand upward through leftover canvas so the upper decade is not clipped.
+    // Bottom stays on the blue box (true ymin / axis line).
     // Log X keeps plot-grid margins above — do not change that path.
     const vertical = expandLinearPlotReferenceVertically(captureBox, canvasH);
     if (vertical) {
@@ -578,18 +569,9 @@ export const buildPlotReferenceAreaFromCaptureBox = (
         }
       }
     }
-  } else if (yMax > yMin) {
-    const vertical = expandLinearPlotReferenceVertically(captureBox, canvasH);
-    if (vertical) {
-      const applied = clampGraphAreaToCanvas(
-        { x, y: vertical.y, width, height: vertical.height },
-        canvasW,
-        canvasH
-      );
-      y = applied.y;
-      height = applied.height;
-    }
   }
+  // Linear Y: no vertical expand — blue box top/bottom = ymax/ymin. Stretching into
+  // title/label margins made origin Y high and ymax unreachable on the top tick.
 
   return clampGraphAreaToCanvas({ x, y, width, height }, canvasW, canvasH);
 };
