@@ -26,6 +26,7 @@ const ManualOnboardingTour = ({ open, onClose }) => {
 
   const step = MANUAL_ONBOARDING_STEPS[stepIndex] || MANUAL_ONBOARDING_STEPS[0];
   const total = MANUAL_ONBOARDING_STEPS.length;
+  const hasExampleImage = Boolean(step?.image);
 
   const finish = useCallback(() => {
     markManualOnboardingComplete();
@@ -88,12 +89,13 @@ const ManualOnboardingTour = ({ open, onClose }) => {
         transform: 'translate(-50%, -50%)',
       };
     }
+    const cardHeightGuess = hasExampleImage ? 360 : 180;
     const below = highlight.top + highlight.height + 12;
     const spaceBelow = window.innerHeight - below;
-    const top = spaceBelow > 160 ? below : Math.max(12, highlight.top - 140);
+    const top = spaceBelow > cardHeightGuess ? below : Math.max(12, highlight.top - Math.min(cardHeightGuess, highlight.top - 12));
     const left = Math.min(
       Math.max(12, highlight.left),
-      Math.max(12, window.innerWidth - 340)
+      Math.max(12, window.innerWidth - 380)
     );
     return { top, left };
   })();
@@ -121,7 +123,7 @@ const ManualOnboardingTour = ({ open, onClose }) => {
         />
       ) : null}
       <div
-        className="absolute z-[10000] w-[min(320px,calc(100vw-24px))] rounded-lg border border-slate-200 bg-white p-4 shadow-xl"
+        className="absolute z-[10000] w-[min(360px,calc(100vw-24px))] rounded-lg border border-slate-200 bg-white p-4 shadow-xl"
         style={tooltipStyle}
         onClick={(e) => e.stopPropagation()}
       >
@@ -129,17 +131,34 @@ const ManualOnboardingTour = ({ open, onClose }) => {
           Tip {stepIndex + 1} of {total}
         </div>
         <h3 className="mb-2 text-base font-semibold text-slate-900">{step.title}</h3>
-        <p className="mb-4 text-sm leading-relaxed text-slate-700">{step.body}</p>
-        {!highlight ? (
+        <p className="mb-3 text-sm leading-relaxed text-slate-700">{step.body}</p>
+        {hasExampleImage ? (
+          <div className="mb-3 overflow-hidden rounded-md border border-slate-200 bg-slate-50">
+            <img
+              src={step.image}
+              alt={step.imageAlt || step.title}
+              className="block w-full h-auto max-h-44 object-cover object-top"
+            />
+            <div className="px-2 py-1 text-[11px] text-slate-500 border-t border-slate-200">
+              Example from a saved session
+            </div>
+          </div>
+        ) : null}
+        {!highlight && !hasExampleImage ? (
           <p className="mb-3 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
             This control appears after you progress (e.g. after Lock axes or Save). You can still continue the tips.
+          </p>
+        ) : null}
+        {!highlight && hasExampleImage ? (
+          <p className="mb-3 text-xs text-slate-600">
+            This section appears after you save. The image above shows what it looks like.
           </p>
         ) : null}
         <div className="flex flex-wrap items-center justify-between gap-2">
           <button
             type="button"
-            className="text-sm font-medium text-slate-600 hover:text-slate-900"
             onClick={finish}
+            className="gc-tour-skip-btn px-3 py-1.5 rounded text-sm font-semibold"
           >
             Skip tips
           </button>
@@ -147,7 +166,7 @@ const ManualOnboardingTour = ({ open, onClose }) => {
             {stepIndex > 0 ? (
               <button
                 type="button"
-                className="px-3 py-1.5 rounded border border-slate-300 text-sm font-medium text-slate-800 bg-white hover:bg-slate-50"
+                className="gc-tour-skip-btn px-3 py-1.5 rounded text-sm font-medium"
                 onClick={() => setStepIndex((i) => Math.max(0, i - 1))}
               >
                 Back
@@ -156,7 +175,7 @@ const ManualOnboardingTour = ({ open, onClose }) => {
             {stepIndex < total - 1 ? (
               <button
                 type="button"
-                className="px-3 py-1.5 rounded text-sm font-semibold text-white bg-sky-600 hover:bg-sky-700"
+                className="gc-tour-next-btn px-3 py-1.5 rounded text-sm font-semibold"
                 onClick={() => setStepIndex((i) => Math.min(total - 1, i + 1))}
               >
                 Next
@@ -164,7 +183,7 @@ const ManualOnboardingTour = ({ open, onClose }) => {
             ) : (
               <button
                 type="button"
-                className="px-3 py-1.5 rounded text-sm font-semibold text-white bg-sky-600 hover:bg-sky-700"
+                className="gc-tour-next-btn px-3 py-1.5 rounded text-sm font-semibold"
                 onClick={finish}
               >
                 Done

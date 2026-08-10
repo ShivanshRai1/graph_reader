@@ -143,3 +143,27 @@ button.gc-action-btn-lg {
   font-size: 16px !important;
   font-weight: 600 !important;
 }
+
+/* Onboarding tour — beat global dark button defaults */
+button.gc-tour-skip-btn {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border: 1px solid #cbd5e1 !important;
+}
+
+button.gc-tour-skip-btn:hover {
+  background-color: #f8fafc !important;
+  border-color: #94a3b8 !important;
+  color: #0f172a !important;
+}
+
+button.gc-tour-next-btn {
+  background-color: #0284c7 !important;
+  color: #ffffff !important;
+  border: 1px solid #0284c7 !important;
+}
+
+button.gc-tour-next-btn:hover {
+  background-color: #0369a1 !important;
+  color: #ffffff !important;
+}

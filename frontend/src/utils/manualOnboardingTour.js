@@ -3,7 +3,11 @@
  * Does not change capture math, save, or RC Ladder / return_url behavior.
  */
 
-export const MANUAL_ONBOARDING_STORAGE_KEY = 'graphCapture.manualOnboardingTourDone.v1';
+import tourEditAxesImg from '../assets/onboarding/tour-edit-axes.jpg';
+import tourSavedGraphsImg from '../assets/onboarding/tour-saved-graphs.jpg';
+import tourViewGraphsImg from '../assets/onboarding/tour-view-graphs.jpg';
+
+export const MANUAL_ONBOARDING_STORAGE_KEY = 'graphCapture.manualOnboardingTourDone.v2';
 
 export const MANUAL_ONBOARDING_STEPS = [
   {
@@ -23,12 +27,14 @@ export const MANUAL_ONBOARDING_STEPS = [
     target: 'gc-tour-edit-axes',
     title: 'Edit axes anytime',
     body: 'Use Edit axes to unlock and fix mapping. You can lock again when ready. (Editing axes clears current points.)',
+    image: tourEditAxesImg,
+    imageAlt: 'Example: Axes locked panel with yellow Edit axes button',
   },
   {
     id: 'capture',
-    target: 'gc-tour-capture',
-    title: 'Name the curve and click points',
-    body: 'Enter a Curve or Line Name on the right, then click on the graph to capture points. Use the table below the graph to edit or delete them.',
+    target: 'gc-tour-curve-name',
+    title: 'Name the curve, then click points',
+    body: 'Type a Curve or Line Name in this field. Then click on the graph image to capture points (edit or delete them in the table below).',
   },
   {
     id: 'save',
@@ -40,13 +46,17 @@ export const MANUAL_ONBOARDING_STEPS = [
     id: 'saved',
     target: 'gc-tour-saved',
     title: 'Saved Graphs',
-    body: 'Saved curves appear here. Click Edit to change details and drag points on the graph to fine-tune them.',
+    body: 'After you save, curves appear here. Click Edit to change details and drag points on the graph to fine-tune them.',
+    image: tourSavedGraphsImg,
+    imageAlt: 'Example: Saved Graphs section with View, Remove, and Edit buttons',
   },
   {
     id: 'view',
     target: 'gc-tour-view',
     title: 'View individually or combined',
     body: 'Use View on one curve, or View combined / View all graphs combined to compare curves together.',
+    image: tourViewGraphsImg,
+    imageAlt: 'Example: View and View all graphs combined buttons',
   },
 ];
 

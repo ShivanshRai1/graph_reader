@@ -8716,10 +8716,11 @@ const GraphCapture = () => {
             <button
               type="button"
               onClick={() => setShowManualOnboardingTour(true)}
-              className="px-3 py-2 rounded border border-slate-300 bg-white text-slate-800 text-sm font-medium hover:bg-slate-50"
+              className="px-3 py-2 rounded text-sm font-semibold border"
+              style={{ backgroundColor: '#eff6ff', color: '#1d4ed8', borderColor: '#93c5fd' }}
               title="Show a short tips tour for manual capture"
             >
-              Tips
+              Tips tour
             </button>
           ) : null}
           {!!urlParams.return_url && (

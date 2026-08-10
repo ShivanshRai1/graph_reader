@@ -712,7 +712,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             </div>
           </div>
 
-          <label className="block mb-5 font-medium text-gray-800">
+          <label className="block mb-5 font-medium text-gray-800" data-tour="gc-tour-curve-name">
             <span className="block mb-1 text-sm font-semibold text-gray-900">Curve or Line Name</span>
             <input
               id={CURVE_NAME_INPUT_ID}
@@ -766,7 +766,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             disabled={isGraphTitleReadOnly || isMetadataLocked}
           />
         </label>
-        <label className="block mb-3 font-medium text-gray-800">
+        <label className="block mb-3 font-medium text-gray-800" data-tour="gc-tour-curve-name">
           <span className="block mb-1 text-sm font-semibold text-gray-900">Curve or Line Name:</span>
           <input
             id={CURVE_NAME_INPUT_ID}
