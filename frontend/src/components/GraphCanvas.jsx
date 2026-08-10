@@ -1423,7 +1423,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
   const yAxisHoverLabel = formatAxisHoverLabel('Y', graphConfig.yLabel);
 
   return (
-    <div className="w-full p-5 bg-white rounded-lg mt-5">
+    <div className="w-full p-5 bg-white rounded-lg mt-5" data-tour="gc-tour-canvas">
       {(partNumber || manufacturer) ? (
         <div className="mb-4 p-3 bg-gray-100 rounded font-semibold text-gray-800 max-w-xs">
           Part Number: {partNumber && manufacturer ? `${partNumber}(${manufacturer})` : partNumber || ''}
@@ -1506,7 +1506,7 @@ const GraphCanvas = ({ isReadOnly = false, partNumber = '', manufacturer = '', i
           The graph image could not be loaded from the server. Re-upload the screenshot, or open this graph after it was saved once in this tool (stored copy).
         </div>
       )}
-      <div className="flex items-center gap-3 mt-4 mb-6 flex-wrap">
+      <div className="flex items-center gap-3 mt-4 mb-6 flex-wrap" data-tour="gc-tour-capture">
         <div className={`relative ${captureUiPhase === 'setup' || captureUiPhase === 'needCurveName' ? 'opacity-40' : ''}`}>
           <button
             type="button"

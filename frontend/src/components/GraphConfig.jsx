@@ -680,7 +680,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
 
       {showCompactLocked ? (
         <>
-          <div className="mb-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
+          <div className="mb-5 rounded-lg border border-slate-200 bg-slate-50 p-4" data-tour="gc-tour-axes">
             <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
               <div className="text-base font-semibold text-slate-900">Axes locked</div>
               <button
@@ -689,6 +689,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
                 className="gc-action-btn rounded"
                 style={{ backgroundColor: '#facc15', color: '#111827' }}
                 title="Edit axis settings (clears captured points)"
+                data-tour="gc-tour-edit-axes"
               >
                 Edit axes
               </button>
@@ -1085,6 +1086,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
       {/* Axis status & controls */}
       <div
         className="mt-6 p-4 border border-gray-300 rounded-lg bg-white"
+        data-tour="gc-tour-axes"
       >
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
@@ -1166,6 +1168,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
             className="w-full mt-3 px-4 py-2 rounded font-medium bg-white text-slate-900 border border-slate-300 hover:bg-slate-50"
             style={{ backgroundColor: '#ffffff', color: '#0f172a' }}
             title="Edit axis settings (clears captured points)"
+            data-tour="gc-tour-edit-axes"
           >
             Edit axes
           </button>

@@ -5,6 +5,7 @@ import CapturedPointsList from '../components/CapturedPointsList';
 import SavedGraphPreview from '../components/SavedGraphPreview';
 import SavedGraphCombinedPreview from '../components/SavedGraphCombinedPreview';
 import ViewModalPanel from '../components/ViewModalPanel';
+import ManualOnboardingTour from '../components/ManualOnboardingTour';
 import lineSingleTemplate from '../assets/tc-templates/line-single.json';
 import {
   buildTypicalCurveExportFromSavedCurves,
@@ -41,6 +42,10 @@ import {
   rewriteRcLadderUrl,
 } from '../utils/rcLadderBase';
 import { resolveCaptureUiPhase } from '../utils/captureUiPhase';
+import {
+  hasCompletedManualOnboarding,
+  shouldSkipManualOnboarding,
+} from '../utils/manualOnboardingTour';
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 
 const MiniGraphCanvas = ({ points }) => {
@@ -4519,6 +4524,8 @@ const GraphCapture = () => {
   const [showReturnDecisionModal, setShowReturnDecisionModal] = useState(false);
   const [showCaptureAnotherGuidance, setShowCaptureAnotherGuidance] = useState(false);
   const [pendingReturnUrl, setPendingReturnUrl] = useState('');
+  const [showManualOnboardingTour, setShowManualOnboardingTour] = useState(false);
+  const manualOnboardingAutoShownRef = useRef(false);
   const savedGraphsSectionRef = useRef(null);
   const hasAutoScrolledToSavedGraphs = useRef(false);
   const autoLoadedGraphIdRef = useRef('');
@@ -4732,6 +4739,21 @@ const GraphCapture = () => {
   const showCaptureWorkspace =
     savedCurves.length > 0 ||
     (Boolean(uploadedImage) && !hasPendingCaptureChoice && !restoredPendingCapture?.imageBase64);
+  const skipManualOnboarding = shouldSkipManualOnboarding({ returnUrl: urlParams.return_url });
+
+  // UI-only tips tour: never auto-start for RC Ladder / return_url sessions.
+  useEffect(() => {
+    if (skipManualOnboarding) return undefined;
+    if (!showCaptureWorkspace || !uploadedImage) return undefined;
+    if (manualOnboardingAutoShownRef.current) return undefined;
+    if (hasCompletedManualOnboarding()) return undefined;
+    const timer = window.setTimeout(() => {
+      manualOnboardingAutoShownRef.current = true;
+      setShowManualOnboardingTour(true);
+    }, 900);
+    return () => window.clearTimeout(timer);
+  }, [skipManualOnboarding, showCaptureWorkspace, uploadedImage]);
+
   const hasTemperatureInOtherSymbols = isTemperatureSymbol(urlParams.other_symbols);
   const shouldShowTemperatureInput =
     (urlParams.tctj !== '0' || hasTemperatureInOtherSymbols) &&
@@ -8689,14 +8711,26 @@ const GraphCapture = () => {
         <h1 className="text-2xl font-bold mb-2" style={{ color: '#213547' }}>
           Graph Capture Tool
         </h1>
-        {!!urlParams.return_url && (
-          <button
-            onClick={handleCancelAndReturn}
-            className="px-4 py-2 rounded bg-red-600 text-white font-medium"
-          >
-            Cancel and Return
-          </button>
-        )}
+        <div className="flex items-center gap-2 flex-wrap">
+          {!skipManualOnboarding && showCaptureWorkspace ? (
+            <button
+              type="button"
+              onClick={() => setShowManualOnboardingTour(true)}
+              className="px-3 py-2 rounded border border-slate-300 bg-white text-slate-800 text-sm font-medium hover:bg-slate-50"
+              title="Show a short tips tour for manual capture"
+            >
+              Tips
+            </button>
+          ) : null}
+          {!!urlParams.return_url && (
+            <button
+              onClick={handleCancelAndReturn}
+              className="px-4 py-2 rounded bg-red-600 text-white font-medium"
+            >
+              Cancel and Return
+            </button>
+          )}
+        </div>
         {/* <p className="text-gray-600">Upload graph images and extract data points easily</p> */}
       </header>
 
@@ -8757,7 +8791,7 @@ const GraphCapture = () => {
                 onNeedCurveName={focusCurveNameField}
                 captureUiPhase={captureUiPhase}
               />
-              <div className={captureUiPhase === 'needCurveName' ? 'opacity-45' : undefined}>
+              <div className={captureUiPhase === 'needCurveName' ? 'opacity-45' : undefined} data-tour="gc-tour-points">
                 <CapturedPointsList isReadOnly={isReadOnly} hasReturnUrl={!!urlParams.return_url} isEditingCurve={Boolean(editingCurveId)} isAxisMappingConfirmed={isAxisMappingConfirmed} />
               </div>
             </div>
@@ -8894,6 +8928,7 @@ const GraphCapture = () => {
                         : { backgroundColor: '#e2e8f0', color: '#334155' }
                     }
                     disabled={isSaving || !canSaveCurve}
+                    data-tour="gc-tour-save"
                     title={
                       canSaveCurve
                         ? 'Save this curve'
@@ -8936,11 +8971,12 @@ const GraphCapture = () => {
                   ref={savedGraphsSectionRef}
                   className="mt-10 p-4 rounded shadow"
                   style={{ backgroundColor: '#ffffff', color: '#213547', border: '1px solid var(--color-border)' }}
+                  data-tour="gc-tour-saved"
                 >
                   <h2 className="text-lg font-bold mb-4" style={{ color: '#213547' }}>
                     Saved Graphs
                   </h2>
-                  <div className="mb-3 flex flex-wrap gap-2">
+                  <div className="mb-3 flex flex-wrap gap-2" data-tour="gc-tour-view">
                     <button
                       type="button"
                       className="gc-action-btn rounded"
@@ -9248,6 +9284,7 @@ const GraphCapture = () => {
                                     className="gc-action-btn rounded"
                                     style={{ backgroundColor: '#fbbf24', color: '#0f172a' }}
                                     onClick={() => handleEditCurveStart(curve)}
+                                    data-tour="gc-tour-edit-curve"
                                   >
                                     Edit
                                   </button>
@@ -9933,6 +9970,11 @@ const GraphCapture = () => {
           </ViewModalPanel>
         </div>
       )}
+
+      <ManualOnboardingTour
+        open={showManualOnboardingTour && !skipManualOnboarding}
+        onClose={() => setShowManualOnboardingTour(false)}
+      />
     </div>
   );
 };
