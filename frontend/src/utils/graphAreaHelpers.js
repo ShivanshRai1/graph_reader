@@ -356,18 +356,6 @@ const hasSignificantOuterPlotSpan = (outerSpanPx, innerSpanPx) =>
   outerSpanPx >= Math.max(8, innerSpanPx * 0.06);
 
 /**
- * Linear X plot-reference margins: skip Y-axis label strip on the left and light
- * padding on the right so xmin/xmax land on the grid (not full-canvas edges).
- * Independent of DATASHEET_PLOT_MARGINS so default axis-box / Y behavior stays put.
- */
-const LINEAR_X_PLOT_MARGINS = {
-  left: 0.12,
-  top: 0.10,
-  right: 0.10,
-  bottom: 0.12,
-};
-
-/**
  * Log plot-reference margins: map axis max to the printed grid, not image padding.
  * top ~0.10 skips the title without dropping ymax below the top decade tick
  * (0.14 was too large — upper ticks hit ymax early, e.g. stuck near the 5-line).
@@ -380,31 +368,12 @@ const LOG_PLOT_MARGINS = {
 };
 
 /**
- * Extend plot reference horizontally for linear axes.
- * Left may move to the plot inset (skip Y-axis labels).
- * Right stays on the blue-box edge: stretching into right padding mapped xmax past
- * the last tick, so clicks on xmax read low (e.g. ~1.9 on a 0–2.5 scale).
- * If the box ends mid-scale, adjust the blue box to the last tick, then Lock axes.
+ * Linear X: do not expand the plot reference past the blue box.
+ * Left expansion into the Y-label margin mapped xmin left of the true axis, so clicks
+ * at visual X=0 read high (e.g. ~12 on a 0–80 scale). Right expansion caused xmax shortfall.
+ * Align the blue box to the axis frame, then Lock axes.
  */
-const expandLinearPlotReferenceHorizontally = (captureBox, canvasW, canvasH) => {
-  const widthLimit = Number(canvasW);
-  const heightLimit = Number(canvasH);
-  if (!Number.isFinite(widthLimit) || widthLimit <= 0) return null;
-  if (!Number.isFinite(heightLimit) || heightLimit <= 0) return null;
-
-  const plot = buildDatasheetPlotArea(widthLimit, heightLimit, LINEAR_X_PLOT_MARGINS);
-  if (!(plot.width > 0)) return null;
-
-  const boxRight = captureBox.x + captureBox.width;
-  const targetLeft = Math.min(captureBox.x, plot.x);
-  const targetRight = boxRight;
-  const nextWidth = targetRight - targetLeft;
-  if (Math.abs(targetLeft - captureBox.x) <= 0.5) {
-    return null;
-  }
-
-  return { x: targetLeft, width: nextWidth };
-};
+const expandLinearPlotReferenceHorizontally = () => null;
 
 /**
  * Extend log plot reference horizontally to the log plot grid (not canvas padding).
@@ -515,9 +484,9 @@ export const buildPlotReferenceAreaFromCaptureBox = (
       }
     }
   } else if (xMax > xMin) {
+    // Linear X: no horizontal expand — blue box left/right = xmin/xmax.
     const horizontal = expandLinearPlotReferenceHorizontally(captureBox, canvasW, canvasH);
     if (horizontal) {
-      // Always apply; clamp to canvas. Do not reject expansion (that locked mapping to the blue box).
       const applied = clampGraphAreaToCanvas(
         { x: horizontal.x, y, width: horizontal.width, height },
         canvasW,
