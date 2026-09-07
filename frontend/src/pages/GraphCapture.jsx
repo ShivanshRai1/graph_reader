@@ -898,6 +898,75 @@ const getAlternateDfSymbolKey = (rawKey) => {
   return key.toLowerCase().startsWith('df_') ? key.slice(3) : `df_${key}`;
 };
 
+const isIncompleteDfSymbolToken = (token) => {
+  const name = String(token || '').trim().split('=')[0].trim();
+  if (!name) return false;
+  const lower = name.toLowerCase();
+  // Bare/truncated DiscoverEE tokens: "df_" or "df" (nothing after the prefix).
+  return lower === 'df_' || lower === 'df' || (lower.startsWith('df_') && stripDfPrefixForDisplay(name) === '');
+};
+
+const getQueryKeyImmediatelyAfterOtherSymbols = (searchParams) => {
+  const keys = Array.from(searchParams.keys());
+  const idx = keys.findIndex((key) => {
+    const lower = String(key || '').toLowerCase();
+    return lower === 'other_symb' || lower === 'other_symbols';
+  });
+  if (idx < 0 || idx >= keys.length - 1) return '';
+  return String(keys[idx + 1] || '').trim();
+};
+
+/**
+ * Normalize manage-TC / DiscoverEE other_symb lists for the UI.
+ * Example bug: other_symb=tctj,df_&testuser_id=10
+ * → ampersand cuts the second symbol; rebuild as df_testuser_id=10.
+ */
+const normalizeOtherSymbolTokenList = (rawOtherSymbols, searchParams) => {
+  const raw = String(rawOtherSymbols || '').trim();
+  const tokens = raw ? raw.split(',').map((part) => part.trim()).filter(Boolean) : [];
+  const nextKeyAfterOther = getQueryKeyImmediatelyAfterOtherSymbols(searchParams);
+  const normalized = [];
+  const seen = new Set();
+
+  const pushToken = (token) => {
+    const trimmed = String(token || '').trim();
+    if (!trimmed) return;
+    const nameOnly = (trimmed.includes('=') ? trimmed.split('=')[0] : trimmed).trim().toLowerCase();
+    if (!nameOnly || seen.has(nameOnly)) return;
+    seen.add(nameOnly);
+    normalized.push(trimmed);
+  };
+
+  tokens.forEach((token) => {
+    if (isIncompleteDfSymbolToken(token)) {
+      if (!nextKeyAfterOther) return;
+      const repairedName = nextKeyAfterOther.toLowerCase().startsWith('df_')
+        ? nextKeyAfterOther
+        : `df_${nextKeyAfterOther}`;
+      const inlineValue = token.includes('=') ? token.slice(token.indexOf('=') + 1).trim() : '';
+      const repairedValue =
+        inlineValue ||
+        String(searchParams.get(nextKeyAfterOther) || '').trim() ||
+        String(searchParams.get(repairedName) || '').trim();
+      pushToken(repairedValue !== '' ? `${repairedName}=${repairedValue}` : repairedName);
+      return;
+    }
+
+    pushToken(token);
+  });
+
+  // Also surface explicit df_* query params (full names) as symbol fields.
+  Array.from(searchParams.keys()).forEach((key) => {
+    const name = String(key || '').trim();
+    if (!/^df_[A-Za-z_][A-Za-z0-9_]*$/i.test(name)) return;
+    if (isIncompleteDfSymbolToken(name)) return;
+    const value = String(searchParams.get(name) || '').trim();
+    pushToken(value !== '' ? `${name}=${value}` : name);
+  });
+
+  return normalized;
+};
+
 const isValidSymbolValue = (value) => {
   // Check if value is null, undefined, or not a valid primitive
   if (value === undefined || value === null) return false;
@@ -4804,11 +4873,17 @@ const GraphCapture = () => {
 
   const getSymbolDisplayLabel = (symbolKey) => {
     const rawLabel = symbolLabels[symbolKey] || symbolKey;
-    return stripDfPrefixForDisplay(rawLabel);
+    const stripped = stripDfPrefixForDisplay(rawLabel);
+    // Never show a blank label (e.g. bare "df_" before URL repair).
+    return stripped || String(rawLabel || symbolKey || '').trim();
   };
 
   const visibleSymbolNames = (Array.isArray(symbolNames) ? symbolNames : []).filter(
-    (symbol) => !isTemperatureSymbol(symbol, getSymbolDisplayLabel(symbol))
+    (symbol) => {
+      const label = getSymbolDisplayLabel(symbol);
+      if (!symbol || !label) return false;
+      return !isTemperatureSymbol(symbol, label);
+    }
   );
 
   const getCurveSymbolMetadataEntries = (curve) => {
@@ -6787,7 +6862,8 @@ const GraphCapture = () => {
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
     const otherSymbols = searchParams.get('other_symbols') || searchParams.get('other_symb') || '';
-    const symbolArray = otherSymbols ? otherSymbols.split(',').map((s) => s.trim()) : [];
+    // Repair truncated DiscoverEE lists (e.g. tctj,df_&testuser_id=10 → include df_testuser_id=10).
+    const symbolArray = normalizeOtherSymbolTokenList(otherSymbols, searchParams);
 
     // Extract friendly labels and pre-fill values from URL parameters
     // Format: "Friendly Label=value" or just "Friendly Label"
@@ -6999,9 +7075,7 @@ const GraphCapture = () => {
         ? symbolNames
         : (() => {
             const otherSymbolsRaw = searchParams.get('other_symbols') || searchParams.get('other_symb') || '';
-            const symbolTokens = otherSymbolsRaw
-              ? otherSymbolsRaw.split(',').map((token) => token.trim()).filter(Boolean)
-              : [];
+            const symbolTokens = normalizeOtherSymbolTokenList(otherSymbolsRaw, searchParams);
 
             return symbolTokens.map((token) => {
               const label = token.includes('=') ? token.split('=')[0].trim() : token;
