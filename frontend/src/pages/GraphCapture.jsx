@@ -546,7 +546,10 @@ const isTemperatureSymbol = (...values) => {
 
   if (!combined) return false;
 
-  return /(graph_tctj|df_tj|tctj|temperature|temp\b|tc\b|tj\b)/i.test(combined);
+  // Only legacy temperature *channel* names — not manage-TC symbols like tj/tc/df_tj
+  // (those must stay visible next to id/tp). Bare tj/tc were swallowed and then hidden
+  // after Lock axes because the compact UI omitted the TC/TJ field.
+  return /(graph_tctj|\btctj\b|temperature|\btemp\b)/i.test(combined);
 };
 
 const resolveTemperatureForSave = (rawTemperature, shouldDefaultRoomTemperature) => {
