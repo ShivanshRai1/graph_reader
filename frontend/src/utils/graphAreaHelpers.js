@@ -420,9 +420,10 @@ const expandLinearPlotReferenceVertically = (captureBox, canvasH) => {
 };
 
 /**
- * Build the full plot-reference rectangle from the capture box at axis confirm.
- * Partial blue boxes expand so axis min/max map across the plot, not only the box.
- * Linear and log both expand; log also keeps decade-extension when needed.
+ * Build the plot-reference rectangle from the capture box at axis confirm.
+ * Linear and log (X and Y): blue-box edges map to axis min/max.
+ * Do not expand into title/label/padding — that skewed origin and decade ticks.
+ * Align the blue box to the printed axis frame, then Lock axes.
  */
 export const buildPlotReferenceAreaFromCaptureBox = (
   captureBox,
@@ -433,116 +434,32 @@ export const buildPlotReferenceAreaFromCaptureBox = (
     return null;
   }
 
-  const xMin = parseAxisBound(graphConfig.xMin, graphConfig.xScale === 'Logarithmic' ? 1 : 0);
-  const xMax = parseAxisBound(graphConfig.xMax, 100);
-  const yMin = parseAxisBound(graphConfig.yMin, graphConfig.yScale === 'Logarithmic' ? 1 : 0);
-  const yMax = parseAxisBound(graphConfig.yMax, 100);
-
-  let x = captureBox.x;
-  let y = captureBox.y;
-  let width = captureBox.width;
-  let height = captureBox.height;
+  // graphConfig kept for call-site compatibility (axis scales do not change box geometry).
+  void graphConfig;
 
   const canvasW =
     Number(canvasSize.width) ||
-    Math.max(x + width + GRAPH_AREA_EDGE_MARGIN, captureBox.x + captureBox.width + GRAPH_AREA_EDGE_MARGIN);
+    Math.max(
+      captureBox.x + captureBox.width + GRAPH_AREA_EDGE_MARGIN,
+      captureBox.width + GRAPH_AREA_EDGE_MARGIN
+    );
   const canvasH =
     Number(canvasSize.height) ||
-    Math.max(y + height + GRAPH_AREA_EDGE_MARGIN, captureBox.y + captureBox.height + GRAPH_AREA_EDGE_MARGIN);
-
-  // Log axes: expand to the log plot grid (not canvas padding — that made xmax read ~82 at 100).
-  // Keep decade-extension afterward when leftover canvas still matches a missing decade.
-  if (graphConfig.xScale === 'Logarithmic') {
-    const horizontal = expandLogPlotReferenceHorizontally(captureBox, canvasW, canvasH);
-    if (horizontal) {
-      const applied = clampGraphAreaToCanvas(
-        { x: horizontal.x, y, width: horizontal.width, height },
-        canvasW,
-        canvasH
-      );
-      x = applied.x;
-      width = applied.width;
-    }
-
-    const canvasWidth = Math.max(
-      Number(canvasW) || 0,
-      x + width + GRAPH_AREA_EDGE_MARGIN
+    Math.max(
+      captureBox.y + captureBox.height + GRAPH_AREA_EDGE_MARGIN,
+      captureBox.height + GRAPH_AREA_EDGE_MARGIN
     );
-    const remainingRight = canvasWidth - (x + width);
-    const visibleXMax = inferLogVisibleMaxAtInnerEdge(xMin, xMax, width, remainingRight);
-    if (visibleXMax < xMax) {
-      const expandedRight = expandLogCanvasSpanFromMinAnchor(x, x + width, xMin, xMax, visibleXMax);
-      const nextWidth = Math.max(width, expandedRight.max - x);
-      const applied = clampGraphAreaToCanvas(
-        { x, y, width: nextWidth, height },
-        canvasW,
-        canvasH
-      );
-      if (applied.width > width + 0.5) {
-        x = applied.x;
-        width = applied.width;
-      }
-    }
-  } else if (xMax > xMin) {
-    // Linear X: no horizontal expand — blue box left/right = xmin/xmax.
-    const horizontal = expandLinearPlotReferenceHorizontally(captureBox, canvasW, canvasH);
-    if (horizontal) {
-      const applied = clampGraphAreaToCanvas(
-        { x: horizontal.x, y, width: horizontal.width, height },
-        canvasW,
-        canvasH
-      );
-      x = applied.x;
-      width = applied.width;
-    }
-  }
 
-  if (graphConfig.yScale === 'Logarithmic') {
-    // Log Y: expand upward through leftover canvas so the upper decade is not clipped.
-    // Bottom stays on the blue box (true ymin / axis line).
-    // Log X keeps plot-grid margins above — do not change that path.
-    const vertical = expandLinearPlotReferenceVertically(captureBox, canvasH);
-    if (vertical) {
-      const applied = clampGraphAreaToCanvas(
-        { x, y: vertical.y, width, height: vertical.height },
-        canvasW,
-        canvasH
-      );
-      y = applied.y;
-      height = applied.height;
-    } else {
-      const canvasHeight = Math.max(
-        Number(canvasH) || 0,
-        y + height + GRAPH_AREA_EDGE_MARGIN
-      );
-      const remainingTop = y;
-      const visibleYMax = inferLogVisibleMaxAtInnerEdge(yMin, yMax, height, remainingTop);
-      if (visibleYMax < yMax) {
-        const expandedTop = expandLogCanvasSpanFromBottomAnchor(
-          y,
-          y + height,
-          yMin,
-          yMax,
-          visibleYMax
-        );
-        const nextY = expandedTop.top;
-        const nextHeight = Math.max(height, expandedTop.bottom - expandedTop.top);
-        const applied = clampGraphAreaToCanvas(
-          { x, y: nextY, width, height: nextHeight },
-          canvasW,
-          canvasH
-        );
-        if (applied.height > height + 0.5) {
-          y = applied.y;
-          height = applied.height;
-        }
-      }
-    }
-  }
-  // Linear Y: no vertical expand — blue box top/bottom = ymax/ymin. Stretching into
-  // title/label margins made origin Y high and ymax unreachable on the top tick.
-
-  return clampGraphAreaToCanvas({ x, y, width, height }, canvasW, canvasH);
+  return clampGraphAreaToCanvas(
+    {
+      x: captureBox.x,
+      y: captureBox.y,
+      width: captureBox.width,
+      height: captureBox.height,
+    },
+    canvasW,
+    canvasH
+  );
 };
 
 export const graphAreasAreSimilar = (a, b, tolerancePx = 6) => {
