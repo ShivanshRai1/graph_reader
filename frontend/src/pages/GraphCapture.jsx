@@ -9480,7 +9480,7 @@ const GraphCapture = () => {
                                           symbol &&
                                           !isGraphCaptureSystemSymbolKey(symbol) &&
                                           !isTemperatureSymbol(symbol, getSymbolDisplayLabel(symbol))
-                                      )
+                                      ))
                                     );
 
                                     if (editableSymbolKeys.length === 0) {
