@@ -4827,14 +4827,17 @@ const GraphCapture = () => {
   }, [skipManualOnboarding, showCaptureWorkspace, uploadedImage]);
 
   const hasTemperatureInOtherSymbols = isTemperatureSymbol(urlParams.other_symbols);
+  // If manage TC / URL explicitly lists tctj (or similar), always show TJ —
+  // do not hide it just because the curve name says "TC = 25C".
   const shouldShowTemperatureInput =
     (urlParams.tctj !== '0' || hasTemperatureInOtherSymbols) &&
-    !hasImplicitTemperatureContext(
-      urlParams.x_label,
-      urlParams.y_label,
-      graphConfig.curveName,
-      urlParams.curve_title,
-    );
+    (hasTemperatureInOtherSymbols ||
+      !hasImplicitTemperatureContext(
+        urlParams.x_label,
+        urlParams.y_label,
+        graphConfig.curveName,
+        urlParams.curve_title,
+      ));
 
   const unitOptions = [
     { value: '1e-12', label: 'pico (p) = 1e-12' },
