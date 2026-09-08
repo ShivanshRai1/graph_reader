@@ -906,6 +906,25 @@ const isIncompleteDfSymbolToken = (token) => {
   return lower === 'df_' || lower === 'df' || (lower.startsWith('df_') && stripDfPrefixForDisplay(name) === '');
 };
 
+/** System URL keys that must never become manage-TC symbol fields in the UI. */
+const isGraphCaptureSystemSymbolKey = (rawKey) => {
+  const key = String(rawKey || '').trim().toLowerCase();
+  if (!key) return false;
+  const bare = key.startsWith('df_') ? key.slice(3) : key;
+  return (
+    key === 'testuser_id' ||
+    key === 'df_testuser_id' ||
+    bare === 'testuser_id' ||
+    key === 'return_url' ||
+    key === 'graph_id' ||
+    key === 'identifier' ||
+    key === 'discoveree_cat_id' ||
+    key === 'partno' ||
+    key === 'manf' ||
+    key === 'manufacturer'
+  );
+};
+
 const getQueryKeyImmediatelyAfterOtherSymbols = (searchParams) => {
   const keys = Array.from(searchParams.keys());
   const idx = keys.findIndex((key) => {
@@ -918,8 +937,8 @@ const getQueryKeyImmediatelyAfterOtherSymbols = (searchParams) => {
 
 /**
  * Normalize manage-TC / DiscoverEE other_symb lists for the UI.
- * Example bug: other_symb=tctj,df_&testuser_id=10
- * → ampersand cuts the second symbol; rebuild as df_testuser_id=10.
+ * Example bug: other_symb=tctj,df_&id=... — ampersand cuts the second symbol.
+ * Do not promote system keys like testuser_id into symbol fields.
  */
 const normalizeOtherSymbolTokenList = (rawOtherSymbols, searchParams) => {
   const raw = String(rawOtherSymbols || '').trim();
@@ -931,15 +950,18 @@ const normalizeOtherSymbolTokenList = (rawOtherSymbols, searchParams) => {
   const pushToken = (token) => {
     const trimmed = String(token || '').trim();
     if (!trimmed) return;
-    const nameOnly = (trimmed.includes('=') ? trimmed.split('=')[0] : trimmed).trim().toLowerCase();
-    if (!nameOnly || seen.has(nameOnly)) return;
-    seen.add(nameOnly);
+    const nameOnly = (trimmed.includes('=') ? trimmed.split('=')[0] : trimmed).trim();
+    if (!nameOnly || isGraphCaptureSystemSymbolKey(nameOnly)) return;
+    const lowerName = nameOnly.toLowerCase();
+    if (seen.has(lowerName)) return;
+    seen.add(lowerName);
     normalized.push(trimmed);
   };
 
   tokens.forEach((token) => {
     if (isIncompleteDfSymbolToken(token)) {
-      if (!nextKeyAfterOther) return;
+      // Only repair when the next URL key is a real TC symbol, not a system param.
+      if (!nextKeyAfterOther || isGraphCaptureSystemSymbolKey(nextKeyAfterOther)) return;
       const repairedName = nextKeyAfterOther.toLowerCase().startsWith('df_')
         ? nextKeyAfterOther
         : `df_${nextKeyAfterOther}`;
@@ -960,6 +982,7 @@ const normalizeOtherSymbolTokenList = (rawOtherSymbols, searchParams) => {
     const name = String(key || '').trim();
     if (!/^df_[A-Za-z_][A-Za-z0-9_]*$/i.test(name)) return;
     if (isIncompleteDfSymbolToken(name)) return;
+    if (isGraphCaptureSystemSymbolKey(name)) return;
     const value = String(searchParams.get(name) || '').trim();
     pushToken(value !== '' ? `${name}=${value}` : name);
   });
@@ -2100,6 +2123,38 @@ const buildCompanyAppendDetailPayload = ({
     throw new Error('No valid points to save.');
   }
   detailPayload.xy = xy;
+  return detailPayload;
+};
+
+/**
+ * DiscoverEE requires TCTJ (and related TC symbols) on details[], or the capture list
+ * shows "Error: Seems TCTJ etc not assigned". Keep this additive — do not alter graph/
+ * return_url / RC Ladder session logic.
+ */
+const applyDiscovereeDetailSymbolFields = (detailPayload, symbolPayload = {}, tctjFallback = '') => {
+  if (!detailPayload || typeof detailPayload !== 'object') {
+    return detailPayload;
+  }
+
+  const payload = symbolPayload && typeof symbolPayload === 'object' ? symbolPayload : {};
+  const tctjValue = String(payload.legacyTctjValue || tctjFallback || '').trim();
+
+  if (payload.hasExplicitLegacyFields) {
+    Object.entries(payload.legacyFieldValues || {}).forEach(([key, value]) => {
+      if (value === undefined || value === null || String(value).trim() === '') return;
+      detailPayload[key] = String(value).trim();
+    });
+  } else if (tctjValue) {
+    detailPayload.tctj = tctjValue;
+    detailPayload.df_tj = tctjValue;
+  }
+
+  Object.entries(payload.symbolValues || {}).forEach(([key, value]) => {
+    if (key === 'tctj' || key === 'df_tj') return;
+    if (value === undefined || value === null || String(value).trim() === '') return;
+    detailPayload[key] = String(value).trim();
+  });
+
   return detailPayload;
 };
 
@@ -4883,8 +4938,9 @@ const GraphCapture = () => {
 
   const visibleSymbolNames = (Array.isArray(symbolNames) ? symbolNames : []).filter(
     (symbol) => {
+      if (!symbol || isGraphCaptureSystemSymbolKey(symbol)) return false;
       const label = getSymbolDisplayLabel(symbol);
-      if (!symbol || !label) return false;
+      if (!label || isGraphCaptureSystemSymbolKey(label)) return false;
       return !isTemperatureSymbol(symbol, label);
     }
   );
@@ -6139,6 +6195,7 @@ const GraphCapture = () => {
       yUnitPrefix: resolvedEditMeta.yUnitPrefix,
       axisConfig: resolvedEditAxis,
     });
+    applyDiscovereeDetailSymbolFields(detailPayload, nextSymbolPayload, tctjValue);
 
     const curvesOnSameGraph = savedCurves.filter(
       (savedCurve) => String(getGraphIdForCurve(savedCurve) || '').trim() === String(companyGraphId).trim()
@@ -8159,6 +8216,7 @@ const GraphCapture = () => {
         ymin: Number.isFinite(Number.parseFloat(graphConfig.yMin)) ? Number.parseFloat(graphConfig.yMin) : undefined,
         ymax: Number.isFinite(Number.parseFloat(graphConfig.yMax)) ? Number.parseFloat(graphConfig.yMax) : undefined,
       };
+      applyDiscovereeDetailSymbolFields(detailPayload, dynamicSymbolPayload, tctjValue);
 
       const searchParams = new URLSearchParams(window.location.search);
       const isRcLadderFitFlow = String(urlParams.graph_title || searchParams.get('graph_title') || '')
@@ -9294,7 +9352,12 @@ const GraphCapture = () => {
                                       new Set([
                                         ...visibleSymbolNames,
                                         ...Object.keys(editCurveSymbolValues || {}),
-                                      ].filter((symbol) => symbol && !isTemperatureSymbol(symbol, getSymbolDisplayLabel(symbol))))
+                                      ].filter(
+                                        (symbol) =>
+                                          symbol &&
+                                          !isGraphCaptureSystemSymbolKey(symbol) &&
+                                          !isTemperatureSymbol(symbol, getSymbolDisplayLabel(symbol))
+                                      )
                                     );
 
                                     if (editableSymbolKeys.length === 0) {
