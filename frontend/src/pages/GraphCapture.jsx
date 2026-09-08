@@ -2127,9 +2127,67 @@ const buildCompanyAppendDetailPayload = ({
 };
 
 /**
- * DiscoverEE requires TCTJ (and related TC symbols) on details[], or the capture list
- * shows "Error: Seems TCTJ etc not assigned". Keep this additive — do not alter graph/
- * return_url / RC Ladder session logic.
+ * DiscoverEE requires TCTJ assignment on details[] (and graph.tctj_title), or the
+ * capture list shows "Error: Seems TCTJ etc not assigned".
+ * Match the proven plain-string format used historically:
+ * - one value → plain string
+ * - several → "df_tj:25;df_id:...;df_tp:..."
+ */
+const buildDiscovereeTctjPlainString = (symbolPayload = {}, temperatureFallback = '') => {
+  const payload = symbolPayload && typeof symbolPayload === 'object' ? symbolPayload : {};
+  const entries = [];
+  const seen = new Set();
+
+  const pushEntry = (key, value) => {
+    const normalizedKey = String(key || '').trim();
+    const normalizedValue = String(value ?? '').trim();
+    if (!normalizedKey || !normalizedValue) return;
+    const lower = normalizedKey.toLowerCase();
+    if (seen.has(lower)) return;
+    seen.add(lower);
+    entries.push([normalizedKey, normalizedValue]);
+  };
+
+  const temperature = String(payload.legacyTctjValue || temperatureFallback || '').trim();
+  if (temperature) {
+    pushEntry('df_tj', temperature);
+  }
+
+  Object.entries(payload.legacyFieldValues || {}).forEach(([key, value]) => {
+    pushEntry(key, value);
+  });
+
+  Object.entries(payload.symbolValues || {}).forEach(([key, value]) => {
+    if (key === 'tctj' || key === 'df_tj') return;
+    pushEntry(key, value);
+  });
+
+  if (entries.length === 0) return '';
+  if (entries.length === 1) return entries[0][1];
+  return entries.map(([key, value]) => `${key}:${value}`).join(';');
+};
+
+const resolveDiscovereeTctjTitle = (symbolPayload = {}, symbolLabels = {}, symbolNames = [], otherSymbols = '') => {
+  const labels = symbolLabels && typeof symbolLabels === 'object' ? symbolLabels : {};
+  const fromPayload =
+    symbolPayload?.symbolTitles?.graph_tctj ||
+    symbolPayload?.symbolTitles?.tctj ||
+    symbolPayload?.symbolTitles?.df_tj ||
+    '';
+  if (String(fromPayload || '').trim()) return String(fromPayload).trim();
+
+  const fromLabels = labels.graph_tctj || labels.tctj || labels.df_tj || '';
+  if (String(fromLabels || '').trim()) return String(fromLabels).trim();
+
+  if (isTemperatureSymbol(otherSymbols)) return 'tctj';
+
+  const firstSymbol = Array.isArray(symbolNames) ? String(symbolNames[0] || '').trim() : '';
+  return firstSymbol;
+};
+
+/**
+ * Apply TCTJ / TC symbol fields onto a DiscoverEE details[] item.
+ * Additive only — does not change graph session / return_url / RC Ladder logic.
  */
 const applyDiscovereeDetailSymbolFields = (detailPayload, symbolPayload = {}, tctjFallback = '') => {
   if (!detailPayload || typeof detailPayload !== 'object') {
@@ -2137,16 +2195,12 @@ const applyDiscovereeDetailSymbolFields = (detailPayload, symbolPayload = {}, tc
   }
 
   const payload = symbolPayload && typeof symbolPayload === 'object' ? symbolPayload : {};
-  const tctjValue = String(payload.legacyTctjValue || tctjFallback || '').trim();
+  const tctjPlain = buildDiscovereeTctjPlainString(payload, tctjFallback);
+  const temperature = String(payload.legacyTctjValue || tctjFallback || '').trim();
 
-  if (payload.hasExplicitLegacyFields) {
-    Object.entries(payload.legacyFieldValues || {}).forEach(([key, value]) => {
-      if (value === undefined || value === null || String(value).trim() === '') return;
-      detailPayload[key] = String(value).trim();
-    });
-  } else if (tctjValue) {
-    detailPayload.tctj = tctjValue;
-    detailPayload.df_tj = tctjValue;
+  if (tctjPlain) {
+    detailPayload.tctj = tctjPlain;
+    detailPayload.df_tj = temperature || tctjPlain;
   }
 
   Object.entries(payload.symbolValues || {}).forEach(([key, value]) => {
@@ -6319,6 +6373,12 @@ const GraphCapture = () => {
       graph_title: graphConfig.graphTitle || urlParams.graph_title || curve.config?.graphTitle || '',
       x_title: graphConfig.xLabel || urlParams.x_label || curve.config?.xLabel || '',
       y_title: graphConfig.yLabel || urlParams.y_label || curve.config?.yLabel || '',
+      tctj_title: resolveDiscovereeTctjTitle(
+        nextSymbolPayload,
+        symbolLabels,
+        symbolNames,
+        urlParams.other_symbols
+      ),
       ...(resolvedGraphImageForEdit ? { graph_img: resolvedGraphImageForEdit } : {}),
       mark_review: '1',
       testuser_id: String(curve?.testuser_id || urlParams.testuser_id || ''),
@@ -6338,6 +6398,9 @@ const GraphCapture = () => {
     Object.entries(getGraphDynamicFieldValues(nextSymbolPayload)).forEach(([key, value]) => {
       appendPayload.graph[key] = value;
     });
+    if (tctjValue) {
+      appendPayload.graph.df_tj = String(tctjValue).trim();
+    }
 
     const detailIdsToRemove = new Set([resolvedDetailId]);
 
@@ -8458,6 +8521,12 @@ const GraphCapture = () => {
           curve_title: urlParams.curve_title || graphConfig.curveName || '',
           x_title: graphConfig.xLabel || urlParams.x_label || '',
           y_title: graphConfig.yLabel || urlParams.y_label || '',
+          tctj_title: resolveDiscovereeTctjTitle(
+            dynamicSymbolPayload,
+            symbolLabels,
+            symbolNames,
+            urlParams.other_symbols
+          ),
           ...(effectiveGraphImageUrl ? { graph_img: effectiveGraphImageUrl } : {}),
           mark_review: '1',
           testuser_id: urlParams.testuser_id || '',
@@ -8468,6 +8537,16 @@ const GraphCapture = () => {
       };
       Object.entries(getGraphDynamicFieldValues(dynamicSymbolPayload)).forEach(([key, value]) => {
         companyApiPayload.graph[key] = value;
+      });
+      // Keep temperature on graph as df_tj too (DiscoverEE column mapping).
+      if (tctjValue) {
+        companyApiPayload.graph.df_tj = String(tctjValue).trim();
+      }
+      console.log('[TCTJ SAVE] detail/graph assignment', {
+        detail_tctj: detailPayload.tctj || '',
+        detail_df_tj: detailPayload.df_tj || '',
+        graph_tctj_title: companyApiPayload.graph.tctj_title || '',
+        graph_df_tj: companyApiPayload.graph.df_tj || '',
       });
 
       console.log('Complete Company API Payload - Graph object:', {
