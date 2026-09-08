@@ -2209,50 +2209,158 @@ const removeCompanyDetailFromDiscoveree = async ({
   }
 };
 
+const COMPANY_SAVE_RELAY_URL = '/.netlify/functions/company-save-relay';
+const COMPANY_SAVE_RELAY_MAX_CHARS = 5_000_000;
+
+const isLikelyCompanySaveNetworkError = (error) => {
+  const message = String(error?.message || '');
+  return (
+    error?.name === 'TypeError' ||
+    /failed to fetch|networkerror|load failed|network request failed/i.test(message)
+  );
+};
+
+/**
+ * POST to DiscoverEE graph_capture_api.php.
+ * On browser CORS/network failure, retry once via Netlify company-save-relay
+ * (same idea as AI relay — does not change payload/session semantics).
+ */
+const postDiscovereeGraphCaptureJson = async (companyUrl, payload) => {
+  const targetUrl = String(companyUrl || '').trim();
+  if (!targetUrl) {
+    throw new Error('Missing DiscoverEE save URL.');
+  }
+
+  const bodyText = JSON.stringify(payload);
+  try {
+    const response = await fetch(targetUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: bodyText,
+    });
+    const rawText = await response.text();
+    return {
+      ok: response.ok,
+      status: response.status,
+      rawText,
+      via: 'direct',
+      headers: response.headers,
+    };
+  } catch (error) {
+    if (!isLikelyCompanySaveNetworkError(error)) {
+      throw error;
+    }
+
+    console.warn(
+      '[COMPANY SAVE] Direct DiscoverEE POST blocked (CORS/network). Retrying via Netlify relay.',
+      error
+    );
+
+    let relayPayload = payload;
+    if (
+      bodyText.length > COMPANY_SAVE_RELAY_MAX_CHARS &&
+      relayPayload?.graph &&
+      Object.prototype.hasOwnProperty.call(relayPayload.graph, 'graph_img')
+    ) {
+      relayPayload = {
+        ...relayPayload,
+        graph: { ...relayPayload.graph },
+      };
+      delete relayPayload.graph.graph_img;
+      console.warn('[COMPANY SAVE] Omitted graph_img on relay retry due to payload size.', {
+        approxChars: bodyText.length,
+      });
+    }
+
+    const relayResponse = await fetch(COMPANY_SAVE_RELAY_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        target_url: targetUrl,
+        payload: relayPayload,
+      }),
+    });
+    const relayRaw = await relayResponse.text();
+    let relayJson = {};
+    try {
+      relayJson = relayRaw ? JSON.parse(relayRaw) : {};
+    } catch {
+      throw new Error(
+        `Company save relay returned non-JSON (${relayResponse.status}). Direct error: ${error.message}`
+      );
+    }
+
+    if (!relayResponse.ok) {
+      throw new Error(
+        relayJson.error ||
+          `Company save relay failed (${relayResponse.status}). Direct error: ${error.message}`
+      );
+    }
+
+    const upstreamStatus = Number(relayJson.upstream_status || 0);
+    const upstreamOk =
+      typeof relayJson.upstream_ok === 'boolean'
+        ? relayJson.upstream_ok
+        : upstreamStatus >= 200 && upstreamStatus < 300;
+
+    return {
+      ok: upstreamOk,
+      status: upstreamStatus || relayResponse.status,
+      rawText: String(relayJson.raw_text || ''),
+      via: 'netlify-relay',
+      headers: null,
+      parsedHint: relayJson.response,
+    };
+  }
+};
+
 const postCompanyAppendSave = async (graphId, payload) => {
   const normalizedGraphId = String(graphId || '').trim();
   if (!normalizedGraphId) {
     throw new Error('Missing graph_id for append save.');
   }
 
-  const companyUrl = `${DISCOVEREE_GRAPH_CAPTURE_API_URL}?graph_id=${encodeURIComponent(normalizedGraphId)}`;
+  const companyUrl = `https://www.discoveree.io/graph_capture_api.php?graph_id=${encodeURIComponent(normalizedGraphId)}`;
   console.log('=== COMPANY APPEND SAVE REQUEST ===', {
     graphId: normalizedGraphId,
     url: companyUrl,
     payload,
   });
 
-  const response = await fetch(companyUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  });
-  const rawText = await response.text();
-  let result = {};
-  try {
-    result = rawText ? parseCompanyApiText(rawText) : {};
-  } catch {
-    result = rawText;
+  const { ok, status, rawText, via, parsedHint } = await postDiscovereeGraphCaptureJson(
+    companyUrl,
+    payload
+  );
+  let result = parsedHint && typeof parsedHint === 'object' ? parsedHint : {};
+  if (!result || Object.keys(result).length === 0) {
+    try {
+      result = rawText ? parseCompanyApiText(rawText) : {};
+    } catch {
+      result = rawText;
+    }
   }
   console.log('=== COMPANY APPEND SAVE RESPONSE ===', {
     graphId: normalizedGraphId,
     url: companyUrl,
-    status: response.status,
-    ok: response.ok,
+    status,
+    ok,
+    via,
     rawText,
     response: result,
   });
 
-  if (!response.ok) {
-    throw new Error(`Company append save failed (${response.status})`);
+  if (!ok) {
+    throw new Error(`Company append save failed (${status})`);
   }
   if (result?.status && result.status !== 'success') {
     throw new Error(result?.msg || 'Company append save returned non-success status');
   }
 
-  return { result, companyUrl, rawText };
+  return { result, companyUrl, rawText, via };
 };
 
 const parseCompanyAxisNumber = (value) => {
@@ -8411,27 +8519,42 @@ const GraphCapture = () => {
       console.log('Making request to Company API:', COMPANY_API_SAVE_URL);
       console.log('Request body:', JSON.stringify(companyApiPayload, null, 2));
 
-      const response = await fetch(COMPANY_API_SAVE_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(companyApiPayload),
-      });
+      const {
+        ok: companyOk,
+        status: companyStatus,
+        rawText,
+        via: companySaveVia,
+        headers: companyHeaders,
+        parsedHint,
+      } = await postDiscovereeGraphCaptureJson(COMPANY_API_SAVE_URL, companyApiPayload);
 
-      console.log('Company API Response status:', response.status);
-      console.log('Company API Response headers:', Object.fromEntries(response.headers.entries()));
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('Company API Error response:', errorData);
-        throw new Error(`Company API error! status: ${response.status}. ${errorData.detail || errorData.message || ''}`);
+      console.log('Company API Response status:', companyStatus, 'via:', companySaveVia);
+      if (companyHeaders && typeof companyHeaders.entries === 'function') {
+        console.log('Company API Response headers:', Object.fromEntries(companyHeaders.entries()));
       }
 
-      const rawText = await response.text();
+      if (!companyOk) {
+        let errorData = {};
+        try {
+          errorData = rawText ? JSON.parse(rawText) : {};
+        } catch {
+          errorData = {};
+        }
+        console.error('Company API Error response:', errorData);
+        throw new Error(
+          `Company API error! status: ${companyStatus}. ${errorData.detail || errorData.message || errorData.error || ''}`
+        );
+      }
+
       // Strip any non-JSON prefix/wrapper (handles JSONP like FF({...}) or FF{...})
-      const jsonMatch = rawText.match(/[{\[][\s\S]*[}\]]/);
-      const result = JSON.parse(jsonMatch ? jsonMatch[0] : rawText);
+      let result =
+        parsedHint && typeof parsedHint === 'object' && !Array.isArray(parsedHint)
+          ? parsedHint
+          : null;
+      if (!result) {
+        const jsonMatch = String(rawText || '').match(/[{\[][\s\S]*[}\]]/);
+        result = JSON.parse(jsonMatch ? jsonMatch[0] : rawText);
+      }
       console.log('Company API Response received:', result);
       console.log('Company Graph ID from API:', result?.graph_id);
       const returnedGraphId = result?.graph_id ? String(result.graph_id) : '';

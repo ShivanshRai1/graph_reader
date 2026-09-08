@@ -10,6 +10,9 @@
 [functions."ai-relay"]
   timeout = 26
 
+[functions."company-save-relay"]
+  timeout = 26
+
 # DigitalOcean Graph Capture API (primary). Same-origin HTTPS proxy avoids
 # mixed-content blocks from https://graph-capture.netlify.app → http://DO.
 [[redirects]]
