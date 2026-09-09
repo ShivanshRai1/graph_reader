@@ -4860,6 +4860,8 @@ const GraphCapture = () => {
   const [showReturnDecisionModal, setShowReturnDecisionModal] = useState(false);
   const [showCaptureAnotherGuidance, setShowCaptureAnotherGuidance] = useState(false);
   const [pendingReturnUrl, setPendingReturnUrl] = useState('');
+  // After save, next URL hydrate must not restore the previous curve name (user enters a new one each curve).
+  const clearCurveNameAfterSaveRef = useRef(false);
   const [showManualOnboardingTour, setShowManualOnboardingTour] = useState(false);
   const manualOnboardingAutoShownRef = useRef(false);
   const savedGraphsSectionRef = useRef(null);
@@ -7193,7 +7195,11 @@ const GraphCapture = () => {
         
         symbolNames.push(paramName);
         initialSymbolValues[paramName] = symbolValue;
-        labelMap[paramName] = label; // Store the friendly label for display
+        // UI label only (DiscoverEE style): df_vge → VGE — never change payload keys.
+        labelMap[paramName] =
+          formatOtherSymbDisplayName(label) ||
+          formatOtherSymbDisplayName(paramName) ||
+          label;
       } else {
         const paramName = resolveSymbolParamName(symbolWithPotentialValue, searchParams);
         const symbolValue =
@@ -7210,12 +7216,31 @@ const GraphCapture = () => {
 
         symbolNames.push(paramName);
         initialSymbolValues[paramName] = symbolValue;
-        labelMap[paramName] = symbolWithPotentialValue;
+        labelMap[paramName] =
+          formatOtherSymbDisplayName(symbolWithPotentialValue) ||
+          formatOtherSymbDisplayName(paramName) ||
+          symbolWithPotentialValue;
       }
     });
 
     setSymbolNames(symbolNames);
-    setSymbolValues(initialSymbolValues);
+    // Keep previously entered other_symb values across URL updates (graph_id/identifier after save).
+    // Only overwrite a key when the URL itself supplies a non-empty value.
+    setSymbolValues((prev) => {
+      const prevMap = prev && typeof prev === 'object' ? prev : {};
+      const next = { ...prevMap };
+      Object.entries(initialSymbolValues).forEach(([key, value]) => {
+        const urlValue = String(value ?? '').trim();
+        if (urlValue) {
+          next[key] = value;
+          return;
+        }
+        if (!Object.prototype.hasOwnProperty.call(next, key)) {
+          next[key] = '';
+        }
+      });
+      return next;
+    });
     setSymbolLabels(labelMap);
 
     // Extract return parameters (format: return_paramName=value, excluding return_url).
@@ -7310,16 +7335,23 @@ const GraphCapture = () => {
     setIsXTitleUrlLocked(Boolean(xTitleFromUrl));
     setIsYTitleUrlLocked(Boolean(yTitleFromUrl));
 
+    const forceEmptyCurveName = clearCurveNameAfterSaveRef.current;
+    if (forceEmptyCurveName) {
+      clearCurveNameAfterSaveRef.current = false;
+    }
+
     // Auto-populate graphConfig with URL parameters
     setGraphConfig((prevConfig) => ({
       ...prevConfig,
       manufacturer: manufacturer || prevConfig.manufacturer,
       username: username || prevConfig.username,
-      curveName: curveTitle || prevConfig.curveName,
+      // Curve name is per-curve: after save keep it empty unless URL has curve_title.
+      curveName: curveTitle || (forceEmptyCurveName ? '' : prevConfig.curveName),
       graphTitle: graphTitle || prevConfig.graphTitle,
       xLabel: xTitleFromUrl || prevConfig.xLabel,
       yLabel: yTitleFromUrl || prevConfig.yLabel,
       partNumber: partno || prevConfig.partNumber,
+      // Keep TC/TJ temperature sticky for the next curve when URL has no tctj value.
       temperature: tctjValue && tctjValue !== '0' ? tctjValue : prevConfig.temperature,
     }));
   }, [window.location.search]);
@@ -8260,6 +8292,8 @@ const GraphCapture = () => {
       }
 
       clearDataPoints();
+      // Keep other_symb + temperature filled for the next curve; only clear curve name.
+      clearCurveNameAfterSaveRef.current = true;
       setGraphConfig((prevConfig) => ({
         ...prevConfig,
         curveName: '',
