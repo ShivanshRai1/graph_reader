@@ -892,10 +892,57 @@ const stripDfPrefixForDisplay = (rawLabel) => {
   return label.toLowerCase().startsWith('df_') ? label.slice(3) : label;
 };
 
+/**
+ * Display name for manage-TC / other_symb fields.
+ * df_tp → TP, df_vge → VGE (match DiscoverEE curve-line labels; never show raw df_*).
+ */
+const formatOtherSymbDisplayName = (rawLabel) => {
+  const stripped = stripDfPrefixForDisplay(rawLabel) || String(rawLabel || '').trim();
+  if (!stripped) return '';
+  // Short code-like tokens (tp, tj, vge, id, …) → uppercase like manage-TC "TP"
+  if (/^[a-z][a-z0-9_]{0,15}$/i.test(stripped)) {
+    return stripped.toUpperCase();
+  }
+  return stripped;
+};
+
+/**
+ * Only the dedicated temperature *channel* (shown as TC/TJ widget).
+ * Never treat df_tj / df_tp / tj / tp as this channel — those stay as normal symbol fields.
+ */
+const isLegacyTemperatureChannelKey = (...values) => {
+  return values
+    .flat()
+    .filter(Boolean)
+    .map((value) => String(value).trim().toLowerCase())
+    .some((key) => {
+      if (!key) return false;
+      const bare = key.startsWith('df_') ? key.slice(3) : key;
+      return (
+        key === 'tctj' ||
+        key === 'graph_tctj' ||
+        key === 'df_tctj' ||
+        key === 'temperature' ||
+        key === 'temp' ||
+        bare === 'tctj' ||
+        bare === 'temperature' ||
+        bare === 'temp'
+      );
+    });
+};
+
 const getAlternateDfSymbolKey = (rawKey) => {
   const key = String(rawKey || '').trim();
   if (!key) return '';
   return key.toLowerCase().startsWith('df_') ? key.slice(3) : `df_${key}`;
+};
+
+const otherSymbDedupeKey = (rawKey) => {
+  const key = String(rawKey || '').trim().toLowerCase();
+  if (!key) return '';
+  if (key.startsWith('df_')) return key;
+  const bare = stripDfPrefixForDisplay(key).toLowerCase();
+  return bare ? `df_${bare}` : key;
 };
 
 const isIncompleteDfSymbolToken = (token) => {
@@ -5093,19 +5140,48 @@ const GraphCapture = () => {
 
   const getSymbolDisplayLabel = (symbolKey) => {
     const rawLabel = symbolLabels[symbolKey] || symbolKey;
-    const stripped = stripDfPrefixForDisplay(rawLabel);
-    // Never show a blank label (e.g. bare "df_" before URL repair).
-    return stripped || String(rawLabel || symbolKey || '').trim();
+    // Never show raw df_* keys — e.g. df_tp → TP (DiscoverEE curve-line style).
+    return formatOtherSymbDisplayName(rawLabel) || formatOtherSymbDisplayName(symbolKey) || String(symbolKey || '').trim();
   };
 
-  const visibleSymbolNames = (Array.isArray(symbolNames) ? symbolNames : []).filter(
-    (symbol) => {
-      if (!symbol || isGraphCaptureSystemSymbolKey(symbol)) return false;
-      const label = getSymbolDisplayLabel(symbol);
-      if (!label || isGraphCaptureSystemSymbolKey(label)) return false;
-      return !isTemperatureSymbol(symbol, label);
-    }
-  );
+  // Every other_symb field except the tctj temperature channel must appear in the form.
+  // Merge URL tokens as a safety net so nothing like df_tp is dropped from the UI.
+  const visibleSymbolNames = (() => {
+    const merged = [];
+    const seen = new Set();
+
+    const pushKey = (rawKey, rawLabel = '') => {
+      const name = String(rawKey || '').trim();
+      if (!name || isIncompleteDfSymbolToken(name)) return;
+      if (isLegacyTemperatureChannelKey(name, rawLabel)) return;
+      if (isGraphCaptureSystemSymbolKey(name) || isGraphCaptureSystemSymbolKey(rawLabel)) return;
+
+      const dedupe = otherSymbDedupeKey(name);
+      if (!dedupe || seen.has(dedupe)) return;
+      seen.add(dedupe);
+      merged.push(name);
+    };
+
+    (Array.isArray(symbolNames) ? symbolNames : []).forEach((key) => {
+      pushKey(key, symbolLabels[key] || key);
+    });
+
+    String(urlParams.other_symbols || '')
+      .split(',')
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .forEach((token) => {
+        const nameOnly = token.includes('=') ? token.split('=')[0].trim() : token;
+        if (!nameOnly || isLegacyTemperatureChannelKey(nameOnly)) return;
+        // Prefer canonical name already in symbolNames when present.
+        const existing = (Array.isArray(symbolNames) ? symbolNames : []).find(
+          (key) => otherSymbDedupeKey(key) === otherSymbDedupeKey(nameOnly)
+        );
+        pushKey(existing || nameOnly, nameOnly);
+      });
+
+    return merged;
+  })();
 
   const getCurveSymbolMetadataEntries = (curve) => {
     const values = normalizeCurveSymbolValues(curve);
@@ -7108,7 +7184,7 @@ const GraphCapture = () => {
         const [label, symbolValue] = symbolWithPotentialValue.split('=').map((s) => s.trim());
         const paramName = resolveSymbolParamName(label, searchParams);
 
-        if (isTemperatureSymbol(label, paramName)) {
+        if (isLegacyTemperatureChannelKey(label, paramName)) {
           if ((!detectedTemperatureValue || detectedTemperatureValue === '0') && symbolValue) {
             detectedTemperatureValue = symbolValue;
           }
@@ -7125,7 +7201,7 @@ const GraphCapture = () => {
           searchParams.get(`return_${paramName}`) ||
           '';
 
-        if (isTemperatureSymbol(symbolWithPotentialValue, paramName)) {
+        if (isLegacyTemperatureChannelKey(symbolWithPotentialValue, paramName)) {
           if ((!detectedTemperatureValue || detectedTemperatureValue === '0') && symbolValue) {
             detectedTemperatureValue = symbolValue;
           }
@@ -9558,7 +9634,7 @@ const GraphCapture = () => {
                                         (symbol) =>
                                           symbol &&
                                           !isGraphCaptureSystemSymbolKey(symbol) &&
-                                          !isTemperatureSymbol(symbol, getSymbolDisplayLabel(symbol))
+                                          !isLegacyTemperatureChannelKey(symbol, getSymbolDisplayLabel(symbol))
                                       ))
                                     );
 
