@@ -1,6 +1,6 @@
 import ImageUpload from '../components/ImageUpload';
 import GraphCanvas from '../components/GraphCanvas';
-import GraphConfig, { CURVE_NAME_INPUT_ID } from '../components/GraphConfig';
+import GraphConfig, { CURVE_NAME_INPUT_ID, AxisScalePicker } from '../components/GraphConfig';
 import CapturedPointsList from '../components/CapturedPointsList';
 import SavedGraphPreview from '../components/SavedGraphPreview';
 import SavedGraphCombinedPreview from '../components/SavedGraphCombinedPreview';
@@ -36,7 +36,7 @@ import {
 } from '../utils/graphAreaHelpers';
 import { useGraph, graphToCanvasWithBounds, getManualCapturePoints, MANUAL_CAPTURE_OVERLAY_ID } from '../context/GraphContext';
 import { clearAnnotationsForCurve } from '../utils/annotationStorage';
-import { getPreferredApiUrlSync, resolveApiUrl } from '../utils/apiBase';
+import { getPreferredApiUrlSync, resolveApiUrl, failoverApiUrl } from '../utils/apiBase';
 import {
   getPreferredRcLadderUrlSync,
   resolveRcLadderUrl,
@@ -8114,20 +8114,45 @@ const GraphCapture = () => {
       console.log('Backend payload being sent:', payload);
       console.log('Data points to be saved:', payload.data_points);
 
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 180000);
+      const postCurveToApi = async (baseUrl) => {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 180000);
+        try {
+          console.log(`Making POST request to: ${baseUrl}/api/curves`);
+          return await fetch(`${baseUrl}/api/curves`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload),
+            signal: controller.signal,
+          });
+        } finally {
+          clearTimeout(timeoutId);
+        }
+      };
 
-      console.log(`Making POST request to: ${apiUrl}/api/curves`);
-      const response = await fetch(`${apiUrl}/api/curves`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-        signal: controller.signal,
-      });
+      let response;
+      try {
+        response = await postCurveToApi(apiUrl);
+      } catch (primaryError) {
+        // Transient Render/network blips — try DO backup once (same payload).
+        if (primaryError?.name === 'AbortError') {
+          throw primaryError;
+        }
+        const backupUrl = await failoverApiUrl(apiUrl);
+        if (!backupUrl) {
+          throw primaryError;
+        }
+        console.warn('[SAVE] Primary API network failure; retrying on backup', {
+          failed: apiUrl,
+          backup: backupUrl,
+          error: primaryError?.message,
+        });
+        setApiUrl(backupUrl);
+        response = await postCurveToApi(backupUrl);
+      }
 
-      clearTimeout(timeoutId);
       const elapsed = Date.now() - startTime;
 
       console.log('Backend response status:', response.status);
@@ -9566,16 +9591,20 @@ const GraphCapture = () => {
                                     />
                                   </label>
                                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                    <label className="text-sm font-semibold text-gray-700">
+                                    <label className="text-sm font-semibold text-gray-700 block mb-3">
                                       Y Scale
-                                      <select
-                                        className="w-full mt-1 px-2 py-1.5 border border-gray-300 rounded text-sm font-medium"
-                                        value={normalizeScale(editCurveMeta.yScale, 'Linear')}
-                                        onChange={(e) => setEditCurveMeta({ ...editCurveMeta, yScale: normalizeScale(e.target.value, 'Linear') })}
-                                      >
-                                        <option value="Linear">Linear</option>
-                                        <option value="Logarithmic">Logarithmic</option>
-                                      </select>
+                                      <div className="mt-1">
+                                        <AxisScalePicker
+                                          name="yScale"
+                                          value={editCurveMeta.yScale}
+                                          onChange={(e) =>
+                                            setEditCurveMeta({
+                                              ...editCurveMeta,
+                                              yScale: normalizeScale(e.target.value, 'Linear'),
+                                            })
+                                          }
+                                        />
+                                      </div>
                                     </label>
                                     <label className="text-sm font-semibold text-gray-700">
                                       Y Unit
@@ -9591,16 +9620,20 @@ const GraphCapture = () => {
                                         ))}
                                       </select>
                                     </label>
-                                    <label className="text-sm font-semibold text-gray-700">
+                                    <label className="text-sm font-semibold text-gray-700 block mb-3">
                                       X Scale
-                                      <select
-                                        className="w-full mt-1 px-2 py-1.5 border border-gray-300 rounded text-sm font-medium"
-                                        value={normalizeScale(editCurveMeta.xScale, 'Linear')}
-                                        onChange={(e) => setEditCurveMeta({ ...editCurveMeta, xScale: normalizeScale(e.target.value, 'Linear') })}
-                                      >
-                                        <option value="Linear">Linear</option>
-                                        <option value="Logarithmic">Logarithmic</option>
-                                      </select>
+                                      <div className="mt-1">
+                                        <AxisScalePicker
+                                          name="xScale"
+                                          value={editCurveMeta.xScale}
+                                          onChange={(e) =>
+                                            setEditCurveMeta({
+                                              ...editCurveMeta,
+                                              xScale: normalizeScale(e.target.value, 'Linear'),
+                                            })
+                                          }
+                                        />
+                                      </div>
                                     </label>
                                     <label className="text-sm font-semibold text-gray-700">
                                       X Unit

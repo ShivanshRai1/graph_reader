@@ -19,7 +19,7 @@ const LOG_FIELDS = ['xMin', 'xMax', 'yMin', 'yMax'];
 const AXIS_SCALE_OPTIONS = ['Linear', 'Logarithmic'];
 
 /** Always-visible Linear / Logarithmic control — avoids native <select> clipping the second option. */
-const AxisScalePicker = ({ name, value, disabled, onChange }) => {
+export const AxisScalePicker = ({ name, value, disabled, onChange }) => {
   const selected = normalizeScale(value, 'Linear');
   return (
     <div className="flex w-full gap-2" role="group" aria-label={`${name} scale`}>
