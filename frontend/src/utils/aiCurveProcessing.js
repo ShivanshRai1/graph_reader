@@ -26,12 +26,18 @@ const pickAxisValue = (...candidates) => {
   return '';
 };
 
-const normalizeScale = (value, fallback = 'Linear') => {
+/**
+ * Canonical UI/API scale labels used by Graph Capture selects and comparisons.
+ * Accepts DiscoverEE 0/1 codes and common aliases; never returns unmatched raw
+ * strings (those create a blank native <option> while the closed select looks wrong).
+ */
+export const normalizeScale = (value, fallback = 'Linear') => {
   const raw = String(value ?? '').trim();
   if (!raw) return fallback;
-  if (raw === '1') return 'Linear';
-  if (raw.toLowerCase() === 'logarithmic' || raw === '0') return 'Logarithmic';
-  return raw;
+  const lower = raw.toLowerCase();
+  if (raw === '1' || lower === 'linear') return 'Linear';
+  if (raw === '0' || lower === 'logarithmic' || lower === 'log') return 'Logarithmic';
+  return fallback;
 };
 
 const parsePointPair = (point) => {

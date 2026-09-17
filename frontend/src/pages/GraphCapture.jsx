@@ -27,6 +27,7 @@ import {
   normalizeAiExtractedMetadata,
   resolveDiscovereeAxisFields,
   syncImportedOverlayCanvas,
+  normalizeScale,
 } from '../utils/aiCurveProcessing';
 import {
   buildPlotReferenceAreaFromCaptureBox,
@@ -9569,8 +9570,8 @@ const GraphCapture = () => {
                                       Y Scale
                                       <select
                                         className="w-full mt-1 px-2 py-1.5 border border-gray-300 rounded text-sm font-medium"
-                                        value={editCurveMeta.yScale}
-                                        onChange={(e) => setEditCurveMeta({ ...editCurveMeta, yScale: e.target.value })}
+                                        value={normalizeScale(editCurveMeta.yScale, 'Linear')}
+                                        onChange={(e) => setEditCurveMeta({ ...editCurveMeta, yScale: normalizeScale(e.target.value, 'Linear') })}
                                       >
                                         <option value="Linear">Linear</option>
                                         <option value="Logarithmic">Logarithmic</option>
@@ -9594,8 +9595,8 @@ const GraphCapture = () => {
                                       X Scale
                                       <select
                                         className="w-full mt-1 px-2 py-1.5 border border-gray-300 rounded text-sm font-medium"
-                                        value={editCurveMeta.xScale}
-                                        onChange={(e) => setEditCurveMeta({ ...editCurveMeta, xScale: e.target.value })}
+                                        value={normalizeScale(editCurveMeta.xScale, 'Linear')}
+                                        onChange={(e) => setEditCurveMeta({ ...editCurveMeta, xScale: normalizeScale(e.target.value, 'Linear') })}
                                       >
                                         <option value="Linear">Linear</option>
                                         <option value="Logarithmic">Logarithmic</option>

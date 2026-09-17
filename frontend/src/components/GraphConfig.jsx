@@ -13,8 +13,42 @@ import {
 } from '../utils/quantityUnitGuidance';
 import { fetchHistoricalScaleSuggestion, applyHistoricalAxisSuggestion, historicalSuggestionHasAxisSettings, PAST_CAPTURES_EMPTY_MESSAGE } from '../utils/graphScaleHistory';
 import { getPreferredApiUrlSync, resolveApiUrl } from '../utils/apiBase';
+import { normalizeScale } from '../utils/aiCurveProcessing';
 
 const LOG_FIELDS = ['xMin', 'xMax', 'yMin', 'yMax'];
+const AXIS_SCALE_OPTIONS = ['Linear', 'Logarithmic'];
+
+/** Always-visible Linear / Logarithmic control — avoids native <select> clipping the second option. */
+const AxisScalePicker = ({ name, value, disabled, onChange }) => {
+  const selected = normalizeScale(value, 'Linear');
+  return (
+    <div className="flex w-full gap-2" role="group" aria-label={`${name} scale`}>
+      {AXIS_SCALE_OPTIONS.map((option) => {
+        const isActive = selected === option;
+        return (
+          <button
+            key={option}
+            type="button"
+            name={name}
+            disabled={disabled}
+            aria-pressed={isActive}
+            onClick={() => {
+              if (disabled || isActive) return;
+              onChange({ target: { name, value: option } });
+            }}
+            className={`flex-1 px-3 py-2 rounded text-sm font-medium border transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${
+              isActive
+                ? 'bg-gray-900 text-white border-gray-900'
+                : 'bg-white text-gray-900 border-gray-300 hover:border-gray-500'
+            }`}
+          >
+            {option}
+          </button>
+        );
+      })}
+    </div>
+  );
+};
 
 const EMPTY_LOG_PAIR_INPUTS = {
   xMin: { exponent: '', value: '' },
@@ -333,7 +367,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
     // Check if min > max for X-axis
     const xMin = parseFloat(graphConfig.xMin);
     const xMax = parseFloat(graphConfig.xMax);
-    if (graphConfig.xScale === 'Logarithmic') {
+    if (normalizeScale(graphConfig.xScale) === 'Logarithmic') {
       if ((!isNaN(xMin) && xMin <= 0) || (!isNaN(xMax) && xMax <= 0)) {
         xErr = '⚠️ Logarithmic axis values must be greater than 0';
       }
@@ -345,7 +379,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
     // Check if min > max for Y-axis
     const yMin = parseFloat(graphConfig.yMin);
     const yMax = parseFloat(graphConfig.yMax);
-    if (graphConfig.yScale === 'Logarithmic') {
+    if (normalizeScale(graphConfig.yScale) === 'Logarithmic') {
       if ((!isNaN(yMin) && yMin <= 0) || (!isNaN(yMax) && yMax <= 0)) {
         yErr = '⚠️ Logarithmic axis values must be greater than 0';
       }
@@ -444,9 +478,11 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
     const { name, value } = e.target;
     // Keep raw string value for numeric inputs to allow typing decimals like "0." or "1.2"
     // Parsing will happen when the value is actually used in calculations
+    const nextValue =
+      name === 'xScale' || name === 'yScale' ? normalizeScale(value, 'Linear') : value;
     setGraphConfig((prevConfig) => ({
       ...prevConfig,
-      [name]: value,
+      [name]: nextValue,
     }));
   };
 
@@ -471,7 +507,7 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
       LOG_FIELDS.forEach((field) => {
         const isXField = field.startsWith('x');
         const axisScale = isXField ? graphConfig.xScale : graphConfig.yScale;
-        if (axisScale !== 'Logarithmic') return;
+        if (normalizeScale(axisScale) !== 'Logarithmic') return;
 
         const raw = graphConfig[field];
         const rawText = String(raw ?? '').trim();
@@ -988,18 +1024,20 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
           <h4 className="text-gray-800 font-semibold mb-3">Y-Axis {isAxisMappingConfirmed && '🔒'} {isEditingCurve && '(disabled during edit)'}</h4>
           <label className="block mb-3">
             <span className="block text-sm font-semibold text-gray-900 mb-1">Scale:</span>
-            <select name="yScale" value={graphConfig.yScale} onChange={handleChange} disabled={isAxisMappingConfirmed || isEditingCurve} className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed">
-              <option value="Linear">Linear</option>
-              <option value="Logarithmic">Logarithmic</option>
-            </select>
+            <AxisScalePicker
+              name="yScale"
+              value={graphConfig.yScale}
+              onChange={handleChange}
+              disabled={isAxisMappingConfirmed || isEditingCurve}
+            />
           </label>
           {renderUnitSelect('yUnitPrefix', graphConfig.yUnitPrefix, yAxisUnitRecommendations)}
           
-          <div className="block mb-3 p-2 bg-blue-50 border border-blue-300 rounded text-xs text-blue-700" style={{ visibility: graphConfig.yScale === 'Logarithmic' ? 'visible' : 'hidden' }}>
+          <div className="block mb-3 p-2 bg-blue-50 border border-blue-300 rounded text-xs text-blue-700" style={{ visibility: normalizeScale(graphConfig.yScale) === 'Logarithmic' ? 'visible' : 'hidden' }}>
             Enter either exponent or number value
           </div>
           
-          {graphConfig.yScale === 'Logarithmic' ? (
+          {normalizeScale(graphConfig.yScale) === 'Logarithmic' ? (
             <>
               {renderLogField('yMin', 'Min', '-2', '0.01', logError.y)}
               {renderLogField('yMax', 'Max', '2', '100', logError.y)}
@@ -1039,18 +1077,20 @@ const GraphConfig = ({ showTctj = true, isGraphTitleReadOnly = false, isCurveNam
           <h4 className="text-gray-800 font-semibold mb-3">X-Axis {isAxisMappingConfirmed && '🔒'} {isEditingCurve && '(disabled during edit)'}</h4>
           <label className="block mb-3">
             <span className="block text-sm font-medium text-gray-800 mb-1">Scale:</span>
-            <select name="xScale" value={graphConfig.xScale} onChange={handleChange} disabled={isAxisMappingConfirmed || isEditingCurve} className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white disabled:opacity-60 disabled:cursor-not-allowed">
-              <option value="Linear">Linear</option>
-              <option value="Logarithmic">Logarithmic</option>
-            </select>
+            <AxisScalePicker
+              name="xScale"
+              value={graphConfig.xScale}
+              onChange={handleChange}
+              disabled={isAxisMappingConfirmed || isEditingCurve}
+            />
           </label>
           {renderUnitSelect('xUnitPrefix', graphConfig.xUnitPrefix, xAxisUnitRecommendations)}
           
-          <div className="block mb-3 p-2 bg-blue-50 border border-blue-300 rounded text-xs text-blue-700" style={{ visibility: graphConfig.xScale === 'Logarithmic' ? 'visible' : 'hidden' }}>
+          <div className="block mb-3 p-2 bg-blue-50 border border-blue-300 rounded text-xs text-blue-700" style={{ visibility: normalizeScale(graphConfig.xScale) === 'Logarithmic' ? 'visible' : 'hidden' }}>
             Enter either exponent or number value
           </div>
           
-          {graphConfig.xScale === 'Logarithmic' ? (
+          {normalizeScale(graphConfig.xScale) === 'Logarithmic' ? (
             <>
               {renderLogField('xMin', 'Min', '-2', '0.01', logError.x)}
               {renderLogField('xMax', 'Max', '2', '100', logError.x)}
